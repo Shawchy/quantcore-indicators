@@ -1,0 +1,10 @@
+data/
+logs/
+*.pyc
+__pycache__/
+.env
+.venv/
+node_modules/
+dist/
+*.db
+*.parquet

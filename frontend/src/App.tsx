@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Box } from '@chakra-ui/react'
+import { Box, ColorModeScript } from '@chakra-ui/react'
 import Layout from './components/Layout'
+import Login from './pages/Login'
+import ProtectedRoute from './components/ProtectedRoute'
 import Dashboard from './pages/Dashboard'
 import StockDetail from './pages/StockDetail'
 import Watchlist from './pages/Watchlist'
@@ -9,13 +11,26 @@ import ChipSelection from './pages/ChipSelection'
 import Screener from './pages/Screener'
 import Strategy from './pages/Strategy'
 import Backtest from './pages/Backtest'
+import theme from './theme'
 
 function App() {
   return (
-    <BrowserRouter>
-      <Box minH="100vh" bg="gray.50">
+    <Box>
+      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+      <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          {/* 公开路由 */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* 受保护的路由 */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<Dashboard />} />
             <Route path="stock/:code" element={<StockDetail />} />
             <Route path="watchlist" element={<Watchlist />} />
@@ -26,8 +41,8 @@ function App() {
             <Route path="backtest" element={<Backtest />} />
           </Route>
         </Routes>
-      </Box>
-    </BrowserRouter>
+      </BrowserRouter>
+    </Box>
   )
 }
 

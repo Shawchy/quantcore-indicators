@@ -2,19 +2,25 @@ import {
   Box,
   Flex,
   Text,
-  IconButton,
+  VStack,
   Drawer,
   DrawerOverlay,
   DrawerContent,
   DrawerCloseButton,
-  DrawerHeader,
   DrawerBody,
-  VStack,
-  useColorModeValue,
-  Link as ChakraLink,
+  Icon,
 } from '@chakra-ui/react'
 import { Link, useLocation } from 'react-router-dom'
-import { FiHome, FiTrendingUp, FiStar, FiGrid, FiFilter, FiSearch, FiSettings, FiActivity } from 'react-icons/fi'
+import { 
+  FiHome, 
+  FiStar, 
+  FiGrid, 
+  FiFilter, 
+  FiSearch, 
+  FiSettings, 
+  FiActivity,
+  FiCpu
+} from 'react-icons/fi'
 
 const menuItems = [
   { name: '首页概览', icon: FiHome, path: '/' },
@@ -33,38 +39,32 @@ interface SidebarProps {
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const location = useLocation()
-  const bgColor = useColorModeValue('white', 'gray.800')
-  const activeBg = useColorModeValue('brand.50', 'brand.900')
-  const activeColor = useColorModeValue('brand.600', 'brand.200')
 
   const SidebarContent = () => (
-    <VStack align="stretch" spacing={1} p={2}>
+    <VStack align="stretch" spacing={1} p={3} pt={4}>
       {menuItems.map((item) => {
         const isActive = location.pathname === item.path
-        const Icon = item.icon
+        const IconComponent = item.icon
         
         return (
-          <ChakraLink
-            key={item.path}
-            as={Link}
-            to={item.path}
-            onClick={onClose}
-            _hover={{ textDecoration: 'none' }}
-          >
+          <Link key={item.path} to={item.path} onClick={onClose}>
             <Flex
               align="center"
               p={3}
               borderRadius="md"
-              bg={isActive ? activeBg : 'transparent'}
-              color={isActive ? activeColor : 'gray.600'}
-              fontWeight={isActive ? 'semibold' : 'normal'}
-              _hover={{ bg: activeBg }}
-              transition="all 0.2s"
+              bg={isActive ? 'brand.50' : 'transparent'}
+              color={isActive ? 'brand.600' : 'light.textSecondary'}
+              fontWeight={isActive ? '600' : '500'}
+              transition="all 0.15s"
+              _hover={{
+                bg: isActive ? 'brand.50' : 'light.bgSecondary',
+                color: isActive ? 'brand.600' : 'light.text',
+              }}
             >
-              <Icon size={18} style={{ marginRight: '12px' }} />
+              <Icon as={IconComponent} boxSize={4} mr={3} />
               <Text fontSize="sm">{item.name}</Text>
             </Flex>
-          </ChakraLink>
+          </Link>
         )
       })}
     </VStack>
@@ -78,26 +78,49 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         left={0}
         top={0}
         bottom={0}
-        w="250px"
-        bg={bgColor}
-        borderRight="1px"
-        borderColor="gray.200"
-        zIndex={10}
+        w="sidebar"
+        bg="light.card"
+        borderRight="1px solid"
+        borderColor="light.border"
+        zIndex={20}
       >
-        <Flex h="16" align="center" px={6} borderBottom="1px" borderColor="gray.200">
-          <Text fontSize="xl" fontWeight="bold" color="brand.600">
-            量化分析系统
-          </Text>
+        <Flex h="14" align="center" px={5} borderBottom="1px solid" borderColor="light.border">
+          <Flex align="center" gap={2}>
+            <Box
+              p={1.5}
+              borderRadius="md"
+              bg="brand.500"
+            >
+              <Icon as={FiCpu} color="white" boxSize={4} />
+            </Box>
+            <Text 
+              fontSize="md" 
+              fontWeight="bold" 
+              color="brand.600"
+            >
+              Quant
+            </Text>
+          </Flex>
         </Flex>
+        
         <SidebarContent />
       </Box>
 
       <Drawer isOpen={isOpen} placement="left" onClose={onClose}>
         <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
-          <DrawerHeader>量化分析系统</DrawerHeader>
-          <DrawerBody>
+        <DrawerContent bg="light.card">
+          <DrawerCloseButton color="light.textSecondary" />
+          <DrawerBody p={0}>
+            <Flex h="14" align="center" px={5} borderBottom="1px solid" borderColor="light.border">
+              <Flex align="center" gap={2}>
+                <Box p={1.5} borderRadius="md" bg="brand.500">
+                  <Icon as={FiCpu} color="white" boxSize={4} />
+                </Box>
+                <Text fontSize="md" fontWeight="bold" color="brand.600">
+                  量化分析系统
+                </Text>
+              </Flex>
+            </Flex>
             <SidebarContent />
           </DrawerBody>
         </DrawerContent>

@@ -6,9 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true,  // 允许外部访问
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8000',  // 修复后端端口
         changeOrigin: true,
       },
     },

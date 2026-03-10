@@ -204,17 +204,42 @@ class AkShareAdapter(BaseDataAdapter):
     ) -> List[ChipData]:
         try:
             df = ak.stock_zh_a_gdhs(symbol=code)
+            if df.empty:
+                return []
+            
+            # 动态检测字段名
+            date_column = None
+            for col in ['股东户数统计截止日', '统计截止日期', '截止日期', '日期']:
+                if col in df.columns:
+                    date_column = col
+                    break
+            
+            if not date_column:
+                logger.warning(f"未找到日期字段，可用字段：{df.columns.tolist()}")
+                return []
+            
             chip_data = []
             for _, row in df.iterrows():
-                date = str(row["股东户数统计截止日"])
+                date = str(row[date_column])
                 if start_date and date < start_date:
                     continue
                 if end_date and date > end_date:
                     continue
+                
+                # 动态检测股东户数字段
+                count_column = None
+                for col in ['股东户数', '股东人数']:
+                    if col in df.columns:
+                        count_column = col
+                        break
+                
+                if not count_column:
+                    continue
+                
                 chip_data.append(ChipData(
                     code=code,
                     date=date,
-                    shareholder_count=float(row["股东户数"]),
+                    shareholder_count=float(row[count_column]),
                     avg_shares_per_holder=float(row["户均持股数量"]) if "户均持股数量" in row else None
                 ))
             return chip_data

@@ -11,7 +11,7 @@ from app.core.exceptions import DataNotFoundException
 class SectorService:
     async def get_sector_list(self, sector_type: str = "industry") -> List[Dict[str, Any]]:
         cache_key = f"sector_list_{sector_type}"
-        cached = cache_manager.get("sector", cache_key)
+        cached = await cache_manager.get("sector", cache_key)
         if cached:
             return cached
         
@@ -26,7 +26,7 @@ class SectorService:
             "amount": s.amount
         } for s in sectors]
         
-        cache_manager.set("sector", cache_key, result)
+        await cache_manager.set("sector", cache_key, result)
         
         return result
     
@@ -37,7 +37,7 @@ class SectorService:
         limit: int = 20
     ) -> List[Dict[str, Any]]:
         cache_key = f"sector_ranking_{sector_type}_{sort_by}_{limit}"
-        cached = cache_manager.get("sector", cache_key)
+        cached = await cache_manager.get("sector", cache_key)
         if cached:
             return cached
         
@@ -52,13 +52,13 @@ class SectorService:
         
         result = sectors[:limit]
         
-        cache_manager.set("sector", cache_key, result)
+        await cache_manager.set("sector", cache_key, result)
         
         return result
     
     async def get_sector_components(self, sector_code: str) -> List[Dict[str, Any]]:
         cache_key = f"sector_components_{sector_code}"
-        cached = cache_manager.get("sector", cache_key)
+        cached = await cache_manager.get("sector", cache_key)
         if cached:
             return cached
         
@@ -69,7 +69,7 @@ class SectorService:
         
         result = [{"code": code} for code in codes]
         
-        cache_manager.set("sector", cache_key, result)
+        await cache_manager.set("sector", cache_key, result)
         
         return result
     

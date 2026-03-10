@@ -17,7 +17,7 @@ class ChipService:
         end_date: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         cache_key = f"chip_data_{code}_{start_date}_{end_date}"
-        cached = cache_manager.get("chip", cache_key)
+        cached = await cache_manager.get("chip", cache_key)
         if cached:
             return cached
         
@@ -34,7 +34,7 @@ class ChipService:
             "top10_holders_ratio": c.top10_holders_ratio
         } for c in chip_data]
         
-        cache_manager.set("chip", cache_key, result)
+        await cache_manager.set("chip", cache_key, result)
         
         return result
     
@@ -130,7 +130,7 @@ class ChipService:
         limit: int = 50
     ) -> List[Dict[str, Any]]:
         cache_key = f"control_ranking_{sort_order}_{limit}"
-        cached = cache_manager.get("chip", cache_key)
+        cached = await cache_manager.get("chip", cache_key)
         if cached:
             return cached
         
@@ -142,7 +142,7 @@ class ChipService:
             results.sort(key=lambda x: x["control_degree"], reverse=True)
         
         result = results[:limit]
-        cache_manager.set("chip", cache_key, result, ttl=600)
+        await cache_manager.set("chip", cache_key, result, ttl=600)
         
         return result
 

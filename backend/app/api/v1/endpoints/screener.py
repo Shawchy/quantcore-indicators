@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, Depends
 from app.models.schemas import ResponseModel, PagedResponseModel
 from app.services import stock_service, sector_service, chip_service
+from app.api.deps import CurrentUser
 from typing import Optional
 
 router = APIRouter()
@@ -8,7 +9,8 @@ router = APIRouter()
 
 @router.post("/query", response_model=ResponseModel[list])
 async def screen_stocks(
-    conditions: dict = Body(..., description="选股条件")
+    conditions: dict = Body(..., description="选股条件"),
+    current_user: CurrentUser = Depends
 ):
     results = []
     
@@ -42,7 +44,7 @@ async def screen_stocks(
 
 
 @router.get("/market-stats", response_model=ResponseModel[dict])
-async def get_market_statistics():
+async def get_market_statistics(current_user: CurrentUser = Depends):
     stocks = await stock_service.search_stocks("", limit=5000)
     
     total_count = len(stocks)
@@ -62,7 +64,7 @@ async def get_market_statistics():
 
 
 @router.get("/sector-stats/{sector_code}", response_model=ResponseModel[dict])
-async def get_sector_statistics(sector_code: str):
+async def get_sector_statistics(sector_code: str, current_user: CurrentUser = Depends):
     components = await sector_service.get_sector_components(sector_code)
     leaders = await sector_service.get_sector_leaders(sector_code, 10)
     
@@ -74,7 +76,7 @@ async def get_sector_statistics(sector_code: str):
 
 
 @router.get("/preset-conditions", response_model=ResponseModel[list])
-async def get_preset_conditions():
+async def get_preset_conditions(current_user: CurrentUser = Depends):
     return ResponseModel(data=[
         {
             "id": "low_pe",
@@ -91,7 +93,7 @@ async def get_preset_conditions():
         {
             "id": "small_cap",
             "name": "小市值",
-            "description": "市值 < 50亿",
+            "description": "市值 < 50 亿",
             "conditions": {"market_cap_max": 50}
         }
     ])

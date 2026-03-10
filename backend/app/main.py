@@ -83,6 +83,15 @@ def create_app() -> FastAPI:
         await init_database()
         logger.info("数据库初始化完成")
         
+        from app.adapters import data_source_manager
+        await data_source_manager.initialize()
+        logger.info("数据源初始化完成")
+        
+        # 启动数据加载器（分层加载）
+        from app.services.data_loader import data_loader
+        await data_loader.start()
+        logger.info("数据加载器已启动")
+        
         Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
         Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)
         logger.info("数据目录初始化完成")
@@ -90,6 +99,11 @@ def create_app() -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown_event():
         logger.info(f"{settings.APP_NAME} 关闭中...")
+        
+        # 停止数据加载器
+        from app.services.data_loader import data_loader
+        await data_loader.stop()
+        logger.info("数据加载器已停止")
     
     @app.get("/health")
     async def health_check():

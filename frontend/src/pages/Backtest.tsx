@@ -5,7 +5,6 @@ import {
   Heading,
   VStack,
   HStack,
-  Text,
   Badge,
   Button,
   Spinner,
@@ -13,8 +12,6 @@ import {
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText,
-  StatArrow,
   Table,
   Thead,
   Tbody,
@@ -31,11 +28,14 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
+  Flex,
+  Icon,
 } from '@chakra-ui/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { backtestApi, strategyApi } from '../services/api'
+import { FiPlay, FiActivity } from 'react-icons/fi'
 
 const Backtest = () => {
   const queryClient = useQueryClient()
@@ -72,93 +72,192 @@ const Backtest = () => {
 
   const getEquityCurveOption = () => {
     return {
-      tooltip: { trigger: 'axis' },
-      legend: { data: ['策略净值', '基准净值'], bottom: 0 },
+      backgroundColor: 'transparent',
+      tooltip: { 
+        trigger: 'axis',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: '#e2e8f0',
+        textStyle: { color: '#1e293b' },
+      },
+      legend: { 
+        data: ['策略净值', '基准净值'], 
+        bottom: 0,
+        textStyle: { color: '#64748b' },
+      },
       grid: { left: '10%', right: '5%', bottom: '15%' },
-      xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
-      yAxis: { type: 'value' },
+      xAxis: { 
+        type: 'category', 
+        data: ['1月', '2月', '3月', '4月', '5月', '6月'],
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { color: '#64748b' },
+      },
+      yAxis: { 
+        type: 'value',
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { color: '#64748b' },
+        splitLine: { lineStyle: { color: '#f1f5f9' } },
+      },
       series: [
-        { name: '策略净值', type: 'line', data: [1, 1.1, 1.05, 1.2, 1.15, 1.3] },
-        { name: '基准净值', type: 'line', data: [1, 1.02, 1.01, 1.05, 1.03, 1.08] },
+        { 
+          name: '策略净值', 
+          type: 'line', 
+          data: [1, 1.1, 1.05, 1.2, 1.15, 1.3],
+          smooth: true,
+          lineStyle: { color: 'brand.500', width: 2 },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(49, 151, 149, 0.3)' },
+                { offset: 1, color: 'rgba(49, 151, 149, 0)' },
+              ],
+            },
+          },
+        },
+        { 
+          name: '基准净值', 
+          type: 'line', 
+          data: [1, 1.02, 1.01, 1.05, 1.03, 1.08],
+          smooth: true,
+          lineStyle: { color: '#94a3b8', width: 2 },
+        },
       ],
     }
   }
 
   const getDrawdownOption = () => {
     return {
-      tooltip: { trigger: 'axis' },
+      backgroundColor: 'transparent',
+      tooltip: { 
+        trigger: 'axis',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: '#e2e8f0',
+        textStyle: { color: '#1e293b' },
+      },
       grid: { left: '10%', right: '5%', bottom: '10%' },
-      xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
-      yAxis: { type: 'value', max: 0 },
+      xAxis: { 
+        type: 'category', 
+        data: ['1月', '2月', '3月', '4月', '5月', '6月'],
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { color: '#64748b' },
+      },
+      yAxis: { 
+        type: 'value', 
+        max: 0,
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { color: '#64748b', formatter: '{value}%' },
+        splitLine: { lineStyle: { color: '#f1f5f9' } },
+      },
       series: [{
         type: 'line',
         data: [0, -2, -5, -3, -8, -4],
-        itemStyle: { color: '#f44336' },
-        areaStyle: { color: 'rgba(244, 67, 54, 0.2)' },
+        smooth: true,
+        itemStyle: { color: 'up.500' },
+        areaStyle: { color: 'rgba(229, 62, 62, 0.2)' },
       }],
     }
   }
 
   return (
     <VStack spacing={6} align="stretch">
-      <Heading size="lg">策略回测</Heading>
+      <Heading size="lg" color="light.text">
+        策略回测
+      </Heading>
 
       <Card>
-        <CardHeader>
-          <Heading size="sm">回测配置</Heading>
+        <CardHeader pb={2}>
+          <Heading size="sm" color="light.text">回测配置</Heading>
         </CardHeader>
-        <CardBody>
+        <CardBody pt={2}>
           <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
             <FormControl>
-              <FormLabel>选择策略</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">选择策略</FormLabel>
               <Select
                 value={config.strategy_id}
                 onChange={(e) => setConfig({ ...config, strategy_id: e.target.value })}
                 placeholder="选择策略"
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.400' }}
+                _focus={{ borderColor: 'brand.500', bg: 'white' }}
               >
                 {strategies.map((s: any) => (
-                  <option key={s.strategy_id} value={s.strategy_id}>{s.name}</option>
+                  <option key={s.strategy_id} value={s.strategy_id} style={{ background: '#fff' }}>
+                    {s.name}
+                  </option>
                 ))}
               </Select>
             </FormControl>
             <FormControl>
-              <FormLabel>开始日期</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">开始日期</FormLabel>
               <Input
                 type="date"
                 value={config.start_date}
                 onChange={(e) => setConfig({ ...config, start_date: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.400' }}
+                _focus={{ borderColor: 'brand.500', bg: 'white' }}
               />
             </FormControl>
             <FormControl>
-              <FormLabel>结束日期</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">结束日期</FormLabel>
               <Input
                 type="date"
                 value={config.end_date}
                 onChange={(e) => setConfig({ ...config, end_date: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.400' }}
+                _focus={{ borderColor: 'brand.500', bg: 'white' }}
               />
             </FormControl>
             <FormControl>
-              <FormLabel>初始资金</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">初始资金</FormLabel>
               <NumberInput
                 value={config.initial_capital}
                 onChange={(_, v) => setConfig({ ...config, initial_capital: v })}
                 min={10000}
+                bg="light.bgSecondary"
+                borderColor="light.border"
               >
-                <NumberInputField />
+                <NumberInputField 
+                  bg="light.bgSecondary"
+                  borderColor="light.border"
+                />
                 <NumberInputStepper>
-                  <NumberIncrementStepper />
-                  <NumberDecrementStepper />
+                  <NumberIncrementStepper borderColor="light.border" color="light.textSecondary" />
+                  <NumberDecrementStepper borderColor="light.border" color="light.textSecondary" />
                 </NumberInputStepper>
               </NumberInput>
             </FormControl>
           </SimpleGrid>
 
-          <HStack mt={4} justify="flex-end">
+          <HStack mt={6} justify="flex-end" spacing={3}>
             <Button
-              colorScheme="brand"
+              variant="ghost"
+              size="md"
+              onClick={() => {
+                setConfig({
+                  strategy_id: '',
+                  start_date: '',
+                  end_date: '',
+                  initial_capital: 1000000,
+                })
+              }}
+            >
+              重置
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              leftIcon={runMutation.isPending ? <Spinner size="sm" /> : <FiPlay />}
               onClick={handleRun}
               isLoading={runMutation.isPending}
+              loadingText="回测中"
               isDisabled={!config.strategy_id || !config.start_date || !config.end_date}
+              px={6}
             >
               开始回测
             </Button>
@@ -170,9 +269,8 @@ const Backtest = () => {
         <Card>
           <CardBody>
             <Stat>
-              <StatLabel>总收益率</StatLabel>
-              <StatNumber>
-                <StatArrow type="increase" />
+              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">总收益率</StatLabel>
+              <StatNumber color="red.500" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
                 +30.0%
               </StatNumber>
             </Stat>
@@ -181,24 +279,30 @@ const Backtest = () => {
         <Card>
           <CardBody>
             <Stat>
-              <StatLabel>年化收益</StatLabel>
-              <StatNumber>+25.5%</StatNumber>
+              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">年化收益</StatLabel>
+              <StatNumber color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+                +25.5%
+              </StatNumber>
             </Stat>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <Stat>
-              <StatLabel>最大回撤</StatLabel>
-              <StatNumber color="red.500">-8.0%</StatNumber>
+              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">最大回撤</StatLabel>
+              <StatNumber color="red.500" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+                -8.0%
+              </StatNumber>
             </Stat>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <Stat>
-              <StatLabel>夏普比率</StatLabel>
-              <StatNumber>1.85</StatNumber>
+              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">夏普比率</StatLabel>
+              <StatNumber color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+                1.85
+              </StatNumber>
             </Stat>
           </CardBody>
         </Card>
@@ -206,63 +310,68 @@ const Backtest = () => {
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
         <Card>
-          <CardHeader>
-            <Heading size="sm">净值曲线</Heading>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">净值曲线</Heading>
           </CardHeader>
-          <CardBody>
+          <CardBody pt={2}>
             <ReactECharts option={getEquityCurveOption()} style={{ height: '300px' }} />
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader>
-            <Heading size="sm">回撤曲线</Heading>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">回撤曲线</Heading>
           </CardHeader>
-          <CardBody>
+          <CardBody pt={2}>
             <ReactECharts option={getDrawdownOption()} style={{ height: '300px' }} />
           </CardBody>
         </Card>
       </SimpleGrid>
 
       <Card>
-        <CardHeader>
-          <Heading size="sm">回测历史</Heading>
+        <CardHeader pb={2}>
+          <Heading size="sm" color="light.text">回测历史</Heading>
         </CardHeader>
         <CardBody>
           {historyLoading ? (
-            <Spinner />
+            <Flex justify="center" align="center" h="200px">
+              <Spinner color="brand.500" />
+            </Flex>
           ) : (
             <TableContainer>
-              <Table size="sm">
+              <Table size="sm" variant="simple">
                 <Thead>
                   <Tr>
-                    <Th>回测ID</Th>
-                    <Th>策略</Th>
-                    <Th>开始日期</Th>
-                    <Th>结束日期</Th>
-                    <Th isNumeric>总收益</Th>
-                    <Th>状态</Th>
-                    <Th>创建时间</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">回测ID</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">策略</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">开始日期</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">结束日期</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>总收益</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">状态</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">创建时间</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {history.map((record: any) => (
-                    <Tr key={record.backtest_id}>
-                      <Td>{record.backtest_id}</Td>
-                      <Td>{record.strategy_id}</Td>
-                      <Td>{record.start_date}</Td>
-                      <Td>{record.end_date}</Td>
-                      <Td isNumeric>
-                        <Badge colorScheme={record.total_return >= 0 ? 'red' : 'green'}>
+                    <Tr key={record.backtest_id} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Td borderColor="light.border" fontFamily="mono" fontSize="xs" color="light.text">{record.backtest_id}</Td>
+                      <Td borderColor="light.border" color="light.textSecondary">{record.strategy_id}</Td>
+                      <Td borderColor="light.border" color="light.textSecondary">{record.start_date}</Td>
+                      <Td borderColor="light.border" color="light.textSecondary">{record.end_date}</Td>
+                      <Td borderColor="light.border" isNumeric>
+                        <Badge variant={record.total_return >= 0 ? 'up' : 'down'}>
                           {record.total_return >= 0 ? '+' : ''}{(record.total_return || 0).toFixed(2)}%
                         </Badge>
                       </Td>
-                      <Td>
-                        <Badge colorScheme={record.status === 'completed' ? 'green' : 'yellow'}>
+                      <Td borderColor="light.border">
+                        <Badge 
+                          bg={record.status === 'completed' ? 'green.100' : 'orange.100'}
+                          color={record.status === 'completed' ? 'green.700' : 'orange.700'}
+                        >
                           {record.status}
                         </Badge>
                       </Td>
-                      <Td>{record.created_at}</Td>
+                      <Td borderColor="light.border" color="light.textSecondary">{record.created_at}</Td>
                     </Tr>
                   ))}
                 </Tbody>

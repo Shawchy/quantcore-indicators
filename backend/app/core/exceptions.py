@@ -54,3 +54,23 @@ class BacktestException(QuantException):
             message=message,
             status_code=500
         )
+
+
+class AuthenticationException(QuantException):
+    """认证异常"""
+    def __init__(self, message: str = "认证失败"):
+        super().__init__(
+            code="AUTHENTICATION_FAILED",
+            message=message,
+            status_code=401
+        )
+
+
+class AuthorizationException(QuantException):
+    """授权异常"""
+    def __init__(self, message: str = "权限不足"):
+        super().__init__(
+            code="AUTHORIZATION_FAILED",
+            message=message,
+            status_code=403
+        )

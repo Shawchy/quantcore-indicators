@@ -121,12 +121,24 @@ const Watchlist = () => {
   return (
     <VStack spacing={6} align="stretch">
       <HStack justify="space-between">
-        <Heading size="lg">自选股</Heading>
+        <Heading size="lg" color="light.text">
+          自选股
+        </Heading>
         <HStack>
-          <Button leftIcon={<FiRefreshCw />} variant="outline" size="sm" onClick={() => refetch()}>
+          <Button 
+            leftIcon={<FiRefreshCw />} 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => refetch()}
+          >
             刷新
           </Button>
-          <Button leftIcon={<FiPlus />} colorScheme="brand" size="sm" onClick={onAddOpen}>
+          <Button 
+            leftIcon={<FiPlus />} 
+            variant="primary" 
+            size="sm" 
+            onClick={onAddOpen}
+          >
             添加
           </Button>
         </HStack>
@@ -136,47 +148,53 @@ const Watchlist = () => {
         <CardBody>
           {isLoading || quotesLoading ? (
             <VStack justify="center" h="200px">
-              <Spinner />
-              <Text>加载中...</Text>
+              <Spinner color="brand.400" />
+              <Text color="light.textSecondary">加载中...</Text>
             </VStack>
           ) : (
             <TableContainer>
               <Table variant="simple">
                 <Thead>
                   <Tr>
-                    <Th>代码</Th>
-                    <Th>名称</Th>
-                    <Th isNumeric>现价</Th>
-                    <Th isNumeric>涨跌幅</Th>
-                    <Th isNumeric>成交量</Th>
-                    <Th>备注</Th>
-                    <Th>操作</Th>
+                    <Th borderColor="light.border">代码</Th>
+                    <Th borderColor="light.border">名称</Th>
+                    <Th borderColor="light.border" isNumeric>现价</Th>
+                    <Th borderColor="light.border" isNumeric>涨跌幅</Th>
+                    <Th borderColor="light.border" isNumeric>成交量</Th>
+                    <Th borderColor="light.border">备注</Th>
+                    <Th borderColor="light.border">操作</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {quotes.map((item: any) => (
                     <Tr
                       key={item.code}
-                      _hover={{ bg: 'gray.50', cursor: 'pointer' }}
+                      _hover={{ bg: 'light.bgSecondary', cursor: 'pointer' }}
                       onClick={() => navigate(`/stock/${item.code}`)}
                     >
-                      <Td fontWeight="medium">{item.code}</Td>
-                      <Td>{item.name}</Td>
-                      <Td isNumeric fontWeight="medium">{item.price?.toFixed(2)}</Td>
-                      <Td isNumeric>
-                        <Badge colorScheme={item.change_pct >= 0 ? 'red' : 'green'}>
+                      <Td borderColor="light.border" fontWeight="medium" color="light.text">{item.code}</Td>
+                      <Td borderColor="light.border" color="light.textSecondary">{item.name}</Td>
+                      <Td borderColor="light.border" isNumeric fontWeight="medium" fontFamily="mono" color="light.text">
+                        {item.price?.toFixed(2)}
+                      </Td>
+                      <Td borderColor="light.border" isNumeric>
+                        <Badge variant={item.change_pct >= 0 ? 'up' : 'down'}>
                           {item.change_pct >= 0 ? '+' : ''}{item.change_pct?.toFixed(2)}%
                         </Badge>
                       </Td>
-                      <Td isNumeric>{item.volume ? (item.volume / 10000).toFixed(0) + '万' : '--'}</Td>
-                      <Td>{item.note || '-'}</Td>
-                      <Td>
+                      <Td borderColor="light.border" isNumeric color="light.textSecondary">
+                        {item.volume ? (item.volume / 10000).toFixed(0) + '万' : '--'}
+                      </Td>
+                      <Td borderColor="light.border" color="light.textSecondary">{item.note || '-'}</Td>
+                      <Td borderColor="light.border">
                         <HStack spacing={1} onClick={(e) => e.stopPropagation()}>
                           <IconButton
                             aria-label="编辑"
                             icon={<FiEdit />}
                             size="sm"
                             variant="ghost"
+                            color="light.textSecondary"
+                            _hover={{ color: 'brand.400' }}
                             onClick={() => handleEdit(item.code, item.note)}
                           />
                           <IconButton
@@ -184,7 +202,8 @@ const Watchlist = () => {
                             icon={<FiTrash2 />}
                             size="sm"
                             variant="ghost"
-                            colorScheme="red"
+                            color="light.textSecondary"
+                            _hover={{ color: 'down.500' }}
                             onClick={() => handleDelete(item.code)}
                           />
                         </HStack>

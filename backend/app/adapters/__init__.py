@@ -6,10 +6,16 @@ from .base import (
     SectorInfo,
     ChipData
 )
+
 from .akshare_adapter import AkShareAdapter
 from .baostock_adapter import BaostockAdapter
 from .yfinance_adapter import YFinanceAdapter
-from .tushare_adapter import TushareAdapter
+
+try:
+    from .tushare_adapter import TushareAdapter
+except ImportError:
+    TushareAdapter = None
+
 from .factory import DataSourceFactory, DataSourceManager, data_source_manager
 
 __all__ = [

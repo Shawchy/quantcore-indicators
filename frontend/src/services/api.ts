@@ -1,25 +1,159 @@
 import axios from 'axios'
+import type { RootState, AppDispatch } from '../store'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
+// Token 刷新锁
+let isRefreshing = false
+let failedQueue: Array<{ resolve: (value?: any) => void; reject: (reason?: any) => void }> = []
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
+// 获取 store 的函数（延迟导入避免循环依赖）
+const getStore = (): { getState: () => RootState; dispatch: AppDispatch } => {
+  // 使用动态导入避免循环依赖
+  const storeModule = window.__store__ as { getState: () => RootState; dispatch: AppDispatch }
+  if (!storeModule) {
+    throw new Error('Store not initialized')
+  }
+  return storeModule
+}
+
+// 请求拦截器 - 自动携带 Token
+api.interceptors.request.use(
+  (config) => {
+    try {
+      const store = getStore()
+      const state = store.getState()
+      const token = state.auth.token
+      
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    } catch (error) {
+      // Store 未初始化时不阻塞请求
+      console.warn('Failed to get auth token:', error)
+    }
+    
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+// 响应拦截器 - 处理 401 错误和 Token 刷新
 api.interceptors.response.use(
   (response) => response.data,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        })
+          .then(token => {
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            return api(originalRequest)
+          })
+          .catch(err => Promise.reject(err))
+      }
+      
+      originalRequest._retry = true
+      isRefreshing = true
+      
+      try {
+        const store = getStore()
+        const state = store.getState()
+        const refreshToken = state.auth.refreshToken
+        
+        if (refreshToken) {
+          try {
+            const response = await axios.post('/api/v1/auth/refresh', {
+              refresh_token: refreshToken
+            })
+            
+            const newToken = response.data.access_token
+            store.dispatch({
+              type: 'auth/setToken',
+              payload: {
+                access_token: newToken,
+                refresh_token: response.data.refresh_token
+              }
+            })
+            
+            processQueue(null, newToken)
+            originalRequest.headers.Authorization = `Bearer ${newToken}`
+            return api(originalRequest)
+          } catch (refreshError) {
+            processQueue(refreshError, null)
+            // 刷新失败，跳转到登录页
+            store.dispatch({ type: 'auth/localLogout' })
+            window.location.href = '/login'
+            return Promise.reject(refreshError)
+          }
+        }
+      } catch (storeError) {
+        // Store 访问失败
+        console.error('Failed to access store:', storeError)
+        processQueue(storeError, null)
+      } finally {
+        isRefreshing = false
+      }
+    }
+    
     const message = error.response?.data?.message || error.message || '请求失败'
     return Promise.reject(new Error(message))
   }
 )
 
+export const authApi = {
+  login: (username: string, password: string) =>
+    api.post('/auth/login', { username, password }),
+  
+  logout: () => api.post('/auth/logout'),
+  
+  refreshToken: (refreshToken: string) =>
+    api.post('/auth/refresh', { refresh_token: refreshToken }),
+  
+  getCurrentUser: () => api.get('/auth/me'),
+}
+
 export const stockApi = {
   getBasic: (code: string) => api.get(`/stock/basic/${code}`),
-  getKline: (code: string, startDate?: string, endDate?: string, adjust: string = 'qfq') =>
-    api.get(`/stock/kline/${code}`, { params: { start_date: startDate, end_date: endDate, adjust } }),
+  getKline: (
+    code: string,
+    params?: {
+      startDate?: string
+      endDate?: string
+      adjust?: string
+      priorityLoad?: boolean
+    }
+  ) =>
+    api.get(`/stock/kline/${code}`, {
+      params: {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        adjust: params?.adjust || 'qfq',
+        priority_load: params?.priorityLoad ?? true
+      }
+    }),
   getIndicators: (code: string, startDate?: string, endDate?: string) =>
     api.get(`/stock/indicators/${code}`, { params: { start_date: startDate, end_date: endDate } }),
   getRealtime: (code: string) => api.get(`/stock/realtime/${code}`),

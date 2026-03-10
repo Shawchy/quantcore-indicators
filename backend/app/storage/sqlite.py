@@ -141,6 +141,21 @@ class BacktestRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
+class TradeRecord(Base):
+    __tablename__ = "trade_record"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    backtest_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    trade_type: Mapped[str] = mapped_column(String(10))
+    code: Mapped[str] = mapped_column(String(10))
+    price: Mapped[float] = mapped_column(Float)
+    quantity: Mapped[float] = mapped_column(Float)
+    amount: Mapped[float] = mapped_column(Float)
+    commission: Mapped[float] = mapped_column(Float, default=0)
+    trade_date: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 engine = None
 async_session_maker = None
 

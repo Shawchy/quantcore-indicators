@@ -5,12 +5,15 @@ from loguru import logger
 from sqlalchemy import select
 
 from app.adapters import data_source_manager, KLineData
-from app.services import DataProcessor, IndicatorCalculator
+from app.services.data_processor import DataProcessor
+from app.services.indicators import IndicatorCalculator
 from app.storage import (
-    StockInfo, KLine, TechnicalIndicatorDB, WatchlistDB,
+    StockInfo, KLine, TechnicalIndicatorDB,
     get_session, cache_manager, parquet_store
 )
 from app.core.exceptions import DataNotFoundException, DataSourceException
+from app.services.data_persistence import data_persistence
+from app.services.data_loader import data_loader, LoadPriority, LoadProgress
 
 
 class StockService:
@@ -20,7 +23,7 @@ class StockService:
     
     async def get_stock_basic(self, code: str) -> Dict[str, Any]:
         cache_key = f"stock_basic_{code}"
-        cached = cache_manager.get("kline", cache_key)
+        cached = await cache_manager.get("kline", cache_key)
         if cached:
             return cached
         
@@ -42,7 +45,7 @@ class StockService:
                     "total_shares": stock.total_shares,
                     "float_shares": stock.float_shares
                 }
-                cache_manager.set("kline", cache_key, data)
+                await cache_manager.set("kline", cache_key, data)
                 return data
         
         stock_info = await data_source_manager.get_stock_info(code)
@@ -67,19 +70,110 @@ class StockService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = "qfq",
-        use_cache: bool = True
+        use_cache: bool = True,
+        persist: bool = True,
+        priority_load: bool = True
+    ) -> Dict[str, Any]:
+        """
+        获取 K 线数据（支持分层加载）
+        
+        Returns:
+            {
+                "status": "partial" | "complete",
+                "data": [...],
+                "coverage": {...},
+                "background_loading": True | False
+            }
+        """
+        # 如果指定了日期范围或禁用优先加载，使用传统方式
+        if start_date or end_date or not priority_load:
+            klines = await self._load_kline_traditional(
+                code, start_date, end_date, adjust, use_cache, persist
+            )
+            return {
+                "status": "complete",
+                "data": klines,
+                "coverage": None,
+                "background_loading": False
+            }
+        
+        # 启用优先加载模式
+        return await self._load_kline_priority(code, adjust, persist)
+    
+    async def _load_kline_priority(self, code: str, adjust: str, persist: bool) -> Dict[str, Any]:
+        """优先加载本月和本年数据"""
+        try:
+            # 第一优先：加载本月数据
+            progress = await data_loader.load_kline_priority(
+                code=code,
+                data_source_manager=data_source_manager,
+                data_persistence=data_persistence,
+                priority=LoadPriority.CURRENT_MONTH
+            )
+            
+            # 处理数据
+            df = pd.DataFrame(progress.data)
+            if not df.empty:
+                df = self.processor.process_kline(df)
+                result = df.to_dict("records")
+            else:
+                result = []
+            
+            return {
+                "status": progress.status,
+                "data": result,
+                "coverage": progress.coverage,
+                "background_loading": progress.background_loading,
+                "total_expected": progress.total_expected,
+                "loaded": progress.loaded
+            }
+            
+        except Exception as e:
+            logger.error(f"优先加载失败 {code}: {e}")
+            # 降级到传统方式
+            klines = await self._load_kline_traditional(code, None, None, adjust, True, persist)
+            return {
+                "status": "complete",
+                "data": klines,
+                "coverage": None,
+                "background_loading": False
+            }
+    
+    async def _load_kline_traditional(
+        self,
+        code: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        adjust: str,
+        use_cache: bool,
+        persist: bool
     ) -> List[Dict[str, Any]]:
+        """传统方式加载全部数据"""
         cache_key = f"kline_{code}_{start_date}_{end_date}_{adjust}"
         
         if use_cache:
-            cached = cache_manager.get("kline", cache_key)
+            cached = await cache_manager.get("kline", cache_key)
             if cached:
                 return cached
         
-        klines = await data_source_manager.get_kline(code, start_date, end_date, adjust)
+        db_klines = await data_persistence.get_klines_from_db(
+            code, start_date, end_date, adjust
+        )
+        
+        if db_klines and len(db_klines) >= 100:
+            klines = db_klines
+            logger.info(f"从本地数据库读取 {len(klines)} 条 K 线：{code}")
+        else:
+            klines = await data_source_manager.get_kline(code, start_date, end_date, adjust)
+            
+            if persist and klines:
+                try:
+                    await data_persistence.save_klines(code, klines, adjust)
+                except Exception as e:
+                    logger.warning(f"保存 K 线数据失败：{e}")
         
         if not klines:
-            raise DataNotFoundException(f"股票 {code} K线数据不存在")
+            raise DataNotFoundException(f"股票 {code} K 线数据不存在")
         
         df = pd.DataFrame([{
             "date": k.date,
@@ -97,7 +191,7 @@ class StockService:
         result = df.to_dict("records")
         
         if use_cache:
-            cache_manager.set("kline", cache_key, result)
+            await cache_manager.set("kline", cache_key, result)
         
         return result
     
@@ -108,11 +202,13 @@ class StockService:
         end_date: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         cache_key = f"indicators_{code}_{start_date}_{end_date}"
-        cached = cache_manager.get("indicators", cache_key)
+        cached = await cache_manager.get("indicators", cache_key)
         if cached:
             return cached
         
-        klines = await self.get_kline(code, start_date, end_date)
+        # 注意：这里调用 get_kline 会返回 Dict，需要提取 data 字段
+        kline_result = await self.get_kline(code, start_date, end_date, priority_load=False)
+        klines = kline_result["data"] if isinstance(kline_result, dict) else kline_result
         
         df = pd.DataFrame(klines)
         if "date" in df.columns:
@@ -134,13 +230,13 @@ class StockService:
         
         result = result_df.to_dict("records")
         
-        cache_manager.set("indicators", cache_key, result)
+        await cache_manager.set("indicators", cache_key, result)
         
         return result
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
         cache_key = f"realtime_{code}"
-        cached = cache_manager.get("realtime", cache_key)
+        cached = await cache_manager.get("realtime", cache_key)
         if cached:
             return cached
         
@@ -149,7 +245,7 @@ class StockService:
         if not quote:
             raise DataNotFoundException(f"股票 {code} 实时行情不存在")
         
-        cache_manager.set("realtime", cache_key, quote, ttl=60)
+        await cache_manager.set("realtime", cache_key, quote, ttl=60)
         
         return quote
     
@@ -169,88 +265,119 @@ class StockService:
         ]
         
         return filtered[:limit]
-
-
-class WatchlistService:
-    async def get_watchlist(self) -> List[Dict[str, Any]]:
-        async with get_session() as session:
-            result = await session.execute(select(WatchlistDB))
-            watchlist = result.scalars().all()
-            
-            return [{
-                "code": item.code,
-                "note": item.note,
-                "created_at": item.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                "updated_at": item.updated_at.strftime("%Y-%m-%d %H:%M:%S")
-            } for item in watchlist]
     
-    async def add_to_watchlist(self, code: str, note: Optional[str] = None) -> Dict[str, Any]:
-        async with get_session() as session:
-            existing = await session.execute(
-                select(WatchlistDB).where(WatchlistDB.code == code)
-            )
-            if existing.scalar_one_or_none():
-                return {"code": code, "message": "已在自选股中"}
-            
-            watchlist_item = WatchlistDB(code=code, note=note)
-            session.add(watchlist_item)
-            await session.commit()
-            
-            return {
-                "code": code,
-                "note": note,
-                "message": "添加成功"
-            }
-    
-    async def remove_from_watchlist(self, code: str) -> Dict[str, Any]:
-        async with get_session() as session:
-            result = await session.execute(
-                select(WatchlistDB).where(WatchlistDB.code == code)
-            )
-            item = result.scalar_one_or_none()
-            
-            if not item:
-                return {"code": code, "message": "不在自选股中"}
-            
-            await session.delete(item)
-            await session.commit()
-            
-            return {"code": code, "message": "删除成功"}
-    
-    async def update_watchlist_note(self, code: str, note: str) -> Dict[str, Any]:
-        async with get_session() as session:
-            result = await session.execute(
-                select(WatchlistDB).where(WatchlistDB.code == code)
-            )
-            item = result.scalar_one_or_none()
-            
-            if not item:
-                return {"code": code, "message": "不在自选股中"}
-            
-            item.note = note
-            await session.commit()
-            
-            return {
-                "code": code,
-                "note": note,
-                "message": "更新成功"
-            }
-    
-    async def get_watchlist_quotes(self) -> List[Dict[str, Any]]:
-        watchlist = await self.get_watchlist()
-        quotes = []
+    async def get_klines_batch(
+        self,
+        codes: List[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        批量获取 K 线数据（解决 N+1 查询问题）
         
-        stock_service = StockService()
-        for item in watchlist:
-            try:
-                quote = await stock_service.get_realtime_quote(item["code"])
-                quote["note"] = item["note"]
-                quotes.append(quote)
-            except Exception as e:
-                logger.warning(f"获取自选股 {item['code']} 行情失败: {e}")
+        Args:
+            codes: 股票代码列表
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+            
+        Returns:
+            {
+                "000001": [...],
+                "000002": [...],
+                ...
+            }
+        """
+        from sqlalchemy import select
+        from app.storage import KLine
         
-        return quotes
+        results = {}
+        
+        # 批量查询数据库
+        async with get_session() as session:
+            query = select(KLine).where(KLine.code.in_(codes))
+            
+            if start_date:
+                query = query.where(KLine.date >= start_date)
+            if end_date:
+                query = query.where(KLine.date <= end_date)
+            
+            result = await session.execute(query)
+            db_klines = result.scalars().all()
+        
+        # 按股票代码分组
+        grouped = {}
+        for kline in db_klines:
+            if kline.code not in grouped:
+                grouped[kline.code] = []
+            grouped[kline.code].append({
+                "date": kline.date,
+                "open": kline.open,
+                "high": kline.high,
+                "low": kline.low,
+                "close": kline.close,
+                "volume": kline.volume,
+                "amount": kline.amount,
+                "turnover_rate": kline.turnover_rate
+            })
+        
+        # 对于数据库中没有的股票，从数据源获取
+        missing_codes = [code for code in codes if code not in grouped or len(grouped[code]) < 100]
+        
+        if missing_codes:
+            from asyncio import gather
+            tasks = [
+                self._load_kline_traditional(code, start_date, end_date, adjust, True, True)
+                for code in missing_codes
+            ]
+            fetched_data = await gather(*tasks, return_exceptions=True)
+            
+            for code, data in zip(missing_codes, fetched_data):
+                if isinstance(data, list):
+                    grouped[code] = data
+                else:
+                    logger.warning(f"批量获取 {code} K 线数据失败：{data}")
+                    grouped[code] = []
+        
+        return grouped
+    
+    async def get_realtime_quotes_batch(
+        self,
+        codes: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        批量获取实时行情（并发优化）
+        
+        Args:
+            codes: 股票代码列表
+            
+        Returns:
+            {
+                "000001": {...},
+                "000002": {...},
+                ...
+            }
+        """
+        from asyncio import gather, Semaphore
+        
+        # 限制并发数，避免过多请求
+        semaphore = Semaphore(10)
+        
+        async def fetch_with_semaphore(code: str) -> tuple:
+            async with semaphore:
+                try:
+                    quote = await self.get_realtime_quote(code)
+                    return (code, quote)
+                except Exception as e:
+                    logger.warning(f"获取 {code} 实时行情失败：{e}")
+                    return (code, None)
+        
+        tasks = [fetch_with_semaphore(code) for code in codes]
+        results = await gather(*tasks)
+        
+        return {code: quote for code, quote in results if quote is not None}
 
 
+# 单例
 stock_service = StockService()
-watchlist_service = WatchlistService()

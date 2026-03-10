@@ -8,10 +8,11 @@ from .sqlite import (
     SectorInfo,
     Strategy,
     BacktestRecord,
+    TradeRecord,
     init_database,
     get_session
 )
-from .cache import cache_manager, CacheManager, LRUCache
+from .cache import cache_manager, CacheManager, AsyncLRUCache
 from .parquet_store import parquet_store, ParquetStore
 
 __all__ = [
@@ -24,11 +25,12 @@ __all__ = [
     "SectorInfo",
     "Strategy",
     "BacktestRecord",
+    "TradeRecord",
     "init_database",
     "get_session",
     "cache_manager",
     "CacheManager",
-    "LRUCache",
+    "AsyncLRUCache",
     "parquet_store",
     "ParquetStore"
 ]

@@ -16,14 +16,25 @@ import {
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText,
+  Flex,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { screenerApi } from '../services/api'
+import { StatCard } from '../components/StatCard'
+import { PresetCondition, MarketStats } from '../types'
+
+interface ScreenerConditions {
+  industry: string
+  market_cap_min: string
+  market_cap_max: string
+  pe_min: string
+  pe_max: string
+  control_degree_min: string
+}
 
 const Screener = () => {
-  const [conditions, setConditions] = useState({
+  const [conditions, setConditions] = useState<ScreenerConditions>({
     industry: '',
     market_cap_min: '',
     market_cap_max: '',
@@ -50,7 +61,7 @@ const Screener = () => {
   })
 
   const presets = presetsData?.data || []
-  const marketStats = marketStatsData?.data
+  const marketStats = marketStatsData?.data as MarketStats | undefined
   const results = resultsData?.data || []
 
   const handleSearch = () => {
@@ -58,7 +69,7 @@ const Screener = () => {
     refetch()
   }
 
-  const handlePresetSelect = (preset: any) => {
+  const handlePresetSelect = (preset: PresetCondition) => {
     setConditions({ ...conditions, ...preset.conditions })
     setHasSearched(true)
     setTimeout(() => refetch(), 100)
@@ -78,48 +89,42 @@ const Screener = () => {
 
   return (
     <VStack spacing={6} align="stretch">
-      <Heading size="lg">智能选股</Heading>
+      <Heading size="lg" color="light.text">
+        智能选股
+      </Heading>
 
       <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
-        <Card>
-          <CardBody>
-            <Stat>
-              <StatLabel>市场股票总数</StatLabel>
-              <StatNumber>{marketStats?.total_stocks || '--'}</StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <Stat>
-              <StatLabel>筛选结果</StatLabel>
-              <StatNumber>{results.length}</StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <Stat>
-              <StatLabel>行业数量</StatLabel>
-              <StatNumber>{Object.keys(marketStats?.industry_distribution || {}).length}</StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
+        <StatCard
+          label="市场股票总数"
+          value={marketStats?.total_stocks || '--'}
+          size="md"
+        />
+        <StatCard
+          label="筛选结果"
+          value={results.length}
+          size="md"
+        />
+        <StatCard
+          label="行业数量"
+          value={Object.keys(marketStats?.industry_distribution || {}).length}
+          size="md"
+        />
       </SimpleGrid>
 
       <Card>
-        <CardHeader>
-          <HStack justify="space-between">
-            <Heading size="sm">预设条件</Heading>
-          </HStack>
+        <CardHeader pb={2}>
+          <Heading size="sm" color="light.text">预设条件</Heading>
         </CardHeader>
-        <CardBody>
-          <HStack spacing={4} wrap="wrap">
+        <CardBody pt={2}>
+          <HStack spacing={3} wrap="wrap">
             {presets.map((preset: any) => (
               <Button
                 key={preset.id}
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                border="1px solid"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
                 onClick={() => handlePresetSelect(preset)}
               >
                 {preset.name}
@@ -130,97 +135,127 @@ const Screener = () => {
       </Card>
 
       <Card>
-        <CardHeader>
-          <Heading size="sm">筛选条件</Heading>
+        <CardHeader pb={2}>
+          <Heading size="sm" color="light.text">筛选条件</Heading>
         </CardHeader>
-        <CardBody>
+        <CardBody pt={2}>
           <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
             <FormControl>
-              <FormLabel>行业</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">行业</FormLabel>
               <Input
                 placeholder="输入行业名称"
                 value={conditions.industry}
                 onChange={(e) => setConditions({ ...conditions, industry: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.500' }}
+                _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
               />
             </FormControl>
             <FormControl>
-              <FormLabel>市值下限(亿)</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">市值下限 (亿)</FormLabel>
               <Input
                 type="number"
                 placeholder="最小市值"
                 value={conditions.market_cap_min}
                 onChange={(e) => setConditions({ ...conditions, market_cap_min: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.500' }}
+                _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
               />
             </FormControl>
             <FormControl>
-              <FormLabel>市值上限(亿)</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">市值上限 (亿)</FormLabel>
               <Input
                 type="number"
                 placeholder="最大市值"
                 value={conditions.market_cap_max}
                 onChange={(e) => setConditions({ ...conditions, market_cap_max: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.500' }}
+                _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
               />
             </FormControl>
             <FormControl>
-              <FormLabel>PE下限</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">PE 下限</FormLabel>
               <Input
                 type="number"
-                placeholder="最小PE"
+                placeholder="最小 PE"
                 value={conditions.pe_min}
                 onChange={(e) => setConditions({ ...conditions, pe_min: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.500' }}
+                _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
               />
             </FormControl>
             <FormControl>
-              <FormLabel>PE上限</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">PE 上限</FormLabel>
               <Input
                 type="number"
-                placeholder="最大PE"
+                placeholder="最大 PE"
                 value={conditions.pe_max}
                 onChange={(e) => setConditions({ ...conditions, pe_max: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.500' }}
+                _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
               />
             </FormControl>
             <FormControl>
-              <FormLabel>最小控盘度</FormLabel>
+              <FormLabel color="light.textSecondary" fontSize="sm">最小控盘度</FormLabel>
               <Input
                 type="number"
                 step="0.1"
                 min="0"
                 max="1"
-                placeholder="0-1之间"
+                placeholder="0-1 之间"
                 value={conditions.control_degree_min}
                 onChange={(e) => setConditions({ ...conditions, control_degree_min: e.target.value })}
+                bg="light.bgSecondary"
+                borderColor="light.border"
+                _hover={{ borderColor: 'brand.500' }}
+                _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
               />
             </FormControl>
           </SimpleGrid>
 
           <HStack mt={6} justify="flex-end">
             <Button variant="ghost" onClick={handleReset}>重置</Button>
-            <Button colorScheme="brand" onClick={handleSearch}>筛选</Button>
+            <Button variant="primary" onClick={handleSearch}>筛选</Button>
           </HStack>
         </CardBody>
       </Card>
 
       <Card>
-        <CardHeader>
-          <Heading size="sm">筛选结果</Heading>
+        <CardHeader pb={2}>
+          <Heading size="sm" color="light.text">筛选结果</Heading>
         </CardHeader>
         <CardBody>
           {isLoading ? (
-            <VStack justify="center" h="200px">
-              <Spinner />
-              <Text>筛选中...</Text>
-            </VStack>
+            <Flex justify="center" align="center" h="200px">
+              <Spinner color="brand.400" />
+            </Flex>
           ) : hasSearched ? (
             results.length > 0 ? (
-              <SimpleGrid columns={{ base: 2, md: 4, lg: 6 }} spacing={4}>
+              <SimpleGrid columns={{ base: 2, md: 4, lg: 6 }} spacing={3}>
                 {results.map((stock: any) => (
-                  <Card key={stock.code} size="sm" variant="outline">
-                    <CardBody>
+                  <Card 
+                    key={stock.code} 
+                    size="sm" 
+                    variant="outline"
+                    cursor="pointer"
+                    _hover={{ borderColor: 'brand.400', bg: 'light.bgSecondary', transform: 'translateY(-2px)' }}
+                    transition="all 0.2s"
+                  >
+                    <CardBody p={3}>
                       <VStack align="start" spacing={1}>
-                        <Text fontWeight="bold">{stock.code}</Text>
-                        <Text fontSize="sm" color="gray.500">{stock.name}</Text>
+                        <Text fontWeight="bold" color="light.text" fontFamily="mono">{stock.code}</Text>
+                        <Text fontSize="sm" color="light.textSecondary">{stock.name}</Text>
                         {stock.industry && (
-                          <Badge size="sm" variant="subtle">{stock.industry}</Badge>
+                          <Badge size="sm" variant="solid" colorScheme="blue" fontSize="xs">{stock.industry}</Badge>
                         )}
                       </VStack>
                     </CardBody>
@@ -228,10 +263,10 @@ const Screener = () => {
                 ))}
               </SimpleGrid>
             ) : (
-              <Text color="gray.500">未找到符合条件的股票</Text>
+              <Text color="light.textMuted">未找到符合条件的股票</Text>
             )
           ) : (
-            <Text color="gray.500">请设置筛选条件后点击筛选按钮</Text>
+            <Text color="light.textMuted">请设置筛选条件后点击筛选按钮</Text>
           )}
         </CardBody>
       </Card>

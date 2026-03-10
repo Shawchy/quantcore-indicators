@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     
     TUSHARE_TOKEN: Optional[str] = None
     
+    # JWT 认证配置
+    SECRET_KEY: Optional[str] = None  # 生产环境必须设置，建议使用：openssl rand -hex 32
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 小时
+    
+    # 默认用户密码（开发环境）
+    DEFAULT_ADMIN_PASSWORD: str = "admin123"
+    DEFAULT_USER_PASSWORD: str = "user123"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

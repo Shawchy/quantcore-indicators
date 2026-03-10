@@ -13,7 +13,12 @@ from .base import (
 from .akshare_adapter import AkShareAdapter
 from .baostock_adapter import BaostockAdapter
 from .yfinance_adapter import YFinanceAdapter
-from .tushare_adapter import TushareAdapter
+
+try:
+    from .tushare_adapter import TushareAdapter
+except ImportError:
+    TushareAdapter = None
+
 from app.config import settings
 
 
@@ -32,8 +37,10 @@ class DataSourceFactory:
             DataSourceType.AKSHARE: (AkShareAdapter, True),
             DataSourceType.BAOSTOCK: (BaostockAdapter, True),
             DataSourceType.YFINANCE: (YFinanceAdapter, False),
-            DataSourceType.TUSHARE: (TushareAdapter, bool(settings.TUSHARE_TOKEN))
         }
+        
+        if TushareAdapter is not None:
+            adapters_config[DataSourceType.TUSHARE] = (TushareAdapter, bool(settings.TUSHARE_TOKEN))
         
         for source_type, (adapter_class, should_init) in adapters_config.items():
             if should_init:

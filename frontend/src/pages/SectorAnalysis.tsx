@@ -11,9 +11,7 @@ import {
   Spinner,
   Tabs,
   TabList,
-  TabPanels,
   Tab,
-  TabPanel,
   Table,
   Thead,
   Tbody,
@@ -22,12 +20,14 @@ import {
   Td,
   TableContainer,
   Select,
-  Button,
+  Flex,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { sectorApi } from '../services/api'
+import { RankBadge } from '../components/RankBadge'
+import { SectorRankingItem } from '../types'
 
 const SectorAnalysis = () => {
   const [sectorType, setSectorType] = useState('industry')
@@ -44,54 +44,88 @@ const SectorAnalysis = () => {
   })
 
   const sectors = sectorListData?.data || []
-  const ranking = rankingData?.data || []
+  const ranking = rankingData?.data || [] as SectorRankingItem[]
 
   const getBarOption = () => {
     const top10 = ranking.slice(0, 10)
     return {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      backgroundColor: 'transparent',
+      tooltip: { 
+        trigger: 'axis', 
+        axisPointer: { type: 'shadow' },
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        borderColor: '#e2e8f0',
+        textStyle: { color: '#1e293b' },
+      },
       grid: { left: '15%', right: '5%', bottom: '10%', top: '5%' },
-      xAxis: { type: 'value' },
+      xAxis: { 
+        type: 'value',
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { color: '#64748b' },
+        splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+      },
       yAxis: {
         type: 'category',
         data: top10.map((s: any) => s.name).reverse(),
-        axisLabel: { width: 80, overflow: 'truncate' },
+        axisLabel: { width: 80, overflow: 'truncate', color: '#64748b' },
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
       },
       series: [{
         type: 'bar',
-        data: top10.map((s: any) => s.change_pct || 0).reverse(),
-        itemStyle: {
-          color: (params: any) => params.value >= 0 ? '#f44336' : '#4caf50',
-        },
+        data: top10.map((s: any) => ({
+          value: s.change_pct || 0,
+          itemStyle: {
+            color: (params: any) => params.value >= 0 ? '#ef4444' : '#10b981',
+          },
+        })).reverse(),
+        barWidth: '60%',
       }],
     }
   }
 
   return (
     <VStack spacing={6} align="stretch">
-      <HStack justify="space-between">
-        <Heading size="lg">板块分析</Heading>
-        <HStack>
-          <Select value={sectorType} onChange={(e) => setSectorType(e.target.value)} w="150px">
-            <option value="industry">行业板块</option>
-            <option value="concept">概念板块</option>
+      <HStack justify="space-between" flexWrap="wrap" gap={4}>
+        <Heading size="lg" color="light.text">
+          板块分析
+        </Heading>
+        <HStack spacing={3}>
+          <Select 
+            value={sectorType} 
+            onChange={(e) => setSectorType(e.target.value)} 
+            w="150px"
+            bg="light.bgSecondary"
+            borderColor="light.border"
+            _hover={{ borderColor: 'brand.500' }}
+          >
+            <option value="industry" style={{ background: '#ffffff' }}>行业板块</option>
+            <option value="concept" style={{ background: '#ffffff' }}>概念板块</option>
           </Select>
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} w="150px">
-            <option value="change_pct">按涨跌幅</option>
-            <option value="volume">按成交量</option>
-            <option value="amount">按成交额</option>
+          <Select 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value)} 
+            w="150px"
+            bg="light.bgSecondary"
+            borderColor="light.border"
+            _hover={{ borderColor: 'brand.500' }}
+          >
+            <option value="change_pct" style={{ background: '#ffffff' }}>按涨跌幅</option>
+            <option value="volume" style={{ background: '#ffffff' }}>按成交量</option>
+            <option value="amount" style={{ background: '#ffffff' }}>按成交额</option>
           </Select>
         </HStack>
       </HStack>
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
         <Card>
-          <CardHeader>
-            <Heading size="sm">板块涨幅排行</Heading>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">板块涨幅排行</Heading>
           </CardHeader>
-          <CardBody>
+          <CardBody pt={2}>
             {rankingLoading ? (
-              <Spinner />
+              <Flex justify="center" align="center" h="400px">
+                <Spinner color="brand.400" />
+              </Flex>
             ) : (
               <ReactECharts option={getBarOption()} style={{ height: '400px' }} />
             )}
@@ -99,28 +133,30 @@ const SectorAnalysis = () => {
         </Card>
 
         <Card>
-          <CardHeader>
-            <Heading size="sm">板块列表</Heading>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">板块列表</Heading>
           </CardHeader>
-          <CardBody>
+          <CardBody pt={2}>
             {listLoading ? (
-              <Spinner />
+              <Flex justify="center" align="center" h="400px">
+                <Spinner color="brand.400" />
+              </Flex>
             ) : (
               <TableContainer maxH="400px" overflowY="auto">
-                <Table size="sm">
+                <Table size="sm" variant="simple">
                   <Thead>
                     <Tr>
-                      <Th>板块名称</Th>
-                      <Th isNumeric>涨跌幅</Th>
+                      <Th borderColor="light.border" color="light.textSecondary">板块名称</Th>
+                      <Th borderColor="light.border" color="light.textSecondary" isNumeric>涨跌幅</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {sectors.slice(0, 20).map((sector: any) => (
-                      <Tr key={sector.code} _hover={{ bg: 'gray.50' }}>
-                        <Td>{sector.name}</Td>
-                        <Td isNumeric>
-                          <Badge colorScheme={sector.change_pct >= 0 ? 'red' : 'green'}>
-                            {sector.change_pct >= 0 ? '+' : ''}{(sector.change_pct || 0).toFixed(2)}%
+                    {sectors.slice(0, 20).map((sector: SectorRankingItem) => (
+                      <Tr key={sector.code} _hover={{ bg: 'light.bgSecondary' }}>
+                        <Td borderColor="light.border" color="light.text">{sector.name}</Td>
+                        <Td borderColor="light.border" isNumeric>
+                          <Badge variant={sector.change_pct && sector.change_pct >= 0 ? 'up' : 'down'}>
+                            {sector.change_pct && sector.change_pct >= 0 ? '+' : ''}{(sector.change_pct || 0).toFixed(2)}%
                           </Badge>
                         </Td>
                       </Tr>
@@ -134,40 +170,46 @@ const SectorAnalysis = () => {
       </SimpleGrid>
 
       <Card>
-        <CardHeader>
-          <Heading size="sm">板块详情排行</Heading>
-        </CardHeader>
-        <CardBody>
-          <TableContainer>
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>排名</Th>
-                  <Th>板块名称</Th>
-                  <Th isNumeric>涨跌幅</Th>
-                  <Th isNumeric>成交量</Th>
-                  <Th isNumeric>成交额</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {ranking.map((sector: any, index: number) => (
-                  <Tr key={sector.code} _hover={{ bg: 'gray.50' }}>
-                    <Td>{index + 1}</Td>
-                    <Td fontWeight="medium">{sector.name}</Td>
-                    <Td isNumeric>
-                      <Badge colorScheme={sector.change_pct >= 0 ? 'red' : 'green'}>
-                        {sector.change_pct >= 0 ? '+' : ''}{(sector.change_pct || 0).toFixed(2)}%
-                      </Badge>
-                    </Td>
-                    <Td isNumeric>{sector.volume ? (sector.volume / 100000000).toFixed(2) + '亿' : '--'}</Td>
-                    <Td isNumeric>{sector.amount ? (sector.amount / 100000000).toFixed(2) + '亿' : '--'}</Td>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">板块详情排行</Heading>
+          </CardHeader>
+          <CardBody>
+            <TableContainer>
+              <Table size="sm" variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th borderColor="light.border" color="light.textSecondary">排名</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">板块名称</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>涨跌幅</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>成交量</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>成交额</Th>
                   </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </TableContainer>
-        </CardBody>
-      </Card>
+                </Thead>
+                <Tbody>
+                  {ranking.map((sector: SectorRankingItem, index: number) => (
+                    <Tr key={sector.code} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Td borderColor="light.border">
+                        <RankBadge rank={index + 1} />
+                      </Td>
+                      <Td borderColor="light.border" fontWeight="medium" color="light.text">{sector.name}</Td>
+                      <Td borderColor="light.border" isNumeric>
+                        <Badge variant={sector.change_pct && sector.change_pct >= 0 ? 'up' : 'down'}>
+                          {sector.change_pct && sector.change_pct >= 0 ? '+' : ''}{(sector.change_pct || 0).toFixed(2)}%
+                        </Badge>
+                      </Td>
+                      <Td borderColor="light.border" isNumeric color="light.textSecondary">
+                        {sector.volume ? (sector.volume / 100000000).toFixed(2) + '亿' : '--'}
+                      </Td>
+                      <Td borderColor="light.border" isNumeric color="light.textSecondary">
+                        {sector.amount ? (sector.amount / 100000000).toFixed(2) + '亿' : '--'}
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </TableContainer>
+          </CardBody>
+        </Card>
     </VStack>
   )
 }

@@ -211,6 +211,16 @@ class StrategyOptimizer:
             data_source_manager.get_kline(code, start_date, end_date, "qfq")
         )
         
+        # 持久化保存到数据库和 Parquet
+        if klines:
+            from app.services.data_persistence import data_persistence
+            try:
+                # 使用 asyncio.run() 运行异步函数
+                asyncio.run(data_persistence.save_klines(code, klines, "qfq"))
+                logger.info(f"回测优化：已保存 {len(klines)} 条 K 线数据：{code}")
+            except Exception as e:
+                logger.warning(f"回测优化：保存 K 线数据失败：{e}")
+        
         if not klines:
             return OptimizationResult(
                 best_params={},

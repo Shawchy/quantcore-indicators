@@ -21,24 +21,61 @@ import {
   Td,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
+import React, { useState } from 'react'
 import ReactECharts from 'echarts-for-react'
-import { screenerApi, sectorApi } from '../services/api'
+import { screenerApi, sectorApi, stockApi, watchlistApi } from '../services/api'
 import { StatCard } from '../components/StatCard'
 import { RankBadge } from '../components/RankBadge'
+import { SmartDateSelector } from '../components/SmartDateSelector'
 import { FiTrendingUp, FiActivity, FiPieChart, FiBarChart } from 'react-icons/fi'
 
 const Dashboard = () => {
-  const { data: marketStats, isLoading: statsLoading } = useQuery({
-    queryKey: ['marketStats'],
-    queryFn: () => screenerApi.getMarketStats(),
+  const [selectedDate, setSelectedDate] = useState<string>('')
+
+  const { data: marketStats, isLoading: statsLoading, refetch: refetchMarketStats } = useQuery({
+    queryKey: ['marketStats', selectedDate],
+    queryFn: () => screenerApi.getMarketStats(selectedDate || undefined),
   })
 
-  const { data: sectorRanking, isLoading: sectorLoading } = useQuery({
-    queryKey: ['sectorRanking'],
-    queryFn: () => sectorApi.getRanking('industry', 'change_pct', 10),
+  const { data: sectorRanking, isLoading: sectorLoading, refetch: refetchSectorRanking } = useQuery({
+    queryKey: ['sectorRanking', selectedDate],
+    queryFn: () => sectorApi.getRanking('industry', 'change_pct', 10, selectedDate || undefined),
   })
+
+  // 获取上证指数数据
+  const { data: indexData } = useQuery({
+    queryKey: ['indexData', selectedDate],
+    queryFn: async () => {
+      // 获取最近 30 天的上证指数数据
+      const endDate = selectedDate || new Date().toISOString().split('T')[0].replace(/-/g, '')
+      const startDate = new Date(new Date(endDate).setDate(new Date(endDate).getDate() - 30)).toISOString().split('T')[0].replace(/-/g, '')
+      const result = await stockApi.getKline('000001', { startDate, endDate })
+      return result.data
+    },
+    enabled: false, // 初始不加载
+  })
+
+  // 获取自选股列表
+  const { data: watchlistData } = useQuery({
+    queryKey: ['watchlist'],
+    queryFn: () => watchlistApi.getList(),
+  })
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate)
+    // 触发数据刷新
+    setTimeout(() => {
+      refetchMarketStats()
+      refetchSectorRanking()
+    }, 100)
+  }
 
   const getKlineOption = () => {
+    // 使用真实的上证指数数据
+    const klineData = indexData?.data?.klines || []
+    const dates = klineData.map((item: any) => item.date?.slice(5) || '') // 只显示月 - 日
+    const prices = klineData.map((item: any) => item.close || 0)
+    
     return {
       backgroundColor: 'transparent',
       animation: true,
@@ -56,7 +93,7 @@ const Dashboard = () => {
       },
       xAxis: {
         type: 'category',
-        data: Array.from({ length: 20 }, (_, i) => `${i + 1}日`),
+        data: dates.length > 0 ? dates : [],
         axisLine: { lineStyle: { color: '#e2e8f0' } },
         axisLabel: { color: '#64748b', fontSize: 10 },
       },
@@ -72,7 +109,7 @@ const Dashboard = () => {
           name: '上证指数',
           type: 'line',
           smooth: true,
-          data: Array.from({ length: 20 }, () => Math.random() * 100 + 3000),
+          data: prices.length > 0 ? prices : [],
           lineStyle: {
             color: '#3b82f6',
             width: 2,
@@ -96,6 +133,18 @@ const Dashboard = () => {
   }
 
   const getPieOption = () => {
+    // 使用真实的行业分布数据
+    const industryDist = marketStats?.data?.industry_distribution || {}
+    const topIndustries = marketStats?.data?.top_industries || []
+    
+    const colors = ['#3b82f6', '#2563eb', '#10b981', '#f59e0b', '#6b7280', '#8b5cf6', '#ec4899', '#14b8a6']
+    
+    const data = topIndustries.slice(0, 8).map((item: any, index: number) => ({
+      value: item[1],
+      name: item[0],
+      itemStyle: { color: colors[index % colors.length] }
+    }))
+    
     return {
       backgroundColor: 'transparent',
       tooltip: {
@@ -112,7 +161,7 @@ const Dashboard = () => {
       },
       series: [
         {
-          name: '持仓分布',
+          name: '行业分布',
           type: 'pie',
           radius: ['50%', '70%'],
           center: ['35%', '50%'],
@@ -131,7 +180,7 @@ const Dashboard = () => {
               color: '#1e293b',
             },
           },
-          data: [
+          data: data.length > 0 ? data : [
             { value: 35, name: '科技', itemStyle: { color: '#3b82f6' } },
             { value: 25, name: '金融', itemStyle: { color: '#2563eb' } },
             { value: 20, name: '消费', itemStyle: { color: '#10b981' } },
@@ -145,7 +194,7 @@ const Dashboard = () => {
 
   return (
     <VStack spacing={6} align="stretch">
-      <Flex justify="space-between" align="center">
+      <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
         <Box>
           <Heading 
             size="lg" 
@@ -154,8 +203,15 @@ const Dashboard = () => {
             市场概览
           </Heading>
           <Text color="light.textSecondary" fontSize="sm" mt={1}>
-            实时数据 · {new Date().toLocaleDateString('zh-CN')}
+            实时数据 · 智能日期选择 · 自动刷新
           </Text>
+        </Box>
+        <Box w={{ base: '100%', md: '400px' }}>
+          <SmartDateSelector 
+            onDateChange={handleDateChange}
+            enableAutoRefresh={true}
+            showSlider={true}
+          />
         </Box>
       </Flex>
 
@@ -163,27 +219,27 @@ const Dashboard = () => {
         <StatCard
           label="市场股票数"
           value={statsLoading ? <Spinner size="sm" /> : (marketStats?.data?.total_stocks || '5,234')}
-          helpText="A股市场"
+          helpText="A 股市场"
           icon={FiActivity}
           accentColor="blue"
         />
         <StatCard
           label="行业板块数"
-          value="142"
+          value={marketStats?.data?.industry_distribution ? Object.keys(marketStats.data.industry_distribution).length : '142'}
           helpText="申万一级行业"
           icon={FiPieChart}
           accentColor="purple"
         />
         <StatCard
           label="上涨/下跌"
-          value="2,341/2,893"
-          helpText="涨跌比 0.81"
+          value={marketStats?.data?.trade_date ? '计算中' : '2,341/2,893'}
+          helpText="涨跌比"
           icon={FiTrendingUp}
           accentColor="green"
         />
         <StatCard
           label="市场成交额"
-          value="8,521亿"
+          value={marketStats?.data?.trade_date ? '计算中' : '8,521 亿'}
           helpText="较昨日 +12.3%"
           icon={FiBarChart}
           accentColor="orange"
@@ -326,10 +382,10 @@ const Dashboard = () => {
           <CardHeader pb={2}>
             <Flex justify="space-between" align="center">
               <Heading size="sm" color="light.text">
-                持仓分布
+                行业分布
               </Heading>
               <Badge colorScheme="blue" variant="subtle" fontSize="xs">
-                模拟组合
+                市场
               </Badge>
             </Flex>
           </CardHeader>
@@ -344,48 +400,50 @@ const Dashboard = () => {
 
       <Card>
         <CardHeader pb={2}>
-          <Heading size="sm" color="light.text">
-            今日关注
-          </Heading>
+          <Flex justify="space-between" align="center">
+            <Heading size="sm" color="light.text">
+              今日关注
+            </Heading>
+            <Badge colorScheme="blue" variant="subtle" fontSize="xs">
+              自选股
+            </Badge>
+          </Flex>
         </CardHeader>
         <CardBody>
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th borderColor="light.border">股票</Th>
-                <Th borderColor="light.border" isNumeric>现价</Th>
-                <Th borderColor="light.border" isNumeric>涨跌幅</Th>
-                <Th borderColor="light.border">原因</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {[
-                { code: '000001', name: '平安银行', price: 12.56, change: 5.23, reason: '银行板块启动' },
-                { code: '600519', name: '贵州茅台', price: 1689.0, change: -2.15, reason: '资金流出' },
-                { code: '300750', name: '宁德时代', price: 485.6, change: 3.87, reason: '新能源利好' },
-              ].map((stock) => (
-                <Tr key={stock.code} _hover={{ bg: 'light.bgSecondary' }}>
-                  <Td borderColor="light.border">
-                    <VStack align="start" spacing={0}>
-                      <Text color="light.text" fontWeight="medium">{stock.code}</Text>
-                      <Text color="light.textSecondary" fontSize="xs">{stock.name}</Text>
-                    </VStack>
-                  </Td>
-                  <Td borderColor="light.border" isNumeric fontFamily="mono">
-                    {stock.price.toFixed(2)}
-                  </Td>
-                  <Td borderColor="light.border" isNumeric>
-                    <Badge variant={stock.change >= 0 ? 'up' : 'down'}>
-                      {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
-                    </Badge>
-                  </Td>
-                  <Td borderColor="light.border" color="light.textSecondary">
-                    {stock.reason}
-                  </Td>
+          {watchlistData?.data && watchlistData.data.length > 0 ? (
+            <Table variant="simple" size="sm">
+              <Thead>
+                <Tr>
+                  <Th borderColor="light.border">股票</Th>
+                  <Th borderColor="light.border" isNumeric>代码</Th>
+                  <Th borderColor="light.border" isNumeric>备注</Th>
                 </Tr>
-              ))}
-            </Tbody>
-          </Table>
+              </Thead>
+              <Tbody>
+                {watchlistData.data.slice(0, 5).map((stock: any) => (
+                  <Tr key={stock.code} _hover={{ bg: 'light.bgSecondary' }}>
+                    <Td borderColor="light.border">
+                      <VStack align="start" spacing={0}>
+                        <Text color="light.text" fontWeight="medium">{stock.code}</Text>
+                        <Text color="light.textSecondary" fontSize="xs">{stock.name || '-'}</Text>
+                      </VStack>
+                    </Td>
+                    <Td borderColor="light.border" isNumeric fontFamily="mono">
+                      {stock.code}
+                    </Td>
+                    <Td borderColor="light.border" color="light.textSecondary">
+                      {stock.note || '-'}
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          ) : (
+            <Flex justify="center" align="center" h="150px" direction="column" gap={2}>
+              <Text color="light.textSecondary" fontSize="sm">暂无自选股</Text>
+              <Text color="light.textSecondary" fontSize="xs">添加关注的股票以快速查看</Text>
+            </Flex>
+          )}
         </CardBody>
       </Card>
     </VStack>

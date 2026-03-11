@@ -70,7 +70,24 @@ const Backtest = () => {
     runMutation.mutate()
   }
 
+  // 获取最新回测结果的详细数据
+  const latestBacktestId = history.length > 0 ? history[0].backtest_id : null
+  const { data: performanceData } = useQuery({
+    queryKey: ['backtestPerformance', latestBacktestId],
+    queryFn: () => latestBacktestId ? backtestApi.getPerformance(latestBacktestId) : Promise.resolve(null),
+    enabled: !!latestBacktestId,
+  })
+
   const getEquityCurveOption = () => {
+    // 使用真实回测数据
+    const performance = performanceData?.data
+    const equityCurve = performance?.equity_curve || []
+    const benchmarkCurve = performance?.benchmark_curve || []
+    
+    const dates = equityCurve.map((item: any) => item.date?.slice(5) || '')
+    const strategyValues = equityCurve.map((item: any) => item.value || 1)
+    const benchmarkValues = benchmarkCurve.map((item: any) => item.value || 1)
+    
     return {
       backgroundColor: 'transparent',
       tooltip: { 
@@ -87,7 +104,7 @@ const Backtest = () => {
       grid: { left: '10%', right: '5%', bottom: '15%' },
       xAxis: { 
         type: 'category', 
-        data: ['1月', '2月', '3月', '4月', '5月', '6月'],
+        data: dates.length > 0 ? dates : [],
         axisLine: { lineStyle: { color: '#e2e8f0' } },
         axisLabel: { color: '#64748b' },
       },
@@ -101,7 +118,7 @@ const Backtest = () => {
         { 
           name: '策略净值', 
           type: 'line', 
-          data: [1, 1.1, 1.05, 1.2, 1.15, 1.3],
+          data: strategyValues.length > 0 ? strategyValues : [],
           smooth: true,
           lineStyle: { color: 'brand.500', width: 2 },
           areaStyle: {
@@ -118,7 +135,7 @@ const Backtest = () => {
         { 
           name: '基准净值', 
           type: 'line', 
-          data: [1, 1.02, 1.01, 1.05, 1.03, 1.08],
+          data: benchmarkValues.length > 0 ? benchmarkValues : [],
           smooth: true,
           lineStyle: { color: '#94a3b8', width: 2 },
         },
@@ -127,6 +144,13 @@ const Backtest = () => {
   }
 
   const getDrawdownOption = () => {
+    // 使用真实回测数据
+    const performance = performanceData?.data
+    const drawdownCurve = performance?.drawdown_curve || []
+    
+    const dates = drawdownCurve.map((item: any) => item.date?.slice(5) || '')
+    const drawdowns = drawdownCurve.map((item: any) => item.value || 0)
+    
     return {
       backgroundColor: 'transparent',
       tooltip: { 
@@ -138,7 +162,7 @@ const Backtest = () => {
       grid: { left: '10%', right: '5%', bottom: '10%' },
       xAxis: { 
         type: 'category', 
-        data: ['1月', '2月', '3月', '4月', '5月', '6月'],
+        data: dates.length > 0 ? dates : [],
         axisLine: { lineStyle: { color: '#e2e8f0' } },
         axisLabel: { color: '#64748b' },
       },
@@ -151,7 +175,7 @@ const Backtest = () => {
       },
       series: [{
         type: 'line',
-        data: [0, -2, -5, -3, -8, -4],
+        data: drawdowns.length > 0 ? drawdowns : [],
         smooth: true,
         itemStyle: { color: 'up.500' },
         areaStyle: { color: 'rgba(229, 62, 62, 0.2)' },
@@ -270,8 +294,8 @@ const Backtest = () => {
           <CardBody>
             <Stat>
               <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">总收益率</StatLabel>
-              <StatNumber color="red.500" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
-                +30.0%
+              <StatNumber color={performanceData?.data?.total_return >= 0 ? 'red.500' : 'green.500'} fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+                {performanceData?.data?.total_return ? `${performanceData.data.total_return >= 0 ? '+' : ''}${performanceData.data.total_return.toFixed(2)}%` : '-'}
               </StatNumber>
             </Stat>
           </CardBody>
@@ -281,7 +305,7 @@ const Backtest = () => {
             <Stat>
               <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">年化收益</StatLabel>
               <StatNumber color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
-                +25.5%
+                {performanceData?.data?.annual_return ? `${performanceData.data.annual_return >= 0 ? '+' : ''}${performanceData.data.annual_return.toFixed(2)}%` : '-'}
               </StatNumber>
             </Stat>
           </CardBody>
@@ -291,7 +315,7 @@ const Backtest = () => {
             <Stat>
               <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">最大回撤</StatLabel>
               <StatNumber color="red.500" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
-                -8.0%
+                {performanceData?.data?.max_drawdown ? `${performanceData.data.max_drawdown.toFixed(2)}%` : '-'}
               </StatNumber>
             </Stat>
           </CardBody>
@@ -301,7 +325,7 @@ const Backtest = () => {
             <Stat>
               <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">夏普比率</StatLabel>
               <StatNumber color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
-                1.85
+                {performanceData?.data?.sharpe_ratio || '-'}
               </StatNumber>
             </Stat>
           </CardBody>

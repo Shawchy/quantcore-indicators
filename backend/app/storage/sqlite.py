@@ -1,9 +1,10 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, Float, Integer, DateTime, Text, Boolean, UniqueConstraint
+from sqlalchemy import String, Float, Integer, DateTime, Text, Boolean, UniqueConstraint, Index
 from datetime import datetime
-from typing import Optional
+from typing import Optional, AsyncGenerator
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from app.config import settings
 
@@ -45,6 +46,9 @@ class KLine(Base):
     
     __table_args__ = (
         UniqueConstraint("code", "date", "adjust_type", name="u_kline_code_date"),
+        # 复合索引优化查询性能
+        Index("idx_kline_code_date", "code", "date"),
+        Index("idx_kline_code_adjust", "code", "adjust_type"),
     )
 
 
@@ -182,8 +186,12 @@ async def init_database():
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def get_session() -> AsyncSession:
+@asynccontextmanager
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """获取数据库会话"""
     global async_session_maker
     if async_session_maker is None:
         await init_database()
-    return async_session_maker()
+    
+    async with async_session_maker() as session:
+        yield session

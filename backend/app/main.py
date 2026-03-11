@@ -87,10 +87,10 @@ def create_app() -> FastAPI:
         await data_source_manager.initialize()
         logger.info("数据源初始化完成")
         
-        # 启动数据加载器（分层加载）
+        # 启动数据加载器（按需加载，不自动预加载）
         from app.services.data_loader import data_loader
         await data_loader.start()
-        logger.info("数据加载器已启动")
+        logger.info("数据加载器已启动（按需加载模式）")
         
         Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
         Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)

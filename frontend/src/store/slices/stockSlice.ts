@@ -1,12 +1,13 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { stockApi } from '../../services/api'
+import { StockBasic, KLineData, TechnicalIndicator, RealtimeQuote } from '../../types'
 
 interface StockState {
-  currentStock: any | null
-  klineData: any[]
-  indicators: any[]
-  realtimeQuote: any | null
-  searchResults: any[]
+  currentStock: StockBasic | null
+  klineData: KLineData[]
+  indicators: TechnicalIndicator[]
+  realtimeQuote: RealtimeQuote | null
+  searchResults: StockBasic[]
   loading: boolean
   error: string | null
 }
@@ -31,7 +32,7 @@ export const fetchStockBasic = createAsyncThunk(
 
 export const fetchKline = createAsyncThunk(
   'stock/fetchKline',
-  async ({ code, startDate, endDate, adjust }: any) => {
+  async ({ code, startDate, endDate, adjust }: { code: string; startDate?: string; endDate?: string; adjust?: string }) => {
     const response = await stockApi.getKline(code, startDate, endDate, adjust)
     return response.data
   }
@@ -39,7 +40,7 @@ export const fetchKline = createAsyncThunk(
 
 export const fetchIndicators = createAsyncThunk(
   'stock/fetchIndicators',
-  async ({ code, startDate, endDate }: any) => {
+  async ({ code, startDate, endDate }: { code: string; startDate?: string; endDate?: string }) => {
     const response = await stockApi.getIndicators(code, startDate, endDate)
     return response.data
   }

@@ -33,28 +33,56 @@ class DataSourceFactory:
         
         default = default_source or settings.DEFAULT_DATA_SOURCE
         
+        # 按照优先级初始化数据源
+        priority_list = getattr(settings, 'DATA_SOURCE_PRIORITY', ['tushare', 'akshare', 'baostock'])
+        
         adapters_config = {
+            DataSourceType.TUSHARE: (TushareAdapter, TushareAdapter is not None and bool(settings.TUSHARE_TOKEN)),
             DataSourceType.AKSHARE: (AkShareAdapter, True),
             DataSourceType.BAOSTOCK: (BaostockAdapter, True),
             DataSourceType.YFINANCE: (YFinanceAdapter, False),
         }
         
-        if TushareAdapter is not None:
-            adapters_config[DataSourceType.TUSHARE] = (TushareAdapter, bool(settings.TUSHARE_TOKEN))
+        # 按优先级顺序初始化
+        for source_type_name in priority_list:
+            try:
+                source_type = DataSourceType(source_type_name)
+            except ValueError:
+                logger.warning(f"未知的数据源类型：{source_type_name}")
+                continue
+            
+            if source_type in adapters_config:
+                adapter_class, should_init = adapters_config[source_type]
+                if should_init:
+                    try:
+                        adapter = adapter_class()
+                        success = await adapter.initialize()
+                        if success:
+                            cls._adapters[source_type] = adapter
+                            logger.info(f"数据源 {source_type.value} 初始化成功（优先级：{priority_list.index(source_type_name) + 1})")
+                        else:
+                            logger.warning(f"数据源 {source_type.value} 初始化失败，尝试下一个")
+                    except Exception as e:
+                        logger.warning(f"数据源 {source_type.value} 初始化异常：{e}，尝试下一个")
         
-        for source_type, (adapter_class, should_init) in adapters_config.items():
-            if should_init:
-                try:
-                    adapter = adapter_class()
-                    success = await adapter.initialize()
-                    if success:
-                        cls._adapters[source_type] = adapter
-                        logger.info(f"数据源 {source_type.value} 初始化成功")
-                except Exception as e:
-                    logger.warning(f"数据源 {source_type.value} 初始化失败: {e}")
+        # 如果没有数据源初始化成功，尝试初始化 AkShare 作为保底
+        if not cls._adapters and DataSourceType.AKSHARE in adapters_config:
+            try:
+                adapter = AkShareAdapter()
+                success = await adapter.initialize()
+                if success:
+                    cls._adapters[DataSourceType.AKSHARE] = adapter
+                    logger.info("使用 AkShare 作为保底数据源")
+            except Exception as e:
+                logger.error(f"AkShare 保底数据源初始化失败：{e}")
         
         cls._initialized = True
-        logger.info(f"数据源工厂初始化完成，可用数据源: {[s.value for s in cls._adapters.keys()]}")
+        available_sources = [s.value for s in cls._adapters.keys()]
+        logger.info(f"数据源工厂初始化完成，可用数据源：{available_sources}")
+        
+        # 记录当前使用的数据源
+        if available_sources:
+            logger.info(f"当前默认数据源：{default} (实际使用：{available_sources[0] if default not in available_sources else default})")
     
     @classmethod
     def get_adapter(cls, source_type: Optional[str] = None) -> BaseDataAdapter:
@@ -62,17 +90,27 @@ class DataSourceFactory:
             raise RuntimeError("数据源工厂未初始化，请先调用 initialize()")
         
         if source_type:
-            source = DataSourceType(source_type)
+            try:
+                source = DataSourceType(source_type)
+            except ValueError:
+                logger.warning(f"未知的数据源类型：{source_type}，使用默认数据源")
+                source = None
         else:
             source = DataSourceType(settings.DEFAULT_DATA_SOURCE)
         
-        if source not in cls._adapters:
-            if DataSourceType.AKSHARE in cls._adapters:
-                logger.warning(f"数据源 {source.value} 不可用，使用 AkShare 作为备选")
-                return cls._adapters[DataSourceType.AKSHARE]
-            raise ValueError(f"数据源 {source.value} 不可用")
+        # 优先使用请求的数据源
+        if source and source in cls._adapters:
+            return cls._adapters[source]
         
-        return cls._adapters[source]
+        # 如果请求的数据源不可用，按优先级选择第一个可用的
+        if cls._adapters:
+            available_source = next(iter(cls._adapters.values()))
+            if source:
+                logger.warning(f"数据源 {source.value} 不可用，使用 {available_source.source_type.value}")
+            return available_source
+        
+        # 如果没有可用数据源，抛出异常
+        raise ValueError(f"没有可用的数据源，请检查配置")
     
     @classmethod
     def get_available_sources(cls) -> list[str]:
@@ -142,6 +180,83 @@ class DataSourceManager:
     ) -> list[ChipData]:
         adapter = self.get_adapter(source_type)
         return await adapter.get_chip_data(code, start_date, end_date)
+    
+    async def get_market_index_kline(
+        self,
+        index_code: str = "000001",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        source_type: Optional[str] = None
+    ) -> list[KLineData]:
+        """获取大盘指数 K 线数据"""
+        adapter = self.get_adapter(source_type)
+        # 检查适配器是否有此方法
+        if hasattr(adapter, 'get_market_index_kline'):
+            return await adapter.get_market_index_kline(index_code, start_date, end_date)
+        else:
+            # 如果适配器不支持，使用普通 K 线方法
+            return await adapter.get_kline(index_code, start_date, end_date, adjust="")
+    
+    async def get_stock_intraday_em(
+        self,
+        symbol: str,
+        source_type: Optional[str] = None
+    ) -> list[Dict[str, Any]]:
+        """获取东方财富个股分时数据"""
+        adapter = self.get_adapter(source_type)
+        if hasattr(adapter, 'get_stock_intraday_em'):
+            return await adapter.get_stock_intraday_em(symbol)
+        else:
+            logger.warning(f"数据源 {adapter.source_type.value} 不支持东方财富分时数据")
+            return []
+    
+    async def get_stock_intraday_sina(
+        self,
+        symbol: str,
+        date: Optional[str] = None,
+        source_type: Optional[str] = None
+    ) -> list[Dict[str, Any]]:
+        """获取新浪财经个股分时数据（大单数据）"""
+        adapter = self.get_adapter(source_type)
+        if hasattr(adapter, 'get_stock_intraday_sina'):
+            return await adapter.get_stock_intraday_sina(symbol, date)
+        else:
+            logger.warning(f"数据源 {adapter.source_type.value} 不支持新浪财经分时数据")
+            return []
+    
+    async def get_stock_zh_a_minute(
+        self,
+        symbol: str,
+        period: str = '1',
+        adjust: str = '',
+        source_type: Optional[str] = None
+    ) -> list[Dict[str, Any]]:
+        """获取新浪财经分时数据（支持多频率和复权）"""
+        adapter = self.get_adapter(source_type)
+        if hasattr(adapter, 'get_stock_zh_a_minute'):
+            return await adapter.get_stock_zh_a_minute(symbol, period, adjust)
+        else:
+            logger.warning(f"数据源 {adapter.source_type.value} 不支持新浪财经分时数据")
+            return []
+    
+    async def get_stock_zh_a_hist_min_em(
+        self,
+        symbol: str,
+        period: str = '5',
+        adjust: str = '',
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        source_type: Optional[str] = None
+    ) -> list[Dict[str, Any]]:
+        """获取东方财富分时数据（支持多频率、复权和时间范围）"""
+        adapter = self.get_adapter(source_type)
+        if hasattr(adapter, 'get_stock_zh_a_hist_min_em'):
+            return await adapter.get_stock_zh_a_hist_min_em(
+                symbol, period, adjust, start_date, end_date
+            )
+        else:
+            logger.warning(f"数据源 {adapter.source_type.value} 不支持东方财富分时数据")
+            return []
     
     async def close(self) -> None:
         await self._factory.close_all()

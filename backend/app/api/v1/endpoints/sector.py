@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Query, Depends
 from app.models.schemas import ResponseModel
 from app.services import sector_service
-from app.api.deps import CurrentUser
+from app.services.trading_calendar import trading_calendar
+from app.api.deps import CurrentUser, OptionalCurrentUser
 from typing import Optional
 
 router = APIRouter()
@@ -21,10 +22,12 @@ async def get_sector_ranking(
     sector_type: str = Query("industry"),
     sort_by: str = Query("change_pct", description="排序字段：change_pct, volume, amount"),
     limit: int = Query(20),
-    current_user: CurrentUser = Depends
+    trade_date: Optional[str] = Query(None, description="交易日期，格式 YYYYMMDD"),
+    current_user: OptionalCurrentUser = None
 ):
+    """获取板块排行榜"""
     data = await sector_service.get_sector_ranking(sector_type, sort_by, limit)
-    return ResponseModel(data=data)
+    return ResponseModel(data=data, message=f"交易日期：{trade_date or (await trading_calendar.get_latest_trading_day())}")
 
 
 @router.get("/components/{sector_code}", response_model=ResponseModel[list])

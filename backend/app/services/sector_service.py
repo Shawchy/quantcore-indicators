@@ -78,25 +78,41 @@ class SectorService:
         sector_code: str,
         top_n: int = 5
     ) -> List[Dict[str, Any]]:
+        from asyncio import gather, Semaphore
+        
         components = await self.get_sector_components(sector_code)
         
         leaders = []
         from app.services.stock_service import stock_service
         
-        for item in components[:50]:
-            try:
-                quote = await stock_service.get_realtime_quote(item["code"])
-                if quote:
-                    leaders.append({
-                        "code": item["code"],
-                        "name": quote.get("name", ""),
-                        "change_pct": quote.get("change_pct", 0),
-                        "price": quote.get("price", 0),
-                        "volume": quote.get("volume", 0)
-                    })
-            except Exception as e:
-                logger.warning(f"获取股票 {item['code']} 行情失败: {e}")
+        # 使用信号量限制并发数，避免过多请求
+        semaphore = Semaphore(10)
         
+        async def fetch_with_semaphore(item):
+            async with semaphore:
+                try:
+                    quote = await stock_service.get_realtime_quote(item["code"])
+                    if quote:
+                        return {
+                            "code": item["code"],
+                            "name": quote.get("name", ""),
+                            "change_pct": quote.get("change_pct", 0),
+                            "price": quote.get("price", 0),
+                            "volume": quote.get("volume", 0)
+                        }
+                    return None
+                except Exception as e:
+                    logger.warning(f"获取股票 {item['code']} 行情失败：{e}")
+                    return None
+        
+        # 并发获取最多 50 只股票的行情
+        tasks = [fetch_with_semaphore(item) for item in components[:50]]
+        results = await gather(*tasks)
+        
+        # 过滤掉 None 值
+        leaders = [result for result in results if result is not None]
+        
+        # 按涨跌幅排序
         leaders.sort(key=lambda x: x.get("change_pct", 0) or 0, reverse=True)
         
         return leaders[:top_n]

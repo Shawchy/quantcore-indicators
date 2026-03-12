@@ -78,12 +78,11 @@ yarn-error.log*
 .env.local
 .env.*.local
 
-# Data
-data/
-*.db
-*.sqlite
-*.sqlite3
-*.parquet
+# Backend data (后端数据目录)
+backend/data/
+
+# 已删除根目录 data/，避免混淆
+# data/ - 已删除，只使用 backend/data/
 
 # Coverage
 coverage/

@@ -154,21 +154,27 @@ class StockService:
         if use_cache:
             cached = await cache_manager.get("kline", cache_key)
             if cached:
+                logger.info(f"从缓存读取 {len(cached)} 条 K 线：{code}, 日期范围：{start_date} - {end_date}")
                 return cached
         
         db_klines = await data_persistence.get_klines_from_db(
             code, start_date, end_date, adjust
         )
         
+        logger.info(f"数据库查询结果：{len(db_klines) if db_klines else 0} 条，日期范围：{start_date} - {end_date}")
+        
         if db_klines and len(db_klines) >= 100:
             klines = db_klines
             logger.info(f"从本地数据库读取 {len(klines)} 条 K 线：{code}")
         else:
+            logger.info(f"数据库数据不足，从数据源获取：{code}, 日期范围：{start_date} - {end_date}")
             klines = await data_source_manager.get_kline(code, start_date, end_date, adjust)
+            logger.info(f"数据源返回 {len(klines) if klines else 0} 条 K 线：{code}")
             
             if persist and klines:
                 try:
                     await data_persistence.save_klines(code, klines, adjust)
+                    logger.info(f"保存 {len(klines)} 条 K 线数据到数据库：{code}")
                 except Exception as e:
                     logger.warning(f"保存 K 线数据失败：{e}")
         
@@ -192,6 +198,8 @@ class StockService:
         
         if use_cache:
             await cache_manager.set("kline", cache_key, result)
+        
+        logger.info(f"返回 {len(result)} 条 K 线数据：{code}")
         
         return result
     
@@ -377,6 +385,102 @@ class StockService:
         results = await gather(*tasks)
         
         return {code: quote for code, quote in results if quote is not None}
+    
+    async def get_weekly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        """
+        获取周线 K 线数据
+        
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+            
+        Returns:
+            周线 K 线数据列表
+        """
+        from app.adapters.factory import get_data_source
+        
+        data_source = await get_data_source()
+        return await data_source.get_weekly_kline(code, start_date, end_date, adjust)
+    
+    async def get_monthly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        """
+        获取月线 K 线数据
+        
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+            
+        Returns:
+            月线 K 线数据列表
+        """
+        from app.adapters.factory import get_data_source
+        
+        data_source = await get_data_source()
+        return await data_source.get_monthly_kline(code, start_date, end_date, adjust)
+    
+    async def get_top_list(self, trade_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取龙虎榜数据
+        
+        Args:
+            trade_date: 交易日期
+            
+        Returns:
+            龙虎榜数据列表
+        """
+        from app.adapters.factory import get_data_source
+        
+        data_source = await get_data_source()
+        return await data_source.get_top_list(trade_date)
+    
+    async def get_forecast(self, code: str, ann_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取业绩预告数据
+        
+        Args:
+            code: 股票代码
+            ann_date: 公告日期
+            
+        Returns:
+            业绩预告数据列表
+        """
+        from app.adapters.factory import get_data_source
+        
+        data_source = await get_data_source()
+        return await data_source.get_forecast(code, ann_date)
+    
+    async def get_moneyflow(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取资金流向数据
+        
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            资金流向数据列表
+        """
+        from app.adapters.factory import get_data_source
+        
+        data_source = await get_data_source()
+        return await data_source.get_moneyflow(code, start_date, end_date)
 
 
 # 单例

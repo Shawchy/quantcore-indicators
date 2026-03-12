@@ -1,11 +1,12 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { sectorApi } from '../../services/api'
+import { SectorInfo, SectorRankingItem, StockBasic } from '../../types'
 
 interface SectorState {
-  sectors: any[]
-  ranking: any[]
-  components: any[]
-  leaders: any[]
+  sectors: SectorInfo[]
+  ranking: SectorRankingItem[]
+  components: StockBasic[]
+  leaders: SectorRankingItem[]
   loading: boolean
   error: string | null
 }
@@ -29,7 +30,7 @@ export const fetchSectorList = createAsyncThunk(
 
 export const fetchSectorRanking = createAsyncThunk(
   'sector/fetchRanking',
-  async ({ sectorType, sortBy, limit }: any) => {
+  async ({ sectorType, sortBy, limit }: { sectorType: string; sortBy?: string; limit?: number }) => {
     const response = await sectorApi.getRanking(sectorType, sortBy, limit)
     return response.data
   }
@@ -45,7 +46,7 @@ export const fetchSectorComponents = createAsyncThunk(
 
 export const fetchSectorLeaders = createAsyncThunk(
   'sector/fetchLeaders',
-  async ({ sectorCode, topN }: any) => {
+  async ({ sectorCode, topN }: { sectorCode: string; topN?: number }) => {
     const response = await sectorApi.getLeaders(sectorCode, topN)
     return response.data
   }

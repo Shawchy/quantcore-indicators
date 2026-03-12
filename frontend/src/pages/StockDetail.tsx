@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   Box,
   Card,
@@ -29,38 +29,84 @@ import {
   Tab,
   TabPanel,
   Flex,
+  useToast,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
-import { stockApi } from '../services/api'
+import { stockApi, realtimeApi } from '../services/api'
+import RealtimeQuote from '../components/RealtimeQuote'
+import TickDataTable from '../components/TickDataTable'
+import type { RealtimeQuoteData, TickData } from '../types'
+import { useEffect, useState } from 'react'
 
 const StockDetail = () => {
   const { code } = useParams<{ code: string }>()
-
+  const navigate = useNavigate()
+  
+  // 验证股票代码格式
+  const isValidCode = code && /^[0-9]{6}$/.test(code)
+  
   const { data: basicData, isLoading: basicLoading } = useQuery({
     queryKey: ['stockBasic', code],
     queryFn: () => stockApi.getBasic(code!),
-    enabled: !!code,
+    enabled: !!code && isValidCode,
   })
 
   const { data: klineData, isLoading: klineLoading } = useQuery({
     queryKey: ['stockKline', code],
     queryFn: () => stockApi.getKline(code!),
-    enabled: !!code,
+    enabled: !!code && isValidCode,
   })
 
   const { data: indicatorData, isLoading: indicatorLoading } = useQuery({
     queryKey: ['stockIndicators', code],
     queryFn: () => stockApi.getIndicators(code!),
-    enabled: !!code,
+    enabled: !!code && isValidCode,
   })
 
   const { data: realtimeData, isLoading: realtimeLoading } = useQuery({
     queryKey: ['stockRealtime', code],
     queryFn: () => stockApi.getRealtime(code!),
-    enabled: !!code,
+    enabled: !!code && isValidCode,
     refetchInterval: 30000,
   })
+
+  // 实时盘口数据
+  const { 
+    data: realtimeQuoteData, 
+    isLoading: quoteLoading,
+    refetch: refetchQuote 
+  } = useQuery<RealtimeQuoteData>({
+    queryKey: ['realtimeQuote', code],
+    queryFn: () => realtimeApi.getQuote(code!).then(res => res.data),
+    enabled: !!code && isValidCode,
+    refetchInterval: 10000, // 10 秒刷新一次
+  })
+
+  // 成交明细数据
+  const { 
+    data: tickData, 
+    isLoading: tickLoading 
+  } = useQuery<TickData>({
+    queryKey: ['tickData', code],
+    queryFn: () => realtimeApi.getTickData(code!, 'dc', 100).then(res => res.data),
+    enabled: !!code && isValidCode,
+    refetchInterval: 30000, // 30 秒刷新一次
+  })
+  
+  // 显示错误提示
+  useEffect(() => {
+    if (code && !isValidCode) {
+      toast({
+        title: '无效的股票代码',
+        description: '请输入 6 位数字股票代码',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      })
+      navigate('/')
+    }
+  }, [code, isValidCode, navigate])
 
   const stock = basicData?.data
   const quote = realtimeData?.data
@@ -258,6 +304,52 @@ const StockDetail = () => {
               </TabPanel>
             </TabPanels>
           </Tabs>
+        </CardBody>
+      </Card>
+
+      {/* 实时盘口 */}
+      <Card>
+        <CardHeader pb={2}>
+          <Flex justify="space-between" align="center">
+            <Heading size="sm" color="light.text">
+              实时盘口
+            </Heading>
+            {realtimeQuoteData && (
+              <Badge fontSize="xs" colorScheme="blue">
+                更新：{realtimeQuoteData.update_time}
+              </Badge>
+            )}
+          </Flex>
+        </CardHeader>
+        <CardBody>
+          <RealtimeQuote
+            data={realtimeQuoteData}
+            loading={quoteLoading}
+            error={null}
+          />
+        </CardBody>
+      </Card>
+
+      {/* 成交明细 */}
+      <Card>
+        <CardHeader pb={2}>
+          <Flex justify="space-between" align="center">
+            <Heading size="sm" color="light.text">
+              成交明细
+            </Heading>
+            {tickData && (
+              <Badge fontSize="xs" colorScheme="green">
+                共 {tickData.total_records} 笔
+              </Badge>
+            )}
+          </Flex>
+        </CardHeader>
+        <CardBody>
+          <TickDataTable
+            data={tickData}
+            loading={tickLoading}
+            error={null}
+          />
         </CardBody>
       </Card>
 

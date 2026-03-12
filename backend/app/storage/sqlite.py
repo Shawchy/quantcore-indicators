@@ -20,13 +20,19 @@ class StockInfo(Base):
     code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     market: Mapped[str] = mapped_column(String(10))
-    industry: Mapped[Optional[str]] = mapped_column(String(50))
-    sector: Mapped[Optional[str]] = mapped_column(String(50))
-    area: Mapped[Optional[str]] = mapped_column(String(50))
+    industry: Mapped[Optional[str]] = mapped_column(String(50), index=True)
+    sector: Mapped[Optional[str]] = mapped_column(String(50), index=True)
+    area: Mapped[Optional[str]] = mapped_column(String(50), index=True)
     list_date: Mapped[Optional[str]] = mapped_column(String(20))
     total_shares: Mapped[Optional[float]] = mapped_column(Float)
     float_shares: Mapped[Optional[float]] = mapped_column(Float)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    __table_args__ = (
+        # 复合索引优化查询性能
+        Index("idx_stock_industry_market", "industry", "market"),
+        Index("idx_stock_sector_market", "sector", "market"),
+    )
 
 
 class KLine(Base):
@@ -71,6 +77,9 @@ class TechnicalIndicatorDB(Base):
     
     __table_args__ = (
         UniqueConstraint("code", "date", name="u_indicator_code_date"),
+        # 复合索引优化查询性能
+        Index("idx_indicator_code_date", "code", "date"),
+        Index("idx_indicator_ma", "code", "ma5", "ma10", "ma20"),
     )
 
 
@@ -175,13 +184,14 @@ async def init_database():
         f"sqlite+aiosqlite:///{db_file}",
         echo=settings.DEBUG
     )
-    
+
     async_session_maker = async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False
     )
     
+    # 只创建表结构，不删除现有数据
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

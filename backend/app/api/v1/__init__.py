@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
-    stock, sector, chip, screener, strategy, backtest, watchlist, auth
+    stock, sector, chip, screener, strategy, backtest, watchlist, auth, market, realtime
 )
 
 api_router = APIRouter()
@@ -16,3 +16,5 @@ api_router.include_router(screener.router, tags=["选股筛选"])
 api_router.include_router(strategy.router, tags=["策略管理"])
 api_router.include_router(backtest.router, tags=["回测系统"])
 api_router.include_router(watchlist.router, tags=["自选股"])
+api_router.include_router(market.router, tags=["市场行情"])
+api_router.include_router(realtime.router, tags=["实时盘口"])

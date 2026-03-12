@@ -149,7 +149,7 @@ export interface ScreenerCondition {
   control_degree_min?: number
 }
 
-export interface MarketStats {
+export interface MarketIndustryStats {
   total_stocks: number
   industry_distribution: Record<string, number>
   top_industries: [string, number][]
@@ -200,4 +200,132 @@ export interface StatCardProps {
 export interface RankBadgeProps {
   rank: number
   size?: 'sm' | 'md' | 'lg'
+}
+
+// 实时涨跌幅排名相关类型
+export interface StockRankingItem {
+  ts_code: string
+  name: string
+  price: number
+  pct_change: number
+  change?: number
+  volume?: number
+  amount?: number
+  open?: number
+  high?: number
+  low?: number
+  close?: number
+  turnover_rate?: number
+}
+
+export interface MarketStats {
+  up_count: number
+  down_count: number
+  flat_count: number
+  limit_up_count: number
+  limit_down_count: number
+  up_ratio: number
+  down_ratio: number
+}
+
+export interface MarketSentiment {
+  text: string
+  score: number  // 1-5, 5 最强
+  up_down_ratio: number
+}
+
+export interface MarketRankingData {
+  update_time: string
+  fetch_time: number
+  data_source: string
+  total_stocks: number
+  market_stats: MarketStats
+  sentiment: MarketSentiment
+  rankings: {
+    gainers: StockRankingItem[]
+    losers: StockRankingItem[]
+    amount: StockRankingItem[]
+    turnover: StockRankingItem[]
+  }
+}
+
+export interface MarketOverviewData {
+  update_time: string
+  total_stocks: number
+  market_stats: {
+    up: number
+    down: number
+    flat: number
+    up_ratio: number
+    down_ratio: number
+  }
+  distribution: {
+    pct_5_plus: number
+    pct_3_to_5: number
+    pct_minus_3_to_3: number
+    pct_minus_5_to_minus_3: number
+    pct_minus_5: number
+  }
+  statistics: {
+    avg_pct_change: number
+    median_pct_change: number
+    total_amount: number  // 亿元
+    avg_amount: number  // 百万元
+  }
+}
+
+// 实时盘口相关类型
+export interface BidAskItem {
+  price: number
+  volume: number
+}
+
+export interface BidAskData {
+  bid: BidAskItem[]  // 买盘
+  ask: BidAskItem[]  // 卖盘
+}
+
+export interface RealtimeQuoteData {
+  ts_code: string
+  update_time: string
+  fetch_time: number
+  data_source: string
+  quote: {
+    price: number
+    change: number
+    change_pct: number
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
+    amount: number
+  }
+  bid_ask: BidAskData
+}
+
+export interface TickDataItem {
+  time: string
+  price: number
+  volume: number
+  amount?: number
+  type: string  // 买盘/卖盘/中性
+}
+
+export interface TickDataStats {
+  buy_count: number
+  sell_count: number
+  neutral_count: number
+  buy_ratio: number
+  sell_ratio: number
+}
+
+export interface TickData {
+  ts_code: string
+  update_time: string
+  fetch_time: number
+  data_source: string
+  total_records: number
+  tick_data: TickDataItem[]
+  stats: TickDataStats
 }

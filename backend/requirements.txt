@@ -1,59 +1,59 @@
 # 核心依赖
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
-python-multipart>=0.0.6
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+python-multipart>=0.0.12
 
 # 数据处理
-pandas>=2.1.0
-polars>=0.20.0
+pandas>=2.2.0
+polars>=1.16.0
 numpy>=1.26.0
 
 # 数据源
-akshare>=1.12.0
+akshare>=1.15.0
 baostock>=0.8.9
-yfinance>=0.2.35
-# tushare>=1.3.8  # 需要token, 可选
+yfinance>=0.2.50
+tushare>=1.4.25 
 
 # 技术指标
 pandas-ta>=0.3.14b
-# TA-Lib>=0.4.28  # 需要预编译C库, Windows上可能安装失败, 建议使用pandas-ta替代
+# TA-Lib>=0.4.28  # 需要预编译 C 库，Windows 上可能安装失败，建议使用 pandas-ta 替代
 
 # 科学计算
-scipy>=1.12.0
-statsmodels>=0.14.0
+scipy>=1.14.0
+statsmodels>=0.14.4
 
-# 机器学习 (可选, 大型包)
-scikit-learn>=1.4.0
+# 机器学习 (可选，大型包)
+scikit-learn>=1.6.0
 scikit-optimize>=0.9.0
-# torch>=2.1.0  # 深度学习框架, 约2GB, 按需安装
-# tensorflow>=2.15.0  # 深度学习框架, 约2GB, 按需安装
+# torch>=2.5.0  # 深度学习框架，约 2GB，按需安装
+# tensorflow>=2.18.0  # 深度学习框架，约 2GB，按需安装
 
 # 存储
-sqlalchemy>=2.0.0
-aiosqlite>=0.19.0
-pyarrow>=15.0.0
-fastparquet>=2024.2.0
+sqlalchemy>=2.0.36
+aiosqlite>=0.20.0
+pyarrow>=18.1.0
+fastparquet>=2024.11.0
 
 # 工具
 loguru>=0.7.2
-python-dotenv>=1.0.0
-httpx>=0.26.0
-websockets>=12.0
-# redis>=5.0.0  # 缓存服务，可选
+python-dotenv>=1.0.1
+httpx>=0.28.0
+websockets>=14.1
+# redis>=5.2.0  # 缓存服务，可选
 
 # 认证与安全
-PyJWT>=2.8.0
-python-jose[cryptography]>=3.3.0
-bcrypt>=4.0.0
+PyJWT>=2.10.0
+python-jose[cryptography]>=3.4.0
+bcrypt>=4.2.0
 passlib>=1.7.4
-python-multipart>=0.0.6
 
 # 性能优化
-numba>=0.59.0
-joblib>=1.3.0
+numba>=0.60.0
+joblib>=1.4.0
 
 # 测试
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-cov>=6.0.0

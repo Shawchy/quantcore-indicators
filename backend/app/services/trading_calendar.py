@@ -133,7 +133,7 @@ class TradingCalendarService:
             limit: 最多返回的交易日数量
         
         Returns:
-            交易日列表，格式 ['20260311', '20260310', ...]
+            交易日列表，格式 ['20260311', '20260310', ...]（降序）
         """
         # 优先使用缓存的完整数据
         try:
@@ -150,15 +150,16 @@ class TradingCalendarService:
             if not start_date:
                 start_date = (datetime.now() - timedelta(days=limit*2)).strftime("%Y%m%d")
             
-            # 筛选日期范围
+            # 筛选日期范围（从新到旧）
             trading_days = []
-            for date in all_days:
+            # 倒序遍历，获取最新的交易日
+            for date in reversed(all_days):
                 if start_date <= date <= end_date:
                     trading_days.append(date)
                 if len(trading_days) >= limit:
                     break
             
-            # 已经是降序的，不需要再排序
+            # 倒序已经是降序的（从新到旧）
             return trading_days
             
         except Exception as e:

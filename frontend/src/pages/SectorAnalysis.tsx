@@ -23,11 +23,12 @@ import {
   Flex,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { sectorApi } from '../services/api'
 import { RankBadge } from '../components/RankBadge'
 import { SectorRankingItem } from '../types'
+import { getBarOption } from '../utils/chartConfig'
 
 const SectorAnalysis = () => {
   const [sectorType, setSectorType] = useState('industry')
@@ -46,42 +47,9 @@ const SectorAnalysis = () => {
   const sectors = sectorListData?.data || []
   const ranking = rankingData?.data || [] as SectorRankingItem[]
 
-  const getBarOption = () => {
-    const top10 = ranking.slice(0, 10)
-    return {
-      backgroundColor: 'transparent',
-      tooltip: { 
-        trigger: 'axis', 
-        axisPointer: { type: 'shadow' },
-        backgroundColor: 'rgba(255, 255, 255, 0.98)',
-        borderColor: '#e2e8f0',
-        textStyle: { color: '#1e293b' },
-      },
-      grid: { left: '15%', right: '5%', bottom: '10%', top: '5%' },
-      xAxis: { 
-        type: 'value',
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
-        axisLabel: { color: '#64748b' },
-        splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-      },
-      yAxis: {
-        type: 'category',
-        data: top10.map((s: any) => s.name).reverse(),
-        axisLabel: { width: 80, overflow: 'truncate', color: '#64748b' },
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
-      },
-      series: [{
-        type: 'bar',
-        data: top10.map((s: any) => ({
-          value: s.change_pct || 0,
-          itemStyle: {
-            color: (params: any) => params.value >= 0 ? '#ef4444' : '#10b981',
-          },
-        })).reverse(),
-        barWidth: '60%',
-      }],
-    }
-  }
+  const barChartOption = useMemo(() => {
+    return getBarOption(ranking, 'change_pct', 'name', '板块涨幅排行')
+  }, [ranking])
 
   return (
     <VStack spacing={6} align="stretch">
@@ -127,7 +95,7 @@ const SectorAnalysis = () => {
                 <Spinner color="brand.400" />
               </Flex>
             ) : (
-              <ReactECharts option={getBarOption()} style={{ height: '400px' }} />
+              <ReactECharts option={barChartOption} style={{ height: '400px' }} />
             )}
           </CardBody>
         </Card>

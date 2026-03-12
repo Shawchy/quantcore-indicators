@@ -45,6 +45,13 @@ const Login = () => {
     
     if (!username.trim() || !password.trim()) {
       dispatch(clearError())
+      toast({
+        title: '请填写完整',
+        description: '用户名和密码不能为空',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      })
       return
     }
 

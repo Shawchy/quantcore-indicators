@@ -1,4 +1,8 @@
-from typing import Optional, Annotated
+from typing import Optional
+try:
+    from typing import Annotated
+except ImportError:
+    from typing_extensions import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from loguru import logger
@@ -80,7 +84,40 @@ async def get_current_admin_user(
     return current_user
 
 
+async def get_optional_current_user(
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(security)]
+) -> Optional[User]:
+    """
+    获取当前登录用户（可选）
+    
+    使用方式:
+    @router.get("/public")
+    async def public_route(current_user: OptionalCurrentUser = None):
+        return {"user": current_user.username if current_user else "anonymous"}
+    """
+    if credentials is None:
+        return None
+    
+    token = credentials.credentials
+    token_data = verify_access_token(token)
+    
+    if token_data is None:
+        return None
+    
+    user = User(
+        user_id=token_data.user_id,
+        username=token_data.username,
+        role=token_data.role,
+        is_active=True
+    )
+    
+    logger.debug(f"用户认证成功：{user.username}")
+    
+    return user
+
+
 # 便捷的类型注解
 CurrentUser = Annotated[User, Depends(get_current_user)]
 CurrentActiveUser = Annotated[User, Depends(get_current_active_user)]
 CurrentAdminUser = Annotated[User, Depends(get_current_admin_user)]
+OptionalCurrentUser = Annotated[Optional[User], Depends(get_optional_current_user)]

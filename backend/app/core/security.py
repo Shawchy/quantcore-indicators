@@ -25,6 +25,7 @@ class TokenData(BaseModel):
     username: Optional[str] = None
     user_id: Optional[int] = None
     role: Optional[str] = None
+    type: Optional[str] = None  # 添加 type 属性
 
 
 class User(BaseModel):
@@ -85,7 +86,7 @@ def decode_token(token: str) -> Optional[TokenData]:
         if username is None or user_id is None:
             return None
         
-        return TokenData(username=username, user_id=user_id, role=role)
+        return TokenData(username=username, user_id=user_id, role=role, type=token_type)
     
     except JWTError as e:
         logger.warning(f"令牌解码失败：{e}")

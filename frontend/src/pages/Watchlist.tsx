@@ -70,6 +70,22 @@ const Watchlist = () => {
       queryClient.invalidateQueries({ queryKey: ['watchlist'] })
       queryClient.invalidateQueries({ queryKey: ['watchlistQuotes'] })
       onDeleteClose()
+      toast({
+        title: '删除成功',
+        description: `已删除股票 ${selectedCode}`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: '删除失败',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      })
     },
   })
 
@@ -78,6 +94,22 @@ const Watchlist = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['watchlist'] })
       onEditClose()
+      toast({
+        title: '更新成功',
+        description: '备注已更新',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: '更新失败',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      })
     },
   })
 
@@ -88,6 +120,22 @@ const Watchlist = () => {
       queryClient.invalidateQueries({ queryKey: ['watchlistQuotes'] })
       onAddClose()
       setAddCode('')
+      toast({
+        title: '添加成功',
+        description: `已添加股票 ${addCode}`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: '添加失败',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      })
     },
   })
 

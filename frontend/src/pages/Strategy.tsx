@@ -99,12 +99,21 @@ const Strategy = () => {
   }
 
   const handleSubmit = () => {
-    const data = {
-      name: formData.name,
-      type: formData.type,
-      config: JSON.parse(formData.config),
+    try {
+      const config = JSON.parse(formData.config)
+      const data = {
+        name: formData.name,
+        type: formData.type,
+        config,
+      }
+      createMutation.mutate(data)
+    } catch (error) {
+      toast({
+        title: '配置格式错误',
+        description: '请输入有效的 JSON 格式',
+        status: 'error',
+      })
     }
-    createMutation.mutate(data)
   }
 
   const resetForm = () => {

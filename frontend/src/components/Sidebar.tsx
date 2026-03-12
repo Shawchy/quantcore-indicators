@@ -19,12 +19,16 @@ import {
   FiSearch, 
   FiSettings, 
   FiActivity,
-  FiCpu
+  FiCpu,
+  FiTrendingUp,
+  FiBarChart
 } from 'react-icons/fi'
 
 const menuItems = [
   { name: '首页概览', icon: FiHome, path: '/' },
   { name: '自选股', icon: FiStar, path: '/watchlist' },
+  { name: '市场排行', icon: FiTrendingUp, path: '/market' },
+  { name: '日线行情', icon: FiBarChart, path: '/daily' },
   { name: '板块分析', icon: FiGrid, path: '/sector' },
   { name: '筹码选股', icon: FiFilter, path: '/chip' },
   { name: '智能选股', icon: FiSearch, path: '/screener' },

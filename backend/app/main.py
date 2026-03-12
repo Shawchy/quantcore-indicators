@@ -9,6 +9,7 @@ from pathlib import Path
 from app.config import settings
 from app.api.v1 import api_router
 from app.core.exceptions import QuantException
+from app.middleware.performance import PerformanceMiddleware
 
 
 def setup_logging():
@@ -39,6 +40,9 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json"
     )
+    
+    # 添加性能监控中间件
+    app.add_middleware(PerformanceMiddleware)
     
     app.add_middleware(
         CORSMiddleware,
@@ -83,14 +87,24 @@ def create_app() -> FastAPI:
         await init_database()
         logger.info("数据库初始化完成")
         
+        # 同步初始化数据源，确保 API 请求前数据源已就绪
         from app.adapters import data_source_manager
-        await data_source_manager.initialize()
-        logger.info("数据源初始化完成")
+        try:
+            await data_source_manager.initialize()
+            logger.info(f"数据源初始化完成，默认数据源：{data_source_manager._default_source}")
+        except Exception as e:
+            logger.error(f"数据源初始化失败：{e}")
         
         # 启动数据加载器（按需加载，不自动预加载）
         from app.services.data_loader import data_loader
         await data_loader.start()
         logger.info("数据加载器已启动（按需加载模式）")
+        
+        # 启动定期性能报告任务
+        import asyncio
+        from app.middleware.performance import periodic_performance_report
+        asyncio.create_task(periodic_performance_report())
+        logger.info("性能监控已启动")
         
         Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
         Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)
@@ -111,6 +125,16 @@ def create_app() -> FastAPI:
             "status": "healthy",
             "app": settings.APP_NAME,
             "version": settings.APP_VERSION
+        }
+    
+    @app.get("/metrics/performance")
+    async def performance_metrics():
+        """获取性能指标"""
+        from app.middleware.performance import get_performance_stats
+        stats = await get_performance_stats()
+        return {
+            "success": True,
+            "data": stats
         }
     
     return app

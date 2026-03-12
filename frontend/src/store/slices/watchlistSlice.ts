@@ -1,9 +1,10 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { watchlistApi } from '../../services/api'
+import { WatchlistItem, RealtimeQuote } from '../../types'
 
 interface WatchlistState {
-  items: any[]
-  quotes: any[]
+  items: WatchlistItem[]
+  quotes: RealtimeQuote[]
   loading: boolean
   error: string | null
 }

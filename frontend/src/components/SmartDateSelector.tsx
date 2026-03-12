@@ -86,34 +86,6 @@ export const SmartDateSelector = ({
     }
   }, [])
 
-  // 本地估算交易日（降级方案）
-  const estimateTradingDays = useCallback(() => {
-    const days: TradingDay[] = []
-    const today = new Date()
-    const now = new Date()
-    
-    for (let i = 0; i < 20 && days.length < 20; i++) {
-      const date = new Date(now)
-      date.setDate(date.getDate() - i)
-      
-      // 排除周末
-      if (date.getDay() !== 0 && date.getDay() !== 6) {
-        const dateStr = date.toISOString().split('T')[0].replace(/-/g, '')
-        const displayDate = date.toISOString().split('T')[0]
-        const [year, month, day] = displayDate.split('-')
-        days.push({
-          date: dateStr,
-          display: `${parseInt(month)}月${parseInt(day)}日`,
-          is_today: i === 0,
-          is_latest: i === 0,
-          is_selected: i === 0
-        })
-      }
-    }
-    
-    return days
-  }, [])
-
   // 加载交易日数据
   const loadTradingDays = useCallback(async (forceRefresh = false) => {
     try {
@@ -181,52 +153,20 @@ export const SmartDateSelector = ({
           })
         }
       } catch (apiError: any) {
-        // API 失败时使用降级方案
-        console.warn('API 加载失败，使用本地估算:', apiError.message)
-        
-        const estimatedDays = estimateTradingDays()
-        const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
-        
-        setTradingDays(estimatedDays)
-        setSelectedDate(today)
-        setSliderValue(0)
-        
-        // 设置简化的有效信息
-        setEffectiveInfo({
-          effective_date: today,
-          is_today: true,
-          is_market_open: false,
-          latest_trading_day: today,
-          previous_trading_day: today,
-          current_time: new Date().toLocaleTimeString()
-        })
-        
-        // 保存到缓存
-        saveToCache({
-          tradingDays: estimatedDays,
-          effectiveInfo: {
-            effective_date: today,
-            is_today: true,
-            is_market_open: false,
-            latest_trading_day: today,
-            previous_trading_day: today,
-            current_time: new Date().toLocaleTimeString()
-          },
-          selectedDate: today
-        })
-        
-        if (onDateChange) {
-          onDateChange(today)
-        }
+        // API 失败时不估算，显示错误提示
+        console.error('API 加载失败:', apiError.message)
         
         toast({
-          title: '使用估算数据',
-          description: '无法获取真实交易日，已使用本地估算',
-          status: 'warning',
+          title: '数据加载失败',
+          description: `无法获取交易日数据：${apiError.message || '请求超时'}`,
+          status: 'error',
           duration: 5000,
           position: 'top-right',
           isClosable: true
         })
+        
+        // 尝试从缓存加载旧数据
+        loadFromCache()
       }
     } catch (error) {
       console.error('加载交易日失败:', error)
@@ -242,7 +182,7 @@ export const SmartDateSelector = ({
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [loadFromCache, saveToCache, onDateChange, toast, selectedDate, estimateTradingDays])
+  }, [loadFromCache, saveToCache, onDateChange, toast, selectedDate])
 
   // 初始加载
   useEffect(() => {

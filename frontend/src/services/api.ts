@@ -103,8 +103,24 @@ api.interceptors.response.use(
             return api(originalRequest)
           } catch (refreshError) {
             processQueue(refreshError, null)
-            // 刷新失败，跳转到登录页
+            // 刷新失败，显示提示并跳转到登录页
+            console.error('Token 刷新失败:', refreshError)
             store.dispatch({ type: 'auth/localLogout' })
+            // 使用 toast 提示用户（如果已导入）
+            try {
+              const { toast } = window.__chakraToast__
+              if (toast) {
+                toast({
+                  title: '登录已过期',
+                  description: '请重新登录',
+                  status: 'warning',
+                  duration: 3000,
+                  isClosable: true,
+                })
+              }
+            } catch (e) {
+              // toast 不可用时不处理
+            }
             window.location.href = '/login'
             return Promise.reject(refreshError)
           }
@@ -146,7 +162,7 @@ export const stockApi = {
       priorityLoad?: boolean
     }
   ) =>
-    api.get(`/stock/kline/${code}`, {
+    api.get(`/kline/${code}`, {
       params: {
         start_date: params?.startDate,
         end_date: params?.endDate,
@@ -155,14 +171,22 @@ export const stockApi = {
       }
     }),
   getIndicators: (code: string, startDate?: string, endDate?: string) =>
-    api.get(`/stock/indicators/${code}`, { params: { start_date: startDate, end_date: endDate } }),
-  getRealtime: (code: string) => api.get(`/stock/realtime/${code}`),
+    api.get(`/indicators/${code}`, { params: { start_date: startDate, end_date: endDate } }),
+  getRealtime: (code: string) => api.get(`/realtime/${code}`),
   search: (keyword: string, limit: number = 20) =>
     api.get('/stock/search', { params: { keyword, limit } }),
 }
 
+// 大盘指数 API
+export const marketIndexApi = {
+  getKline: (indexCode: string = '000001', startDate?: string, endDate?: string) =>
+    api.get('/market/index', { params: { index_code: indexCode, start_date: startDate, end_date: endDate } }),
+  getRealtime: (indexCodes: string = '000001,399001,399006') =>
+    api.get('/market/realtime', { params: { index_codes: indexCodes } }),
+}
+
 export const watchlistApi = {
-  getList: () => api.get('/watchlist/list'),
+  getList: () => api.get('/watchlist'),
   add: (code: string, note?: string) => api.post('/watchlist/add', { code, note }),
   remove: (code: string) => api.delete(`/watchlist/remove/${code}`),
   update: (code: string, note: string) => api.put(`/watchlist/update/${code}`, { note }),
@@ -171,8 +195,8 @@ export const watchlistApi = {
 
 export const sectorApi = {
   getList: (sectorType: string = 'industry') => api.get('/sector/list', { params: { sector_type: sectorType } }),
-  getRanking: (sectorType: string = 'industry', sortBy: string = 'change_pct', limit: number = 20) =>
-    api.get('/sector/ranking', { params: { sector_type: sectorType, sort_by: sortBy, limit } }),
+  getRanking: (sectorType: string = 'industry', sortBy: string = 'change_pct', limit: number = 20, tradeDate?: string) =>
+    api.get('/ranking', { params: { sector_type: sectorType, sort_by: sortBy, limit, ...(tradeDate && { trade_date: tradeDate }) } }),
   getComponents: (sectorCode: string) => api.get(`/sector/components/${sectorCode}`),
   getLeaders: (sectorCode: string, topN: number = 5) =>
     api.get(`/sector/leaders/${sectorCode}`, { params: { top_n: topN } }),
@@ -191,9 +215,11 @@ export const chipApi = {
 
 export const screenerApi = {
   query: (conditions: any) => api.post('/screener/query', conditions),
-  getMarketStats: () => api.get('/screener/market-stats'),
-  getSectorStats: (sectorCode: string) => api.get(`/screener/sector-stats/${sectorCode}`),
-  getPresetConditions: () => api.get('/screener/preset-conditions'),
+  getMarketStats: (tradeDate?: string) => api.get('/market-stats', { params: { trade_date: tradeDate } }),
+  getSectorStats: (sectorCode: string) => api.get(`/sector-stats/${sectorCode}`),
+  getPresetConditions: () => api.get('/preset-conditions'),
+  getEffectiveDate: () => api.get('/effective-date'),
+  getTradingDays: (limit: number = 20) => api.get('/trading-days', { params: { limit } }),
 }
 
 export const strategyApi = {
@@ -213,6 +239,23 @@ export const backtestApi = {
   getTrades: (backtestId: string, page: number = 1, pageSize: number = 50) =>
     api.get(`/backtest/trades/${backtestId}`, { params: { page, page_size: pageSize } }),
   getHistory: (limit: number = 20) => api.get('/backtest/history', { params: { limit } }),
+}
+
+// 市场行情 API - 实时涨跌幅排名
+export const marketApi = {
+  getRanking: (topN: number = 50, src: string = 'sina') =>
+    api.get('/market/market-ranking', { params: { top_n: topN, src } }),
+  getOverview: () => api.get('/market/market-overview'),
+  getSectorPerformance: (sectorType: string = 'industry') =>
+    api.get('/market/sector-performance', { params: { sector_type: sectorType } }),
+}
+
+// 实时盘口 API
+export const realtimeApi = {
+  getQuote: (code: string, src: string = 'sina') =>
+    api.get(`/realtime/realtime-quote/${code}`, { params: { src } }),
+  getTickData: (code: string, src: string = 'dc', limit: number = 100) =>
+    api.get(`/realtime/realtime-tick/${code}`, { params: { src, limit } }),
 }
 
 export default api

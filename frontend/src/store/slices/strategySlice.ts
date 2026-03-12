@@ -1,9 +1,10 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { strategyApi } from '../../services/api'
+import { Strategy } from '../../types'
 
 interface StrategyState {
-  strategies: any[]
-  currentStrategy: any | null
+  strategies: Strategy[]
+  currentStrategy: Strategy | null
   loading: boolean
   error: string | null
 }

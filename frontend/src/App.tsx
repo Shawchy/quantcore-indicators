@@ -11,6 +11,8 @@ import ChipSelection from './pages/ChipSelection'
 import Screener from './pages/Screener'
 import Strategy from './pages/Strategy'
 import Backtest from './pages/Backtest'
+import MarketRanking from './pages/MarketRanking'
+import DailyMarket from './pages/DailyMarket'
 import theme from './theme'
 
 function App() {
@@ -39,6 +41,8 @@ function App() {
             <Route path="screener" element={<Screener />} />
             <Route path="strategy" element={<Strategy />} />
             <Route path="backtest" element={<Backtest />} />
+            <Route path="market" element={<MarketRanking />} />
+            <Route path="daily" element={<DailyMarket />} />
           </Route>
         </Routes>
       </BrowserRouter>

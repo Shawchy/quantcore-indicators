@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.adapters import data_source_manager, ChipData
 from app.storage import cache_manager, ChipData as ChipDataDB, get_session
 from app.core.exceptions import DataNotFoundException
+from app.api.v1.endpoints.data_source_control import should_use_mock_data
 
 
 class ChipService:
@@ -20,6 +21,33 @@ class ChipService:
         cached = await cache_manager.get("chip", cache_key)
         if cached:
             return cached
+        
+        # 在模拟数据模式下，从数据库读取
+        if should_use_mock_data():
+            async with get_session() as session:
+                query = select(ChipDataDB).where(ChipDataDB.code == code)
+                if start_date:
+                    query = query.where(ChipDataDB.date >= start_date)
+                if end_date:
+                    query = query.where(ChipDataDB.date <= end_date)
+                
+                result = await session.execute(query)
+                chip_data = result.scalars().all()
+                
+                if not chip_data:
+                    raise DataNotFoundException(f"股票 {code} 筹码数据不存在")
+                
+                result = [{
+                    "code": c.code,
+                    "date": c.date,
+                    "shareholder_count": c.shareholder_count,
+                    "avg_shares_per_holder": c.avg_shares_per_holder,
+                    "control_degree": c.control_degree,
+                    "concentration": c.concentration
+                } for c in chip_data]
+                
+                await cache_manager.set("chip", cache_key, result)
+                return result
         
         chip_data = await data_source_manager.get_chip_data(code, start_date, end_date)
         

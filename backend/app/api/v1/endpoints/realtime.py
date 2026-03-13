@@ -23,7 +23,7 @@ token = os.getenv('TUSHARE_TOKEN')
 ts.set_token(token)
 
 
-@router.get("/realtime-quote/{code}", response_model=ResponseModel[Dict[str, Any]])
+@router.get("/quote/{code}", response_model=ResponseModel[Dict[str, Any]])
 async def get_realtime_quote(
     code: str,
     src: str = Query("sina", description="数据源：sina-新浪，dc-东方财富"),
@@ -125,7 +125,7 @@ async def get_realtime_quote(
         )
 
 
-@router.get("/realtime-tick/{code}", response_model=ResponseModel[Dict[str, Any]])
+@router.get("/tick/{code}", response_model=ResponseModel[Dict[str, Any]])
 async def get_realtime_tick_data(
     code: str,
     src: str = Query("dc", description="数据源：sina-新浪，dc-东方财富"),

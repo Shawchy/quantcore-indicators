@@ -42,6 +42,7 @@ import { useEffect, useState } from 'react'
 const StockDetail = () => {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
+  const toast = useToast()
   
   // 验证股票代码格式
   const isValidCode = code && /^[0-9]{6}$/.test(code)
@@ -55,6 +56,18 @@ const StockDetail = () => {
   const { data: klineData, isLoading: klineLoading } = useQuery({
     queryKey: ['stockKline', code],
     queryFn: () => stockApi.getKline(code!),
+    enabled: !!code && isValidCode,
+  })
+
+  const { data: weeklyKlineData, isLoading: weeklyKlineLoading } = useQuery({
+    queryKey: ['stockWeeklyKline', code],
+    queryFn: () => stockApi.getWeeklyKline(code!),
+    enabled: !!code && isValidCode,
+  })
+
+  const { data: monthlyKlineData, isLoading: monthlyKlineLoading } = useQuery({
+    queryKey: ['stockMonthlyKline', code],
+    queryFn: () => stockApi.getMonthlyKline(code!),
     enabled: !!code && isValidCode,
   })
 
@@ -111,6 +124,8 @@ const StockDetail = () => {
   const stock = basicData?.data
   const quote = realtimeData?.data
   const klines = klineData?.data || []
+  const weeklyKlines = weeklyKlineData?.data || []
+  const monthlyKlines = monthlyKlineData?.data || []
   const indicators = indicatorData?.data || []
 
   const getKlineOption = () => {
@@ -149,6 +164,130 @@ const StockDetail = () => {
       series: [
         {
           name: 'K 线',
+          type: 'candlestick',
+          data: ohlc,
+          itemStyle: {
+            color: '#ef4444',
+            color0: '#10b981',
+            borderColor: '#ef4444',
+            borderColor0: '#10b981',
+          },
+        },
+        {
+          name: '成交量',
+          type: 'bar',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: volumes,
+          itemStyle: (params: any) => {
+            const idx = params.dataIndex
+            const open = ohlc[idx][0]
+            const close = ohlc[idx][1]
+            return { color: close >= open ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.6)' }
+          },
+        },
+      ],
+    }
+  }
+
+  const getWeeklyKlineOption = () => {
+    if (!weeklyKlines.length) return {}
+
+    const dates = weeklyKlines.map((k: any) => k.date)
+    const ohlc = weeklyKlines.map((k: any) => [k.open, k.close, k.low, k.high])
+    const volumes = weeklyKlines.map((k: any) => k.volume)
+
+    return {
+      backgroundColor: 'transparent',
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'cross' },
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        borderColor: '#e2e8f0',
+        textStyle: { color: '#1e293b' },
+      },
+      legend: { data: ['周K线'], bottom: 0, textStyle: { color: '#64748b' } },
+      grid: [
+        { left: '10%', right: '8%', height: '50%' },
+        { left: '10%', right: '8%', top: '65%', height: '20%' },
+      ],
+      xAxis: [
+        { type: 'category', data: dates, gridIndex: 0, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' } },
+        { type: 'category', data: dates, gridIndex: 1, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' } },
+      ],
+      yAxis: [
+        { scale: true, gridIndex: 0, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' }, splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } } },
+        { scale: true, gridIndex: 1, splitLine: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' } },
+      ],
+      dataZoom: [
+        { type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 },
+        { show: true, xAxisIndex: [0, 1], type: 'slider', bottom: '5%', backgroundColor: '#f1f5f9', fillerColor: 'rgba(59, 130, 246, 0.2)', borderColor: '#e2e8f0', textStyle: { color: '#64748b' } },
+      ],
+      series: [
+        {
+          name: '周K线',
+          type: 'candlestick',
+          data: ohlc,
+          itemStyle: {
+            color: '#ef4444',
+            color0: '#10b981',
+            borderColor: '#ef4444',
+            borderColor0: '#10b981',
+          },
+        },
+        {
+          name: '成交量',
+          type: 'bar',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: volumes,
+          itemStyle: (params: any) => {
+            const idx = params.dataIndex
+            const open = ohlc[idx][0]
+            const close = ohlc[idx][1]
+            return { color: close >= open ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.6)' }
+          },
+        },
+      ],
+    }
+  }
+
+  const getMonthlyKlineOption = () => {
+    if (!monthlyKlines.length) return {}
+
+    const dates = monthlyKlines.map((k: any) => k.date)
+    const ohlc = monthlyKlines.map((k: any) => [k.open, k.close, k.low, k.high])
+    const volumes = monthlyKlines.map((k: any) => k.volume)
+
+    return {
+      backgroundColor: 'transparent',
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'cross' },
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        borderColor: '#e2e8f0',
+        textStyle: { color: '#1e293b' },
+      },
+      legend: { data: ['月K线'], bottom: 0, textStyle: { color: '#64748b' } },
+      grid: [
+        { left: '10%', right: '8%', height: '50%' },
+        { left: '10%', right: '8%', top: '65%', height: '20%' },
+      ],
+      xAxis: [
+        { type: 'category', data: dates, gridIndex: 0, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' } },
+        { type: 'category', data: dates, gridIndex: 1, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' } },
+      ],
+      yAxis: [
+        { scale: true, gridIndex: 0, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' }, splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } } },
+        { scale: true, gridIndex: 1, splitLine: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' } },
+      ],
+      dataZoom: [
+        { type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 },
+        { show: true, xAxisIndex: [0, 1], type: 'slider', bottom: '5%', backgroundColor: '#f1f5f9', fillerColor: 'rgba(59, 130, 246, 0.2)', borderColor: '#e2e8f0', textStyle: { color: '#64748b' } },
+      ],
+      series: [
+        {
+          name: '月K线',
           type: 'candlestick',
           data: ohlc,
           itemStyle: {
@@ -296,11 +435,19 @@ const StockDetail = () => {
                   showLoading={klineLoading}
                 />
               </TabPanel>
-              <TabPanel>
-                <Text color="light.textMuted">周K线数据</Text>
+              <TabPanel p={0} pt={4}>
+                <ReactECharts
+                  option={getWeeklyKlineOption()}
+                  style={{ height: '400px' }}
+                  showLoading={weeklyKlineLoading}
+                />
               </TabPanel>
-              <TabPanel>
-                <Text color="light.textMuted">月K线数据</Text>
+              <TabPanel p={0} pt={4}>
+                <ReactECharts
+                  option={getMonthlyKlineOption()}
+                  style={{ height: '400px' }}
+                  showLoading={monthlyKlineLoading}
+                />
               </TabPanel>
             </TabPanels>
           </Tabs>

@@ -625,7 +625,9 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
               </Tr>
             </Thead>
             <Tbody>
-              {filteredData.slice(-100).reverse().map((item, index) => (
+              {filteredData.slice(-100).reverse().map((item, index) => {
+                const prevItem = index > 0 ? filteredData[filteredData.length - 101 + index] : null
+                return (
                 <Tr key={item.date} _hover={{ bg: 'gray.50' }}>
                   <Td fontSize="xs" fontFamily="mono">{formatDate(item.date)}</Td>
                   <Td fontSize="xs" fontWeight="bold" fontFamily="mono" isNumeric>
@@ -642,7 +644,7 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
                     fontWeight="bold" 
                     fontFamily="mono" 
                     isNumeric
-                    color={index > 0 && filteredData[index - 1] && item.close >= filteredData[index - 1].close ? 'red.500' : 'green.500'}
+                    color={prevItem && item.close >= prevItem.close ? 'red.500' : 'green.500'}
                   >
                     {formatPrice(item.close)}
                   </Td>
@@ -653,7 +655,8 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
                     {formatAmount(item.amount)}
                   </Td>
                 </Tr>
-              ))}
+                )
+              })}
             </Tbody>
           </Table>
         </TableContainer>

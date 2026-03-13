@@ -20,12 +20,13 @@ interface AuthState {
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem('access_token')
+  // 使用 sessionStorage 替代 localStorage，关闭浏览器后自动失效
+  return sessionStorage.getItem('access_token')
 }
 
 const getStoredRefreshToken = () => {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem('refresh_token')
+  return sessionStorage.getItem('refresh_token')
 }
 
 const initialState: AuthState = {
@@ -42,8 +43,9 @@ export const login = createAsyncThunk(
   async ({ username, password }: { username: string; password: string }, { rejectWithValue }) => {
     try {
       const response = await authApi.login(username, password)
-      localStorage.setItem('access_token', response.access_token)
-      localStorage.setItem('refresh_token', response.refresh_token)
+      // 使用 sessionStorage 替代 localStorage，关闭浏览器后自动失效
+      sessionStorage.setItem('access_token', response.access_token)
+      sessionStorage.setItem('refresh_token', response.refresh_token)
       return response
     } catch (error: any) {
       return rejectWithValue(error.message || '登录失败')
@@ -83,8 +85,8 @@ const authSlice = createSlice({
       state.error = null
     },
     localLogout: (state) => {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+      sessionStorage.removeItem('access_token')
+      sessionStorage.removeItem('refresh_token')
       state.user = null
       state.token = null
       state.refreshToken = null
@@ -94,8 +96,8 @@ const authSlice = createSlice({
       state.token = action.payload.access_token
       state.refreshToken = action.payload.refresh_token
       state.isAuthenticated = true
-      localStorage.setItem('access_token', action.payload.access_token)
-      localStorage.setItem('refresh_token', action.payload.refresh_token)
+      sessionStorage.setItem('access_token', action.payload.access_token)
+      sessionStorage.setItem('refresh_token', action.payload.refresh_token)
     },
   },
   extraReducers: (builder) => {
@@ -130,8 +132,8 @@ const authSlice = createSlice({
       })
       // Logout
       .addCase(logout.fulfilled, (state) => {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        sessionStorage.removeItem('access_token')
+        sessionStorage.removeItem('refresh_token')
         state.user = null
         state.token = null
         state.refreshToken = null

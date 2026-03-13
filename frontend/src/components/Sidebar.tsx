@@ -21,7 +21,8 @@ import {
   FiActivity,
   FiCpu,
   FiTrendingUp,
-  FiBarChart
+  FiBarChart,
+  FiSliders
 } from 'react-icons/fi'
 
 const menuItems = [
@@ -34,6 +35,7 @@ const menuItems = [
   { name: '智能选股', icon: FiSearch, path: '/screener' },
   { name: '策略管理', icon: FiSettings, path: '/strategy' },
   { name: '策略回测', icon: FiActivity, path: '/backtest' },
+  { name: '系统设置', icon: FiSliders, path: '/settings' },
 ]
 
 interface SidebarProps {

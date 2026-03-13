@@ -24,12 +24,13 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import React, { useState, useEffect, useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
-import { screenerApi, sectorApi, marketIndexApi } from '../services/api'
+import { screenerApi, sectorApi, marketIndexApi, moneyflowApi } from '../services/api'
 import { INDEX_CODES, SECTOR_TYPES } from '../constants'
 import { getKlineOption, getPieOption } from '../utils/chartConfig'
 import { StatCard } from '../components/StatCard'
 import { RankBadge } from '../components/RankBadge'
 import { SmartDateSelector } from '../components/SmartDateSelector'
+import MarketMoneyflowCard from '../components/MarketMoneyflowCard'
 import { FiTrendingUp, FiActivity, FiPieChart, FiBarChart } from 'react-icons/fi'
 
 const Dashboard = () => {
@@ -333,6 +334,11 @@ const Dashboard = () => {
             )}
           </CardBody>
         </Card>
+      </SimpleGrid>
+
+      {/* 大盘资金流向 */}
+      <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={4}>
+        <MarketMoneyflowCard />
       </SimpleGrid>
     </VStack>
   )

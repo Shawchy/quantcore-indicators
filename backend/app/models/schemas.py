@@ -59,3 +59,22 @@ class TechnicalIndicator(BaseModel):
     macd: Optional[float] = None
     macd_signal: Optional[float] = None
     macd_hist: Optional[float] = None
+
+
+class MarketMoneyflowData(BaseModel):
+    """大盘资金流向数据模型"""
+    trade_date: str
+    close_sh: Optional[float] = None
+    pct_change_sh: Optional[float] = None
+    close_sz: Optional[float] = None
+    pct_change_sz: Optional[float] = None
+    net_amount: Optional[float] = None
+    net_amount_rate: Optional[float] = None
+    buy_elg_amount: Optional[float] = None
+    buy_elg_amount_rate: Optional[float] = None
+    buy_lg_amount: Optional[float] = None
+    buy_lg_amount_rate: Optional[float] = None
+    buy_md_amount: Optional[float] = None
+    buy_md_amount_rate: Optional[float] = None
+    buy_sm_amount: Optional[float] = None
+    buy_sm_amount_rate: Optional[float] = None

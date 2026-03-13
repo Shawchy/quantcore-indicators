@@ -2,7 +2,7 @@
  * 市场情绪卡片组件
  * 显示市场情绪状态和涨跌统计
  */
-import React from 'react'
+import React, { useMemo, memo } from 'react'
 import { Box, Stat, StatLabel, StatNumber, StatHelpText, Flex, Badge, Icon } from '@chakra-ui/react'
 import { ArrowUpIcon, ArrowDownIcon } from '@chakra-ui/icons'
 import type { MarketStats, MarketSentiment } from '../types'
@@ -13,9 +13,9 @@ interface MarketSentimentCardProps {
   totalStocks: number
 }
 
-const MarketSentimentCard: React.FC<MarketSentimentCardProps> = ({ stats, sentiment, totalStocks }) => {
-  // 根据情绪分数设置颜色
-  const getSentimentColor = (score: number) => {
+const MarketSentimentCard: React.FC<MarketSentimentCardProps> = memo(({ stats, sentiment, totalStocks }) => {
+  // 使用 useMemo 缓存情绪颜色
+  const sentimentColor = useMemo(() => {
     const colors = {
       1: 'red',    // 强势下跌
       2: 'orange', // 震荡下跌
@@ -23,19 +23,20 @@ const MarketSentimentCard: React.FC<MarketSentimentCardProps> = ({ stats, sentim
       4: 'blue',   // 震荡上涨
       5: 'green'   // 强势上涨
     }
-    return colors[score as keyof typeof colors] || 'gray'
-  }
+    return colors[sentiment.score as keyof typeof colors] || 'gray'
+  }, [sentiment.score])
 
-  const sentimentColor = getSentimentColor(sentiment.score)
-
-  // 格式化情绪文本
-  const sentimentEmojis = {
-    5: '📈📈',
-    4: '📈',
-    3: '➖',
-    2: '📉',
-    1: '📉📉'
-  }
+  // 使用 useMemo 缓存情绪文本
+  const sentimentEmoji = useMemo(() => {
+    const sentimentEmojis = {
+      5: '📈📈',
+      4: '📈',
+      3: '➖',
+      2: '📉',
+      1: '📉📉'
+    }
+    return sentimentEmojis[sentiment.score as keyof typeof sentimentEmojis] || '➖'
+  }, [sentiment.score])
 
   return (
     <Box 
@@ -53,7 +54,7 @@ const MarketSentimentCard: React.FC<MarketSentimentCardProps> = ({ stats, sentim
           </StatLabel>
           <Flex align="center" gap={2}>
             <StatNumber fontSize="2xl" fontWeight="bold" color={`${sentimentColor}.500`}>
-              {sentimentEmojis[sentiment.score as keyof typeof sentimentEmojis] || '➖'} {sentiment.text}
+              {sentimentEmoji} {sentiment.text}
             </StatNumber>
             <Badge colorScheme={sentimentColor} fontSize="sm" px={2} py={1}>
               强弱度：{sentiment.score}/5
@@ -113,6 +114,8 @@ const MarketSentimentCard: React.FC<MarketSentimentCardProps> = ({ stats, sentim
       </Flex>
     </Box>
   )
-}
+})
+
+MarketSentimentCard.displayName = 'MarketSentimentCard'
 
 export default MarketSentimentCard

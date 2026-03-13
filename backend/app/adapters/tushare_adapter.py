@@ -660,3 +660,70 @@ class TushareAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"获取资金流向数据失败 {code}: {e}")
             return []
+    
+    async def get_market_moneyflow_dc(
+        self,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        获取大盘资金流向数据（东方财富数据源，        接口：moneyflow_mkt_dc
+        积分：120积分可试用，6000积分可正式调取
+        
+        Args:
+            trade_date: 交易日期（YYYYMMDD格式）
+            start_date: 开始日期（YYYYMMDD格式）
+            end_date: 结束日期（YYYYMMDD格式）
+            
+        Returns:
+            大盘资金流向数据列表
+        """
+        try:
+            # 检查适配器是否已初始化
+            if not self._is_initialized or not self._pro:
+                logger.error("Tushare 适配器未初始化")
+                return []
+            
+            # 检查权限（120积分可试用，6000积分可正式调取）
+            if self._points_manager:
+                if not self._points_manager.check_and_log_permission("moneyflow_mkt_dc", "akshare"):
+                    logger.warning(f"Tushare 大盘资金流向需要 6000 积分，当前只有{self._points_manager.get_points()}分，使用备选数据源")
+                    return []
+            
+            # 调用 Tushare API
+            df = await asyncio.to_thread(
+                self._pro.moneyflow_mkt_dc,
+                trade_date=trade_date,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            if df.empty:
+                return []
+            
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "trade_date": str(row["trade_date"]),
+                    "close_sh": float(row["close_sh"]) if pd.notna(row["close_sh"]) else None,
+                    "pct_change_sh": float(row["pct_change_sh"]) if pd.notna(row["pct_change_sh"]) else None,
+                    "close_sz": float(row["close_sz"]) if pd.notna(row["close_sz"]) else None,
+                    "pct_change_sz": float(row["pct_change_sz"]) if pd.notna(row["pct_change_sz"]) else None,
+                    "net_amount": float(row["net_amount"]) if pd.notna(row["net_amount"]) else None,
+                    "net_amount_rate": float(row["net_amount_rate"]) if pd.notna(row["net_amount_rate"]) else None,
+                    "buy_elg_amount": float(row["buy_elg_amount"]) if pd.notna(row["buy_elg_amount"]) else None,
+                    "buy_elg_amount_rate": float(row["buy_elg_amount_rate"]) if pd.notna(row["buy_elg_amount_rate"]) else None,
+                    "buy_lg_amount": float(row["buy_lg_amount"]) if pd.notna(row["buy_lg_amount"]) else None,
+                    "buy_lg_amount_rate": float(row["buy_lg_amount_rate"]) if pd.notna(row["buy_lg_amount_rate"]) else None,
+                    "buy_md_amount": float(row["buy_md_amount"]) if pd.notna(row["buy_md_amount"]) else None,
+                    "buy_md_amount_rate": float(row["buy_md_amount_rate"]) if pd.notna(row["buy_md_amount_rate"]) else None,
+                    "buy_sm_amount": float(row["buy_sm_amount"]) if pd.notna(row["buy_sm_amount"]) else None,
+                    "buy_sm_amount_rate": float(row["buy_sm_amount_rate"]) if pd.notna(row["buy_sm_amount_rate"]) else None,
+                })
+            
+            logger.info(f"获取大盘资金流向数据成功：{len(result)}条")
+            return result
+        except Exception as e:
+            logger.error(f"获取大盘资金流向数据失败：{e}")
+            return []

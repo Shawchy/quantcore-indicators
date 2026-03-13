@@ -9,6 +9,7 @@ from .sqlite import (
     Strategy,
     BacktestRecord,
     TradeRecord,
+    User,
     init_database,
     get_session
 )
@@ -26,6 +27,7 @@ __all__ = [
     "Strategy",
     "BacktestRecord",
     "TradeRecord",
+    "User",
     "init_database",
     "get_session",
     "cache_manager",

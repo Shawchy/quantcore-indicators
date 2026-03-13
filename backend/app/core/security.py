@@ -9,7 +9,9 @@ from app.config import settings
 
 
 # JWT 配置
-SECRET_KEY = settings.SECRET_KEY  # 生产环境必须设置环境变量
+if not settings.SECRET_KEY:
+    raise ValueError("SECRET_KEY 未设置！请在 .env 文件中设置 SECRET_KEY 环境变量")
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 小时
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -124,11 +126,18 @@ def verify_refresh_token(token: str) -> Optional[TokenData]:
 
 
 # 模拟用户数据库 (生产环境应使用数据库)
+import os
+import secrets
+
+# 生成随机默认密码（仅用于开发环境）
+DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", secrets.token_urlsafe(16))
+DEFAULT_USER_PASSWORD = os.getenv("DEFAULT_USER_PASSWORD", secrets.token_urlsafe(16))
+
 fake_users_db = {
     "admin": {
         "user_id": 1,
         "username": "admin",
-        "password": get_password_hash("admin123"),  # 生产环境必须修改
+        "password": get_password_hash(DEFAULT_ADMIN_PASSWORD),
         "email": "admin@example.com",
         "role": "admin",
         "is_active": True
@@ -136,39 +145,68 @@ fake_users_db = {
     "user": {
         "user_id": 2,
         "username": "user",
-        "password": get_password_hash("user123"),
+        "password": get_password_hash(DEFAULT_USER_PASSWORD),
         "email": "user@example.com",
         "role": "user",
         "is_active": True
     }
 }
 
+# 开发环境打印默认密码
+if settings.DEBUG:
+    logger.warning(f"开发环境默认密码 - admin: {DEFAULT_ADMIN_PASSWORD}, user: {DEFAULT_USER_PASSWORD}")
+
 
 async def get_user(username: str) -> Optional[User]:
-    """获取用户"""
-    if username in fake_users_db:
-        user_data = fake_users_db[username]
-        return User(**user_data)
+    """从数据库获取用户"""
+    from app.storage import User as UserModel, get_session
+    from sqlalchemy import select
+    
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserModel).where(UserModel.username == username)
+        )
+        user = result.scalar_one_or_none()
+        
+        if user:
+            return User(
+                user_id=user.user_id,
+                username=user.username,
+                email=user.email,
+                role=user.role,
+                is_active=user.is_active
+            )
+    
     return None
 
 
 async def authenticate_user(username: str, password: str) -> Optional[User]:
     """认证用户"""
-    user = await get_user(username)
+    from app.storage import User as UserModel, get_session
+    from sqlalchemy import select
     
-    if not user:
-        return None
-    
-    # 从模拟数据库中获取密码哈希并验证
-    # 生产环境应从数据库获取
-    user_data = fake_users_db.get(username)
-    if not user_data:
-        return None
-    
-    if not verify_password(password, user_data["password"]):
-        return None
-    
-    return user
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserModel).where(UserModel.username == username)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            return None
+        
+        if not user.is_active:
+            return None
+        
+        if not verify_password(password, user.password):
+            return None
+        
+        return User(
+            user_id=user.user_id,
+            username=user.username,
+            email=user.email,
+            role=user.role,
+            is_active=user.is_active
+        )
 
 
 async def login_for_access_token(username: str, password: str) -> Token:

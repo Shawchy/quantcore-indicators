@@ -13,6 +13,7 @@ import Strategy from './pages/Strategy'
 import Backtest from './pages/Backtest'
 import MarketRanking from './pages/MarketRanking'
 import DailyMarket from './pages/DailyMarket'
+import Settings from './pages/Settings'
 import theme from './theme'
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
             <Route path="backtest" element={<Backtest />} />
             <Route path="market" element={<MarketRanking />} />
             <Route path="daily" element={<DailyMarket />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
       </BrowserRouter>

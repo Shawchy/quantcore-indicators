@@ -121,7 +121,8 @@ class DataPersistence:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         adjust: str = "qfq",
-        limit: int = 5000
+        limit: int = 5000,
+        order_by_date: str = "asc"  # "asc" 或 "desc"
     ) -> List[KLineData]:
         async with get_session() as session:
             query = select(KLineDB).where(
@@ -136,7 +137,10 @@ class DataPersistence:
             if end_date:
                 query = query.where(KLineDB.date <= end_date)
             
-            query = query.order_by(KLineDB.date).limit(limit)
+            if order_by_date == "desc":
+                query = query.order_by(KLineDB.date.desc()).limit(limit)
+            else:
+                query = query.order_by(KLineDB.date).limit(limit)
             
             result = await session.execute(query)
             klines = result.scalars().all()
@@ -202,7 +206,8 @@ class DataPersistence:
         code: str,
         adjust: str = "qfq"
     ) -> Optional[str]:
-        klines = await self.get_klines_from_db(code, adjust=adjust, limit=1)
+        # 倒序查询获取最新日期
+        klines = await self.get_klines_from_db(code, adjust=adjust, limit=1, order_by_date="desc")
         if klines:
             return klines[0].date
         

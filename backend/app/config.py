@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     }
     
     # JWT 认证配置
-    SECRET_KEY: Optional[str] = None  # 生产环境必须设置，建议使用：openssl rand -hex 32
+    SECRET_KEY: str  # 必须设置，建议使用：openssl rand -hex 32
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 小时
     

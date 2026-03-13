@@ -2,7 +2,7 @@
  * 股票排行榜表格组件
  * 显示涨幅榜、跌幅榜、成交额榜等
  */
-import React from 'react'
+import React, { useMemo, memo } from 'react'
 import { 
   Box, Table, Thead, Tbody, Tr, Th, Td, TableContainer, 
   Badge, Text, Flex, Tooltip, useColorModeValue 
@@ -16,7 +16,7 @@ interface StockRankingTableProps {
   maxItems?: number
 }
 
-const StockRankingTable: React.FC<StockRankingTableProps> = ({ 
+const StockRankingTable: React.FC<StockRankingTableProps> = memo(({ 
   data, 
   type = 'gainers',
   showRank = true,
@@ -24,52 +24,51 @@ const StockRankingTable: React.FC<StockRankingTableProps> = ({
 }) => {
   const hoverBg = useColorModeValue('gray.50', 'gray.700')
   
-  // 限制显示数量
-  const displayData = data.slice(0, maxItems)
-  
-  // 格式化涨跌幅
-  const formatPctChange = (pct: number) => {
-    const sign = pct > 0 ? '+' : ''
-    return `${sign}${pct.toFixed(2)}%`
-  }
-  
-  // 根据涨跌幅获取颜色
-  const getPctChangeColor = (pct: number) => {
-    if (pct > 0) return 'red.500'
-    if (pct < 0) return 'green.500'
-    return 'gray.500'
-  }
-  
-  // 格式化成交额（万元）
-  const formatAmount = (amount?: number) => {
-    if (amount === undefined || amount === null) return '-'
-    if (amount >= 100000000) {
-      return `${(amount / 100000000).toFixed(2)}亿`
+  // 使用 useMemo 缓存格式化函数
+  const formatters = useMemo(() => ({
+    formatPctChange: (pct: number) => {
+      const sign = pct > 0 ? '+' : ''
+      return `${sign}${pct.toFixed(2)}%`
+    },
+    formatAmount: (amount?: number) => {
+      if (amount === undefined || amount === null) return '-'
+      if (amount >= 100000000) {
+        return `${(amount / 100000000).toFixed(2)}亿`
+      }
+      if (amount >= 10000) {
+        return `${(amount / 10000).toFixed(2)}万`
+      }
+      return amount.toFixed(0)
+    },
+    formatVolume: (volume?: number) => {
+      if (volume === undefined || volume === null) return '-'
+      if (volume >= 10000) {
+        return `${(volume / 10000).toFixed(1)}万`
+      }
+      return volume.toFixed(0)
     }
-    if (amount >= 10000) {
-      return `${(amount / 10000).toFixed(2)}万`
+  }), [])
+  
+  // 使用 useMemo 缓存颜色获取函数
+  const colorHelpers = useMemo(() => ({
+    getPctChangeColor: (pct: number) => {
+      if (pct > 0) return 'red.500'
+      if (pct < 0) return 'green.500'
+      return 'gray.500'
+    },
+    getRankBadgeColor: (rank: number) => {
+      if (rank === 1) return 'red'
+      if (rank === 2) return 'orange'
+      if (rank === 3) return 'yellow'
+      return 'gray'
     }
-    return amount.toFixed(0)
-  }
+  }), [])
   
-  // 格式化成交量（万手）
-  const formatVolume = (volume?: number) => {
-    if (volume === undefined || volume === null) return '-'
-    if (volume >= 10000) {
-      return `${(volume / 10000).toFixed(1)}万`
-    }
-    return volume.toFixed(0)
-  }
+  // 使用 useMemo 缓存显示数据
+  const displayData = useMemo(() => data.slice(0, maxItems), [data, maxItems])
   
-  // 获取排名徽章颜色
-  const getRankBadgeColor = (rank: number) => {
-    if (rank === 1) return 'red'
-    if (rank === 2) return 'orange'
-    if (rank === 3) return 'yellow'
-    return 'gray'
-  }
-  
-  const getTableTitle = () => {
+  // 使用 useMemo 缓存表格标题
+  const tableTitle = useMemo(() => {
     const titles = {
       gainers: '涨幅榜',
       losers: '跌幅榜',
@@ -77,13 +76,13 @@ const StockRankingTable: React.FC<StockRankingTableProps> = ({
       turnover: '换手率榜'
     }
     return titles[type]
-  }
+  }, [type])
   
   return (
     <Box bg="white" borderRadius="lg" boxShadow="md" overflow="hidden">
       <Box px={4} py={3} bg="gray.50" borderBottom="1px" borderColor="gray.200">
         <Text fontWeight="bold" fontSize="lg" color="gray.700">
-          {getTableTitle()}
+          {tableTitle}
         </Text>
       </Box>
       
@@ -121,7 +120,7 @@ const StockRankingTable: React.FC<StockRankingTableProps> = ({
                 {showRank && (
                   <Td textAlign="center">
                     <Badge 
-                      colorScheme={getRankBadgeColor(index + 1)}
+                      colorScheme={colorHelpers.getRankBadgeColor(index + 1)}
                       minWidth="24px"
                       textAlign="center"
                       fontSize="xs"
@@ -148,19 +147,19 @@ const StockRankingTable: React.FC<StockRankingTableProps> = ({
                   <Td 
                     isNumeric 
                     fontWeight="bold"
-                    color={getPctChangeColor(item.pct_change)}
+                    color={colorHelpers.getPctChangeColor(item.pct_change)}
                   >
-                    {formatPctChange(item.pct_change)}
+                    {formatters.formatPctChange(item.pct_change)}
                   </Td>
                 )}
                 {type !== 'turnover' && (
                   <Td isNumeric fontSize="xs" color="gray.600">
-                    {formatVolume(item.volume)}
+                    {formatters.formatVolume(item.volume)}
                   </Td>
                 )}
                 {(type === 'amount' || type === 'turnover') && (
                   <Td isNumeric fontSize="xs" color="gray.600">
-                    {formatAmount(item.amount)}
+                    {formatters.formatAmount(item.amount)}
                   </Td>
                 )}
                 {type === 'turnover' && (
@@ -183,6 +182,8 @@ const StockRankingTable: React.FC<StockRankingTableProps> = ({
       )}
     </Box>
   )
-}
+})
+
+StockRankingTable.displayName = 'StockRankingTable'
 
 export default StockRankingTable

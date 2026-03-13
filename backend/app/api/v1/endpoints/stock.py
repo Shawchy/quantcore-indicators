@@ -8,13 +8,13 @@ from loguru import logger
 router = APIRouter()
 
 
-@router.get("/basic/{code}", response_model=ResponseModel[dict])
+@router.get("/{code}", response_model=ResponseModel[dict])
 async def get_stock_basic(code: str, current_user: OptionalCurrentUser):
     data = await stock_service.get_stock_basic(code)
     return ResponseModel(data=data)
 
 
-@router.get("/kline/{code}", response_model=ResponseModel[dict])
+@router.get("/{code}/kline", response_model=ResponseModel[dict])
 async def get_kline(
     code: str,
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
@@ -93,18 +93,18 @@ async def get_market_realtime(
     return ResponseModel(data=realtime_data)
 
 
-@router.get("/indicators/{code}", response_model=ResponseModel[list])
+@router.get("/{code}/indicators", response_model=ResponseModel[list])
 async def get_technical_indicators(
     code: str,
+    current_user: CurrentUser,
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
-    current_user: CurrentUser = Depends
 ):
     data = await stock_service.get_technical_indicators(code, start_date, end_date)
     return ResponseModel(data=data)
 
 
-@router.get("/realtime/{code}", response_model=ResponseModel[dict])
+@router.get("/{code}/realtime", response_model=ResponseModel[dict])
 async def get_realtime_quote(code: str, current_user: CurrentUser):
     data = await stock_service.get_realtime_quote(code)
     return ResponseModel(data=data)
@@ -112,33 +112,33 @@ async def get_realtime_quote(code: str, current_user: CurrentUser):
 
 @router.get("/search", response_model=ResponseModel[list])
 async def search_stocks(
+    current_user: CurrentUser,
     keyword: str = Query(..., description="搜索关键词"),
     limit: int = Query(20, description="返回数量限制"),
-    current_user: CurrentUser = Depends
 ):
     data = await stock_service.search_stocks(keyword, limit)
     return ResponseModel(data=data)
 
 
-@router.get("/kline/weekly/{code}", response_model=ResponseModel[list])
+@router.get("/{code}/kline/weekly", response_model=ResponseModel[list])
 async def get_weekly_kline(
     code: str,
+    current_user: CurrentUser,
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
     adjust: str = Query("qfq", description="复权类型"),
-    current_user: CurrentUser = Depends
 ):
     data = await stock_service.get_weekly_kline(code, start_date, end_date, adjust)
     return ResponseModel(data=data)
 
 
-@router.get("/kline/monthly/{code}", response_model=ResponseModel[list])
+@router.get("/{code}/kline/monthly", response_model=ResponseModel[list])
 async def get_monthly_kline(
     code: str,
+    current_user: CurrentUser,
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
     adjust: str = Query("qfq", description="复权类型"),
-    current_user: CurrentUser = Depends
 ):
     data = await stock_service.get_monthly_kline(code, start_date, end_date, adjust)
     return ResponseModel(data=data)
@@ -146,8 +146,8 @@ async def get_monthly_kline(
 
 @router.get("/top-list", response_model=ResponseModel[list])
 async def get_top_list(
+    current_user: CurrentUser,
     trade_date: Optional[str] = Query(None, description="交易日期 YYYYMMDD"),
-    current_user: CurrentUser = Depends
 ):
     data = await stock_service.get_top_list(trade_date)
     return ResponseModel(data=data)
@@ -156,8 +156,8 @@ async def get_top_list(
 @router.get("/forecast/{code}", response_model=ResponseModel[list])
 async def get_forecast(
     code: str,
+    current_user: CurrentUser,
     ann_date: Optional[str] = Query(None, description="公告日期"),
-    current_user: CurrentUser = Depends
 ):
     data = await stock_service.get_forecast(code, ann_date)
     return ResponseModel(data=data)
@@ -166,9 +166,9 @@ async def get_forecast(
 @router.get("/moneyflow/{code}", response_model=ResponseModel[list])
 async def get_moneyflow(
     code: str,
+    current_user: CurrentUser,
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
-    current_user: CurrentUser = Depends
 ):
     data = await stock_service.get_moneyflow(code, start_date, end_date)
     return ResponseModel(data=data)

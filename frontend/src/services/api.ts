@@ -152,7 +152,7 @@ export const authApi = {
 }
 
 export const stockApi = {
-  getBasic: (code: string) => api.get(`/stock/basic/${code}`),
+  getBasic: (code: string) => api.get(`/stock/${code}`),
   getKline: (
     code: string,
     params?: {
@@ -162,17 +162,47 @@ export const stockApi = {
       priorityLoad?: boolean
     }
   ) =>
-    api.get(`/kline/${code}`, {
+    api.get(`/stock/${code}/kline`, {
       params: {
         start_date: params?.startDate,
         end_date: params?.endDate,
         adjust: params?.adjust || 'qfq',
-        priority_load: params?.priorityLoad ?? true
+        priority_load: params?.priorityLoad ?? true,
+      },
+    }),
+  getWeeklyKline: (
+    code: string,
+    params?: {
+      startDate?: string
+      endDate?: string
+      adjust?: string
+    }
+  ) =>
+    api.get(`/stock/${code}/kline/weekly`, {
+      params: {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        adjust: params?.adjust || 'qfq'
+      }
+    }),
+  getMonthlyKline: (
+    code: string,
+    params?: {
+      startDate?: string
+      endDate?: string
+      adjust?: string
+    }
+  ) =>
+    api.get(`/stock/${code}/kline/monthly`, {
+      params: {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        adjust: params?.adjust || 'qfq'
       }
     }),
   getIndicators: (code: string, startDate?: string, endDate?: string) =>
-    api.get(`/indicators/${code}`, { params: { start_date: startDate, end_date: endDate } }),
-  getRealtime: (code: string) => api.get(`/realtime/${code}`),
+    api.get(`/stock/${code}/indicators`, { params: { start_date: startDate, end_date: endDate } }),
+  getRealtime: (code: string) => api.get(`/stock/${code}/realtime`),
   search: (keyword: string, limit: number = 20) =>
     api.get('/stock/search', { params: { keyword, limit } }),
 }
@@ -180,9 +210,9 @@ export const stockApi = {
 // 大盘指数 API
 export const marketIndexApi = {
   getKline: (indexCode: string = '000001', startDate?: string, endDate?: string) =>
-    api.get('/market/index', { params: { index_code: indexCode, start_date: startDate, end_date: endDate } }),
+    api.get('/stock/market/index', { params: { index_code: indexCode, start_date: startDate, end_date: endDate } }),
   getRealtime: (indexCodes: string = '000001,399001,399006') =>
-    api.get('/market/realtime', { params: { index_codes: indexCodes } }),
+    api.get('/stock/market/realtime', { params: { index_codes: indexCodes } }),
 }
 
 export const watchlistApi = {
@@ -196,7 +226,7 @@ export const watchlistApi = {
 export const sectorApi = {
   getList: (sectorType: string = 'industry') => api.get('/sector/list', { params: { sector_type: sectorType } }),
   getRanking: (sectorType: string = 'industry', sortBy: string = 'change_pct', limit: number = 20, tradeDate?: string) =>
-    api.get('/ranking', { params: { sector_type: sectorType, sort_by: sortBy, limit, ...(tradeDate && { trade_date: tradeDate }) } }),
+    api.get('/sector/ranking', { params: { sector_type: sectorType, sort_by: sortBy, limit, ...(tradeDate && { trade_date: tradeDate }) } }),
   getComponents: (sectorCode: string) => api.get(`/sector/components/${sectorCode}`),
   getLeaders: (sectorCode: string, topN: number = 5) =>
     api.get(`/sector/leaders/${sectorCode}`, { params: { top_n: topN } }),
@@ -215,11 +245,11 @@ export const chipApi = {
 
 export const screenerApi = {
   query: (conditions: any) => api.post('/screener/query', conditions),
-  getMarketStats: (tradeDate?: string) => api.get('/market-stats', { params: { trade_date: tradeDate } }),
-  getSectorStats: (sectorCode: string) => api.get(`/sector-stats/${sectorCode}`),
-  getPresetConditions: () => api.get('/preset-conditions'),
-  getEffectiveDate: () => api.get('/effective-date'),
-  getTradingDays: (limit: number = 20) => api.get('/trading-days', { params: { limit } }),
+  getMarketStats: (tradeDate?: string) => api.get('/screener/market-stats', { params: { trade_date: tradeDate } }),
+  getSectorStats: (sectorCode: string) => api.get(`/screener/sector-stats/${sectorCode}`),
+  getPresetConditions: () => api.get('/screener/preset-conditions'),
+  getEffectiveDate: () => api.get('/screener/effective-date'),
+  getTradingDays: (limit: number = 20) => api.get('/screener/trading-days', { params: { limit } }),
 }
 
 export const strategyApi = {
@@ -253,9 +283,36 @@ export const marketApi = {
 // 实时盘口 API
 export const realtimeApi = {
   getQuote: (code: string, src: string = 'sina') =>
-    api.get(`/realtime/realtime-quote/${code}`, { params: { src } }),
+    api.get(`/realtime/quote/${code}`, { params: { src } }),
   getTickData: (code: string, src: string = 'dc', limit: number = 100) =>
-    api.get(`/realtime/realtime-tick/${code}`, { params: { src, limit } }),
+    api.get(`/realtime/tick/${code}`, { params: { src, limit } }),
+}
+
+// 资金流向 API
+export const moneyflowApi = {
+  getMarketMoneyflow: (params?: {
+    trade_date?: string
+    start_date?: string
+    end_date?: string
+    days?: number
+  }) =>
+    api.get('/moneyflow/market', { params }),
+  getMarketMoneyflowSummary: () =>
+    api.get('/moneyflow/market/summary'),
+  getMarketMoneyflowTrend: (days: number = 10) =>
+    api.get('/moneyflow/market/trend', { params: { days } }),
+}
+
+// 数据源控制 API
+export const dataSourceApi = {
+  getStatus: () =>
+    api.get('/data-source/status'),
+  setMode: (mode: 'online' | 'offline' | 'mock') =>
+    api.post('/data-source/mode', null, { params: { mode } }),
+  toggleSource: (source: string, enabled: boolean) =>
+    api.post('/data-source/toggle', null, { params: { source, enabled } }),
+  reset: () =>
+    api.post('/data-source/reset'),
 }
 
 export default api

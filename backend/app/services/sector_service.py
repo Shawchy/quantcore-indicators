@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.adapters import data_source_manager
 from app.storage import cache_manager, SectorInfo, get_session
 from app.core.exceptions import DataNotFoundException
+from app.api.v1.endpoints.data_source_control import should_use_mock_data
 
 
 class SectorService:
@@ -14,6 +15,26 @@ class SectorService:
         cached = await cache_manager.get("sector", cache_key)
         if cached:
             return cached
+        
+        # 在模拟数据模式下，从数据库读取
+        if should_use_mock_data():
+            async with get_session() as session:
+                result = await session.execute(
+                    select(SectorInfo).where(SectorInfo.sector_type == sector_type)
+                )
+                sectors = result.scalars().all()
+                
+                result = [{
+                    "code": s.code,
+                    "name": s.name,
+                    "sector_type": s.sector_type,
+                    "change_pct": s.change_pct,
+                    "volume": s.volume,
+                    "amount": s.amount
+                } for s in sectors]
+                
+                await cache_manager.set("sector", cache_key, result)
+                return result
         
         sectors = await data_source_manager.get_sector_list(sector_type)
         

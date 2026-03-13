@@ -1418,3 +1418,73 @@ class AkShareAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"获取资金流向数据失败 {code}: {e}")
             return []
+
+    async def get_market_moneyflow_dc(
+        self,
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        获取大盘资金流向数据（使用东方财富 API）
+        
+        Args:
+            trade_date: 交易日期（YYYYMMDD格式）
+            start_date: 开始日期（YYYYMMDD格式）
+            end_date: 结束日期（YYYYMMDD格式）
+            
+        Returns:
+            大盘资金流向数据列表
+        """
+        try:
+            async with asyncio.timeout(15):
+                df = ak.stock_market_fund_flow()
+            
+            if df.empty:
+                return []
+            
+            result = []
+            for _, row in df.iterrows():
+                date_str = str(row["日期"]) if "日期" in row else ""
+                if date_str:
+                    date_str = date_str.replace("-", "").replace("/", "")[:8]
+                
+                if trade_date and date_str != trade_date:
+                    continue
+                if start_date and date_str < start_date:
+                    continue
+                if end_date and date_str > end_date:
+                    continue
+                
+                def safe_float(val):
+                    try:
+                        return float(val) if val is not None and str(val) not in ['', '-', 'None', 'nan'] else None
+                    except (ValueError, TypeError):
+                        return None
+                
+                result.append({
+                    "trade_date": date_str,
+                    "close_sh": safe_float(row.get("上证-收盘价")),
+                    "pct_change_sh": safe_float(row.get("上证-涨跌幅")),
+                    "close_sz": safe_float(row.get("深证-收盘价")),
+                    "pct_change_sz": safe_float(row.get("深证-涨跌幅")),
+                    "net_amount": safe_float(row.get("主力净流入-净额")),
+                    "net_amount_rate": safe_float(row.get("主力净流入-净占比")),
+                    "buy_elg_amount": safe_float(row.get("超大单净流入-净额")),
+                    "buy_elg_amount_rate": safe_float(row.get("超大单净流入-净占比")),
+                    "buy_lg_amount": safe_float(row.get("大单净流入-净额")),
+                    "buy_lg_amount_rate": safe_float(row.get("大单净流入-净占比")),
+                    "buy_md_amount": safe_float(row.get("中单净流入-净额")),
+                    "buy_md_amount_rate": safe_float(row.get("中单净流入-净占比")),
+                    "buy_sm_amount": safe_float(row.get("小单净流入-净额")),
+                    "buy_sm_amount_rate": safe_float(row.get("小单净流入-净占比")),
+                })
+            
+            logger.info(f"获取大盘资金流向数据成功：{len(result)}条")
+            return result
+        except asyncio.TimeoutError:
+            logger.error("获取大盘资金流向数据超时")
+            return []
+        except Exception as e:
+            logger.error(f"获取大盘资金流向数据失败：{e}")
+            return []

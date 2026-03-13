@@ -19,6 +19,7 @@ import {
   InputRightElement,
   IconButton,
   useColorModeValue,
+  useToast,
 } from '@chakra-ui/react'
 import { FiEye, FiEyeOff } from 'react-icons/fi'
 
@@ -29,6 +30,7 @@ const Login = () => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const location = useLocation()
+  const toast = useToast()
   const { isLoading, error, isAuthenticated } = useAppSelector((state) => state.auth)
 
   const from = location.state?.from?.pathname || '/'

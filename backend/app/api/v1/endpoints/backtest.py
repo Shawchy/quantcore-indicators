@@ -123,53 +123,83 @@ async def run_backtest_task(
 @router.post("/run", response_model=ResponseModel[dict])
 async def run_backtest(
     background_tasks: BackgroundTasks,
+    current_user: CurrentUser,
     backtest_config: dict = Body(...),
-    current_user: CurrentUser = Depends
 ):
-    backtest_id = f"bt_{uuid.uuid4().hex[:8]}"
-    
-    strategy_type = backtest_config.get("strategy_type", "ma_cross")
-    strategy_params = backtest_config.get("strategy_params", {
-        "short_period": 5,
-        "long_period": 20
-    })
-    code = backtest_config.get("code", "000001")
-    start_date = backtest_config.get("start_date", "")
-    end_date = backtest_config.get("end_date", "")
-    initial_capital = backtest_config.get("initial_capital", settings.BACKTEST_INITIAL_CAPITAL)
-    
-    async with get_session() as session:
-        record = BacktestRecord(
-            backtest_id=backtest_id,
-            strategy_id=backtest_config.get("strategy_id", ""),
-            start_date=start_date,
-            end_date=end_date,
-            initial_capital=initial_capital,
-            status="pending"
+    try:
+        # 参数验证
+        if not backtest_config:
+            return ResponseModel(success=False, code="INVALID_PARAMS", message="回测配置不能为空")
+        
+        strategy_type = backtest_config.get("strategy_type", "ma_cross")
+        strategy_params = backtest_config.get("strategy_params", {
+            "short_period": 5,
+            "long_period": 20
+        })
+        code = backtest_config.get("code", "000001")
+        start_date = backtest_config.get("start_date", "")
+        end_date = backtest_config.get("end_date", "")
+        initial_capital = backtest_config.get("initial_capital", settings.BACKTEST_INITIAL_CAPITAL)
+        
+        # 验证股票代码
+        if not code or not isinstance(code, str):
+            return ResponseModel(success=False, code="INVALID_PARAMS", message="股票代码无效")
+        
+        # 验证日期
+        if start_date and end_date:
+            try:
+                from datetime import datetime
+                start = datetime.strptime(start_date, "%Y-%m-%d")
+                end = datetime.strptime(end_date, "%Y-%m-%d")
+                if start >= end:
+                    return ResponseModel(success=False, code="INVALID_PARAMS", message="开始日期必须早于结束日期")
+            except ValueError:
+                return ResponseModel(success=False, code="INVALID_PARAMS", message="日期格式错误，应为 YYYY-MM-DD")
+        
+        # 验证初始资金
+        if initial_capital <= 0:
+            return ResponseModel(success=False, code="INVALID_PARAMS", message="初始资金必须大于 0")
+        
+        backtest_id = f"bt_{uuid.uuid4().hex[:8]}"
+        
+        async with get_session() as session:
+            record = BacktestRecord(
+                backtest_id=backtest_id,
+                strategy_id=backtest_config.get("strategy_id", ""),
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                status="pending"
+            )
+            session.add(record)
+            await session.commit()
+        
+        background_tasks.add_task(
+            run_backtest_task,
+            backtest_id,
+            code,
+            start_date,
+            end_date,
+            initial_capital,
+            strategy_type,
+            strategy_params
         )
-        session.add(record)
-        await session.commit()
+        
+        logger.info(f"创建回测任务：{backtest_id}, 股票：{code}, 策略：{strategy_type}")
+        
+        return ResponseModel(data={
+            "backtest_id": backtest_id,
+            "status": "pending",
+            "message": "回测任务已创建"
+        })
     
-    background_tasks.add_task(
-        run_backtest_task,
-        backtest_id,
-        code,
-        start_date,
-        end_date,
-        initial_capital,
-        strategy_type,
-        strategy_params
-    )
-    
-    return ResponseModel(data={
-        "backtest_id": backtest_id,
-        "status": "pending",
-        "message": "回测任务已创建"
-    })
+    except Exception as e:
+        logger.error(f"创建回测任务失败: {e}")
+        return ResponseModel(success=False, code="INTERNAL_ERROR", message=f"创建回测任务失败: {str(e)}")
 
 
 @router.get("/result/{backtest_id}", response_model=ResponseModel[dict])
-async def get_backtest_result(backtest_id: str, current_user: CurrentUser = Depends):
+async def get_backtest_result(backtest_id: str, current_user: CurrentUser):
     async with get_session() as session:
         result = await session.execute(
             select(BacktestRecord).where(BacktestRecord.backtest_id == backtest_id)
@@ -196,7 +226,7 @@ async def get_backtest_result(backtest_id: str, current_user: CurrentUser = Depe
 
 
 @router.get("/performance/{backtest_id}", response_model=ResponseModel[dict])
-async def get_backtest_performance(backtest_id: str, current_user: CurrentUser = Depends):
+async def get_backtest_performance(backtest_id: str, current_user: CurrentUser):
     async with get_session() as session:
         result = await session.execute(
             select(BacktestRecord).where(BacktestRecord.backtest_id == backtest_id)
@@ -218,9 +248,9 @@ async def get_backtest_performance(backtest_id: str, current_user: CurrentUser =
 @router.get("/trades/{backtest_id}", response_model=PagedResponseModel[dict])
 async def get_backtest_trades(
     backtest_id: str,
+    current_user: CurrentUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    current_user: CurrentUser = Depends
 ):
     async with get_session() as session:
         count_result = await session.execute(
@@ -259,7 +289,7 @@ async def get_backtest_trades(
 
 
 @router.get("/history", response_model=ResponseModel[list])
-async def get_backtest_history(limit: int = Query(20), current_user: CurrentUser = Depends):
+async def get_backtest_history(current_user: CurrentUser, limit: int = Query(20)):
     async with get_session() as session:
         result = await session.execute(
             select(BacktestRecord).order_by(BacktestRecord.created_at.desc()).limit(limit)

@@ -15,7 +15,30 @@ from app.core.backtest import strategy_optimizer
 
 router = APIRouter()
 
-optimization_tasks: Dict[str, Dict[str, Any]] = {}
+class OptimizationTaskManager:
+    """优化任务管理器（线程安全）"""
+    def __init__(self):
+        self._tasks: Dict[str, Dict[str, Any]] = {}
+        self._lock = asyncio.Lock()
+    
+    async def create_task(self, task_id: str, task_data: Dict[str, Any]):
+        async with self._lock:
+            self._tasks[task_id] = task_data
+    
+    async def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        async with self._lock:
+            return self._tasks.get(task_id)
+    
+    async def update_task(self, task_id: str, updates: Dict[str, Any]):
+        async with self._lock:
+            if task_id in self._tasks:
+                self._tasks[task_id].update(updates)
+    
+    async def delete_task(self, task_id: str):
+        async with self._lock:
+            self._tasks.pop(task_id, None)
+
+task_manager = OptimizationTaskManager()
 
 
 async def run_optimization_task(
@@ -30,8 +53,10 @@ async def run_optimization_task(
     initial_capital: float
 ):
     try:
-        optimization_tasks[task_id]["status"] = "running"
-        optimization_tasks[task_id]["progress"] = 0
+        await task_manager.update_task(task_id, {
+            "status": "running",
+            "progress": 0
+        })
         
         result = await strategy_optimizer.optimize_strategy(
             code=code,
@@ -44,24 +69,28 @@ async def run_optimization_task(
             method=method
         )
         
-        optimization_tasks[task_id]["status"] = "completed"
-        optimization_tasks[task_id]["result"] = {
-            "best_params": result.best_params,
-            "best_score": float(result.best_score),
-            "total_iterations": result.n_iterations,
-            "all_results": result.all_results[-10:] if len(result.all_results) > 10 else result.all_results
-        }
+        await task_manager.update_task(task_id, {
+            "status": "completed",
+            "result": {
+                "best_params": result.best_params,
+                "best_score": float(result.best_score),
+                "total_iterations": result.n_iterations,
+                "all_results": result.all_results[-10:] if len(result.all_results) > 10 else result.all_results
+            }
+        })
         
         logger.info(f"优化任务 {task_id} 完成，最佳得分: {result.best_score:.4f}")
         
     except Exception as e:
         logger.error(f"优化任务 {task_id} 失败: {e}")
-        optimization_tasks[task_id]["status"] = "failed"
-        optimization_tasks[task_id]["error"] = str(e)
+        await task_manager.update_task(task_id, {
+            "status": "failed",
+            "error": str(e)
+        })
 
 
 @router.get("/list", response_model=ResponseModel[list])
-async def get_strategy_list(current_user: CurrentUser = Depends):
+async def get_strategy_list(current_user: CurrentUser):
     async with get_session() as session:
         result = await session.execute(select(Strategy))
         strategies = result.scalars().all()
@@ -76,7 +105,7 @@ async def get_strategy_list(current_user: CurrentUser = Depends):
 
 
 @router.get("/{strategy_id}", response_model=ResponseModel[dict])
-async def get_strategy(strategy_id: str, current_user: CurrentUser = Depends):
+async def get_strategy(strategy_id: str, current_user: CurrentUser):
     async with get_session() as session:
         result = await session.execute(
             select(Strategy).where(Strategy.strategy_id == strategy_id)
@@ -97,7 +126,7 @@ async def get_strategy(strategy_id: str, current_user: CurrentUser = Depends):
 
 
 @router.post("/create", response_model=ResponseModel[dict])
-async def create_strategy(strategy_config: dict = Body(...), current_user: CurrentUser = Depends):
+async def create_strategy(current_user: CurrentUser, strategy_config: dict = Body(...)):
     strategy_id = f"strategy_{uuid.uuid4().hex[:8]}"
     
     async with get_session() as session:
@@ -118,7 +147,7 @@ async def create_strategy(strategy_config: dict = Body(...), current_user: Curre
 
 
 @router.put("/{strategy_id}", response_model=ResponseModel[dict])
-async def update_strategy(strategy_id: str, strategy_config: dict = Body(...), current_user: CurrentUser = Depends):
+async def update_strategy(strategy_id: str, current_user: CurrentUser, strategy_config: dict = Body(...)):
     async with get_session() as session:
         result = await session.execute(
             select(Strategy).where(Strategy.strategy_id == strategy_id)
@@ -144,7 +173,7 @@ async def update_strategy(strategy_id: str, strategy_config: dict = Body(...), c
 
 
 @router.delete("/{strategy_id}", response_model=ResponseModel[dict])
-async def delete_strategy(strategy_id: str, current_user: CurrentUser = Depends):
+async def delete_strategy(strategy_id: str, current_user: CurrentUser):
     async with get_session() as session:
         result = await session.execute(
             select(Strategy).where(Strategy.strategy_id == strategy_id)
@@ -167,18 +196,18 @@ async def delete_strategy(strategy_id: str, current_user: CurrentUser = Depends)
 async def optimize_strategy_params(
     strategy_id: str,
     background_tasks: BackgroundTasks,
+    current_user: CurrentUser,
     optimization_config: dict = Body(...),
-    current_user: CurrentUser = Depends
 ):
     task_id = f"opt_{uuid.uuid4().hex[:8]}"
     
-    optimization_tasks[task_id] = {
+    await task_manager.create_task(task_id, {
         "strategy_id": strategy_id,
         "status": "pending",
         "progress": 0,
         "method": optimization_config.get("method", "bayesian"),
         "created_at": datetime.now().isoformat()
-    }
+    })
     
     background_tasks.add_task(
         run_optimization_task,
@@ -202,16 +231,18 @@ async def optimize_strategy_params(
 
 
 @router.get("/optimize/status/{task_id}", response_model=ResponseModel[dict])
-async def get_optimization_status(task_id: str, current_user: CurrentUser = Depends):
-    if task_id not in optimization_tasks:
+async def get_optimization_status(task_id: str, current_user: CurrentUser):
+    task = await task_manager.get_task(task_id)
+    
+    if not task:
         return ResponseModel(success=False, code="NOT_FOUND", message="优化任务不存在")
     
-    task = optimization_tasks[task_id]
     return ResponseModel(data={
         "task_id": task_id,
         "strategy_id": task.get("strategy_id"),
         "status": task.get("status"),
         "progress": task.get("progress", 0),
         "result": task.get("result"),
-        "error": task.get("error")
+        "error": task.get("error"),
+        "created_at": task.get("created_at")
     })

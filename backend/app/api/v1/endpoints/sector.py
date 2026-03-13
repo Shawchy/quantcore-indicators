@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/list", response_model=ResponseModel[list])
 async def get_sector_list(
     sector_type: str = Query("industry", description="板块类型：industry 行业，concept 概念，area 地域"),
-    current_user: CurrentUser = Depends
+    current_user: OptionalCurrentUser = None
 ):
     data = await sector_service.get_sector_list(sector_type)
     return ResponseModel(data=data)

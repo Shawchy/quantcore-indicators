@@ -29,13 +29,12 @@ import {
   NumberIncrementStepper,
   NumberDecrementStepper,
   Flex,
-  Icon,
 } from '@chakra-ui/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { backtestApi, strategyApi } from '../services/api'
-import { FiPlay, FiActivity } from 'react-icons/fi'
+import { FiPlay } from 'react-icons/fi'
 
 const Backtest = () => {
   const queryClient = useQueryClient()

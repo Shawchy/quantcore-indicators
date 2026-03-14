@@ -11,8 +11,6 @@ import {
   Badge,
   Spinner,
   Flex,
-  Icon,
-  Progress,
   Table,
   Thead,
   Tbody,
@@ -22,11 +20,11 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import React, { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
-import { screenerApi, sectorApi, marketIndexApi, moneyflowApi } from '../services/api'
-import { INDEX_CODES, SECTOR_TYPES } from '../constants'
-import { getKlineOption, getPieOption } from '../utils/chartConfig'
+import { screenerApi, sectorApi, marketIndexApi } from '../services/api'
+import { INDEX_CODES } from '../constants'
+import { getKlineOption } from '../utils/chartConfig'
 import { StatCard } from '../components/StatCard'
 import { RankBadge } from '../components/RankBadge'
 import { SmartDateSelector } from '../components/SmartDateSelector'
@@ -98,7 +96,6 @@ const Dashboard = () => {
 
   // 行业分布饼图配置（使用 useMemo 优化）
   const industryPieOption = useMemo(() => {
-    const industryDist = marketStats?.data?.industry_distribution || {}
     const topIndustries = marketStats?.data?.top_industries || []
     const colors = ['#3b82f6', '#2563eb', '#10b981', '#f59e0b', '#6b7280', '#8b5cf6', '#ec4899', '#14b8a6']
     

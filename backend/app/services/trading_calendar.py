@@ -72,7 +72,7 @@ class TradingCalendarService:
         try:
             start_time = time.time()
             
-            # 优先使用 Baostock（更快）
+            # 优先使用 Baostock（更可靠）
             try:
                 import baostock as bs
                 bs.login()
@@ -80,9 +80,9 @@ class TradingCalendarService:
                 bs.logout()
                 
                 trading_days = []
-                for _, row in df.iterrows():
-                    if row['is_trading_day'] == '1':
-                        date = row['calendar_date'].replace('-', '')
+                for _, row in df.itertuples(index=False):
+                    if row.is_trading_day == '1':
+                        date = row.calendar_date.replace('-', '')
                         trading_days.append(date)
                 
                 if trading_days:
@@ -95,23 +95,48 @@ class TradingCalendarService:
             except Exception as bs_error:
                 logger.warning(f"Baostock 获取失败，切换到 AkShare: {bs_error}")
             
-            # 使用 AkShare
-            df = ak.tool_trade_date_hist_sina()
-            
-            # 转换为列表
-            trading_days = []
-            for _, row in df.iterrows():
-                date = str(row['trade_date']).replace('-', '')
-                trading_days.append(date)
-            
-            # 缓存
-            self._all_trading_days_cache = trading_days
-            self._all_trading_days_cache_time = time.time()
-            self._save_to_local_cache(trading_days)
-            
-            logger.debug(f"从 AkShare 获取交易日数据耗时：{time.time() - start_time:.2f}秒，共{len(trading_days)}天")
-            
-            return trading_days
+            # 使用 AkShare 的另一个 API（中国节假日列表）
+            try:
+                # 获取中国节假日数据
+                df = ak.holiday_info()
+                
+                # 生成所有日期，然后排除节假日和周末
+                trading_days = []
+                current = datetime(2000, 1, 1)  # 从 2000 年开始
+                end = datetime.now() + timedelta(days=365)  # 到明年今天
+                
+                # 获取节假日列表
+                holidays = set()
+                if not df.empty:
+                    for row in df.itertuples(index=False):
+                        try:
+                            holiday_date = str(getattr(row, 'date', '')).replace('-', '')
+                            if holiday_date and len(holiday_date) == 8:
+                                holidays.add(holiday_date)
+                        except:
+                            continue
+                
+                while current <= end:
+                    date_str = current.strftime("%Y%m%d")
+                    # 排除周末（5=周六，6=周日）
+                    if current.weekday() < 5:
+                        # 排除节假日
+                        if date_str not in holidays:
+                            trading_days.append(date_str)
+                    current += timedelta(days=1)
+                
+                if trading_days:
+                    # 缓存
+                    self._all_trading_days_cache = trading_days
+                    self._all_trading_days_cache_time = time.time()
+                    self._save_to_local_cache(trading_days)
+                    logger.debug(f"从 AkShare 节假日数据生成交易日，共{len(trading_days)}天")
+                    return trading_days
+                    
+            except Exception as ak_error:
+                logger.warning(f"AkShare 节假日数据获取失败：{ak_error}")
+                # 如果都失败，使用估算方法
+                return self._estimate_all_trading_days()
             
         except Exception as e:
             logger.error(f"获取交易日失败：{e}")
@@ -177,6 +202,22 @@ class TradingCalendarService:
                 trading_days.append(current.strftime("%Y%m%d"))
             current -= timedelta(days=1)
         
+        return trading_days
+    
+    def _estimate_all_trading_days(self) -> List[str]:
+        """估算所有交易日（完整列表）"""
+        trading_days = []
+        current = datetime(2000, 1, 1)  # 从 2000 年开始
+        end = datetime.now() + timedelta(days=365)  # 到明年今天
+        
+        while current <= end:
+            date_str = current.strftime("%Y%m%d")
+            # 排除周末（5=周六，6=周日）
+            if current.weekday() < 5:
+                trading_days.append(date_str)
+            current += timedelta(days=1)
+        
+        logger.info(f"估算交易日数据完成，共{len(trading_days)}天")
         return trading_days
     
     async def get_latest_trading_day(self) -> str:

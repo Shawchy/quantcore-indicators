@@ -5,7 +5,7 @@
 import React, { useMemo, memo } from 'react'
 import { 
   Box, Table, Thead, Tbody, Tr, Th, Td, TableContainer, 
-  Badge, Text, Flex, Tooltip, useColorModeValue 
+  Badge, Text, useColorModeValue 
 } from '@chakra-ui/react'
 import type { StockRankingItem } from '../types'
 

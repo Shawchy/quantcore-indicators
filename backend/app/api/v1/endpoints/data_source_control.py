@@ -16,14 +16,12 @@ router = APIRouter()
 class DataSourceMode(str, Enum):
     ONLINE = "online"
     OFFLINE = "offline"
-    MOCK = "mock"
 
 
 class DataSourceStatus:
     _instance = None
     _mode: DataSourceMode = DataSourceMode.ONLINE
     _disabled_sources: set = set()
-    _mock_data_enabled: bool = False
     
     def __new__(cls):
         if cls._instance is None:
@@ -37,7 +35,7 @@ class DataSourceStatus:
     @mode.setter
     def mode(self, value: DataSourceMode):
         self._mode = value
-        logger.info(f"数据源模式已切换为: {value.value}")
+        logger.info(f"数据源模式已切换为：{value.value}")
     
     @property
     def disabled_sources(self) -> set:
@@ -45,23 +43,14 @@ class DataSourceStatus:
     
     def disable_source(self, source: str):
         self._disabled_sources.add(source)
-        logger.info(f"已禁用数据源: {source}")
+        logger.info(f"已禁用数据源：{source}")
     
     def enable_source(self, source: str):
         self._disabled_sources.discard(source)
-        logger.info(f"已启用数据源: {source}")
+        logger.info(f"已启用数据源：{source}")
     
     def is_source_disabled(self, source: str) -> bool:
         return source in self._disabled_sources
-    
-    @property
-    def mock_data_enabled(self) -> bool:
-        return self._mock_data_enabled or self._mode == DataSourceMode.MOCK
-    
-    @mock_data_enabled.setter
-    def mock_data_enabled(self, value: bool):
-        self._mock_data_enabled = value
-        logger.info(f"模拟数据模式: {'开启' if value else '关闭'}")
 
 
 data_source_status = DataSourceStatus()
@@ -75,21 +64,19 @@ async def get_data_source_status(
     获取当前数据源状态
     
     返回：
-    - mode: 当前模式（online/offline/mock）
+    - mode: 当前模式（online/offline）
     - disabled_sources: 已禁用的数据源列表
-    - mock_data_enabled: 是否启用模拟数据
     """
     return ResponseModel(data={
         "mode": data_source_status.mode.value,
         "disabled_sources": list(data_source_status.disabled_sources),
-        "mock_data_enabled": data_source_status.mock_data_enabled,
         "available_modes": [m.value for m in DataSourceMode]
     })
 
 
 @router.post("/mode", response_model=ResponseModel[Dict[str, Any]])
 async def set_data_source_mode(
-    mode: str = Query(..., description="模式：online-在线, offline-离线, mock-模拟数据"),
+    mode: str = Query(..., description="模式：online-在线，offline-离线"),
     current_user: OptionalCurrentUser = None
 ):
     """
@@ -98,7 +85,6 @@ async def set_data_source_mode(
     模式说明：
     - online: 正常从外部数据源拉取数据
     - offline: 禁用所有外部数据源，只使用本地缓存/数据库
-    - mock: 使用模拟测试数据
     """
     try:
         new_mode = DataSourceMode(mode)
@@ -107,20 +93,16 @@ async def set_data_source_mode(
         if new_mode == DataSourceMode.OFFLINE:
             for source in ["tushare", "akshare", "baostock", "yfinance"]:
                 data_source_status.disable_source(source)
-        elif new_mode == DataSourceMode.MOCK:
-            data_source_status.mock_data_enabled = True
         else:
             data_source_status.disabled_sources.clear()
-            data_source_status.mock_data_enabled = False
         
         return ResponseModel(data={
             "mode": data_source_status.mode.value,
             "disabled_sources": list(data_source_status.disabled_sources),
-            "mock_data_enabled": data_source_status.mock_data_enabled,
-            "message": f"数据源模式已切换为: {new_mode.value}"
+            "message": f"数据源模式已切换为：{new_mode.value}"
         })
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"无效的模式: {mode}")
+        raise HTTPException(status_code=400, detail=f"无效的模式：{mode}")
 
 
 @router.post("/toggle", response_model=ResponseModel[Dict[str, Any]])
@@ -135,7 +117,7 @@ async def toggle_data_source(
     valid_sources = {"tushare", "akshare", "baostock", "yfinance"}
     
     if source not in valid_sources:
-        raise HTTPException(status_code=400, detail=f"无效的数据源: {source}")
+        raise HTTPException(status_code=400, detail=f"无效的数据源：{source}")
     
     if enabled:
         data_source_status.enable_source(source)
@@ -159,24 +141,17 @@ async def reset_data_source(
     """
     data_source_status.mode = DataSourceMode.ONLINE
     data_source_status.disabled_sources.clear()
-    data_source_status.mock_data_enabled = False
     
     return ResponseModel(data={
         "mode": data_source_status.mode.value,
         "disabled_sources": list(data_source_status.disabled_sources),
-        "mock_data_enabled": data_source_status.mock_data_enabled,
         "message": "数据源状态已重置为默认"
     })
 
 
 def is_data_fetch_disabled() -> bool:
     """检查是否禁用数据拉取"""
-    return data_source_status.mode in [DataSourceMode.OFFLINE, DataSourceMode.MOCK]
-
-
-def should_use_mock_data() -> bool:
-    """检查是否应该使用模拟数据"""
-    return data_source_status.mock_data_enabled
+    return data_source_status.mode == DataSourceMode.OFFLINE
 
 
 def is_source_available(source: str) -> bool:

@@ -1,7 +1,6 @@
 import {
   Card,
   CardBody,
-  CardHeader,
   Heading,
   VStack,
   HStack,
@@ -9,13 +8,6 @@ import {
   Badge,
   Button,
   Spinner,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -28,12 +20,13 @@ import {
   Input,
   Select,
   useDisclosure,
+  useToast,
   SimpleGrid,
   Flex,
 } from '@chakra-ui/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { FiPlus, FiEdit, FiTrash2, FiPlay, FiSettings } from 'react-icons/fi'
+import { FiPlus, FiEdit, FiTrash2, FiSettings } from 'react-icons/fi'
 import { strategyApi } from '../services/api'
 import { Strategy as StrategyType } from '../types'
 
@@ -45,6 +38,7 @@ interface StrategyFormData {
 
 const Strategy = () => {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { isOpen, onOpen, onClose } = useDisclosure()
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyType | null>(null)
   const [formData, setFormData] = useState<StrategyFormData>({
@@ -98,16 +92,15 @@ const Strategy = () => {
     }
   }
 
-  const handleSubmit = () => {
+  const submitStrategy = () => {
     try {
       const config = JSON.parse(formData.config)
-      const data = {
+      createMutation.mutate({
         name: formData.name,
         type: formData.type,
         config,
-      }
-      createMutation.mutate(data)
-    } catch (error) {
+      })
+    } catch {
       toast({
         title: '配置格式错误',
         description: '请输入有效的 JSON 格式',
@@ -289,8 +282,11 @@ const Strategy = () => {
             </VStack>
           </ModalBody>
           <ModalFooter>
-            <Button variant="ghost" onClick={onClose} color="light.textSecondary" ml={3}>
+            <Button variant="primary" onClick={submitStrategy} isLoading={createMutation.isPending}>
               {selectedStrategy ? '保存' : '创建'}
+            </Button>
+            <Button variant="ghost" onClick={onClose} color="light.textSecondary" ml={3}>
+              取消
             </Button>
           </ModalFooter>
         </ModalContent>

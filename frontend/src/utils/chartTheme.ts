@@ -1,4 +1,12 @@
-import { ThemeConfig } from 'echarts'
+/** ECharts 通用 option 形状（与 echarts 版本解耦） */
+type EChartsOptionShape = Record<string, unknown>
+
+// 动态导入 echarts 以避免 require 警告
+const getEchartsGraphic = () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const echarts = require('echarts')
+  return echarts.graphic
+}
 
 export const chartColors = {
   up: '#ef4444',
@@ -13,7 +21,7 @@ export const chartColors = {
   grid: '#f1f5f9',
 }
 
-export const getCommonOption = (): ThemeConfig['option'] => ({
+export const getCommonOption = (): EChartsOptionShape => ({
   backgroundColor: chartColors.background,
   tooltip: {
     trigger: 'axis',
@@ -120,7 +128,7 @@ export const getLineOption = (
       },
       areaStyle: fillArea
         ? {
-            color: new (require('echarts').graphic.LinearGradient)(0, 0, 0, 1, [
+            color: new (getEchartsGraphic().LinearGradient)(0, 0, 0, 1, [
               {
                 offset: 0,
                 color: color.replace(')', ', 0.3)').replace('rgb', 'rgba'),
@@ -142,7 +150,7 @@ export const getBarOption = (color = chartColors.primary) => ({
     {
       type: 'bar',
       itemStyle: {
-        color: new (require('echarts').graphic.LinearGradient)(0, 0, 0, 1, [
+        color: new (getEchartsGraphic().LinearGradient)(0, 0, 0, 1, [
           {
             offset: 0,
             color: color,

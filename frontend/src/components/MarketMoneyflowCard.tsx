@@ -1,4 +1,4 @@
-import { Card, CardBody, CardHeader, Heading, VStack, HStack, Text, Flex, Badge, Spinner, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, StatArrow } from '@chakra-ui/react'
+import { Card, CardBody, CardHeader, Heading, VStack, HStack, Text, Flex, Badge, Spinner, SimpleGrid } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { moneyflowApi } from '../services/api'
 import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi'
@@ -30,7 +30,9 @@ const MarketMoneyflowCard: React.FC<MarketMoneyflowCardProps> = ({ showTrend = f
     refetchInterval: 60000,
   })
 
-  const { data: trendData, isLoading: trendLoading } = useQuery({
+  // 趋势数据功能预留
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { data: _trendData, isLoading: _trendLoading } = useQuery({
     queryKey: ['marketMoneyflowTrend', days],
     queryFn: () => moneyflowApi.getMarketMoneyflowTrend(days),
     enabled: showTrend,

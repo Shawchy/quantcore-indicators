@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import asyncio
 import pandas as pd
 from loguru import logger
 from sqlalchemy import select
@@ -8,7 +9,7 @@ from app.adapters import data_source_manager, KLineData
 from app.services.data_processor import DataProcessor
 from app.services.indicators import IndicatorCalculator
 from app.storage import (
-    StockInfo, KLine, TechnicalIndicatorDB,
+    StockInfo, KLine, TechnicalIndicatorDB, RealtimeQuote,
     get_session, cache_manager, parquet_store
 )
 from app.core.exceptions import DataNotFoundException, DataSourceException
@@ -243,19 +244,127 @@ class StockService:
         return result
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
+        """
+        获取实时行情（三级缓存优化）
+        
+        L1: 内存缓存 (60 秒)
+        L2: 数据库缓存 (永久，直到更新)
+        L3: 数据源实时拉取
+        """
         cache_key = f"realtime_{code}"
+        
+        # L1: 检查内存缓存
         cached = await cache_manager.get("realtime", cache_key)
         if cached:
             return cached
         
-        quote = await data_source_manager.get_realtime_quote(code)
+        # L2: 检查数据库缓存
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(RealtimeQuote).where(RealtimeQuote.code == code)
+                )
+                db_quote = result.scalar_one_or_none()
+                
+                if db_quote:
+                    # 转换为字典格式
+                    quote = {
+                        "code": db_quote.code,
+                        "name": db_quote.name,
+                        "price": db_quote.price,
+                        "change": db_quote.change,
+                        "change_pct": db_quote.change_pct,
+                        "volume": db_quote.volume,
+                        "amount": db_quote.amount,
+                        "high": db_quote.high,
+                        "low": db_quote.low,
+                        "open": db_quote.open,
+                        "prev_close": db_quote.prev_close,
+                        "turnover_rate": db_quote.turnover_rate,
+                        "quote_time": db_quote.quote_time,
+                    }
+                    
+                    # 更新内存缓存
+                    await cache_manager.set("realtime", cache_key, quote, ttl=60)
+                    
+                    logger.debug(f"从数据库获取实时行情：{code}")
+                    return quote
+        except Exception as e:
+            logger.warning(f"从数据库读取实时行情失败 {code}: {e}")
         
-        if not quote:
-            raise DataNotFoundException(f"股票 {code} 实时行情不存在")
-        
-        await cache_manager.set("realtime", cache_key, quote, ttl=60)
-        
-        return quote
+        # L3: 从数据源获取
+        try:
+            quote = await data_source_manager.get_realtime_quote(code)
+            
+            if not quote:
+                raise DataNotFoundException(f"股票 {code} 实时行情不存在")
+            
+            # 保存到内存缓存
+            await cache_manager.set("realtime", cache_key, quote, ttl=60)
+            
+            # 异步保存到数据库（不阻塞返回）
+            asyncio.create_task(self._save_realtime_quote_to_db(code, quote))
+            
+            logger.debug(f"从数据源获取实时行情：{code}")
+            return quote
+            
+        except Exception as e:
+            logger.error(f"获取实时行情失败 {code}: {e}")
+            raise DataNotFoundException(f"股票 {code} 实时行情获取失败：{e}")
+    
+    async def _save_realtime_quote_to_db(self, code: str, quote: Dict[str, Any]):
+        """保存实时行情到数据库（异步后台任务）"""
+        try:
+            async with get_session() as session:
+                # 检查是否已存在
+                result = await session.execute(
+                    select(RealtimeQuote).where(RealtimeQuote.code == code)
+                )
+                db_quote = result.scalar_one_or_none()
+                
+                if db_quote:
+                    # 更新现有记录
+                    db_quote.name = quote.get("name", db_quote.name)
+                    db_quote.price = quote.get("price", 0)
+                    db_quote.change = quote.get("change", 0)
+                    db_quote.change_pct = quote.get("change_pct", 0)
+                    db_quote.volume = quote.get("volume", 0)
+                    db_quote.amount = quote.get("amount", 0)
+                    db_quote.high = quote.get("high", 0)
+                    db_quote.low = quote.get("low", 0)
+                    db_quote.open = quote.get("open", 0)
+                    db_quote.prev_close = quote.get("prev_close", 0)
+                    db_quote.turnover_rate = quote.get("turnover_rate", 0)
+                    db_quote.quote_time = quote.get("quote_time", "")
+                    db_quote.updated_at = datetime.now()
+                else:
+                    # 创建新记录
+                    new_quote = RealtimeQuote(
+                        code=code,
+                        name=quote.get("name", ""),
+                        price=quote.get("price", 0),
+                        change=quote.get("change", 0),
+                        change_pct=quote.get("change_pct", 0),
+                        volume=quote.get("volume", 0),
+                        amount=quote.get("amount", 0),
+                        high=quote.get("high", 0),
+                        low=quote.get("low", 0),
+                        open=quote.get("open", 0),
+                        prev_close=quote.get("prev_close", 0),
+                        turnover_rate=quote.get("turnover_rate", 0),
+                        quote_time=quote.get("quote_time", ""),
+                    )
+                    session.add(new_quote)
+                
+                await session.commit()
+                logger.debug(f"实时行情已保存到数据库：{code}")
+                
+        except Exception as e:
+            logger.error(f"保存实时行情到数据库失败 {code}: {e}")
+            try:
+                await session.rollback()
+            except:
+                pass
     
     async def search_stocks(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
         stocks = await data_source_manager.get_stock_list()

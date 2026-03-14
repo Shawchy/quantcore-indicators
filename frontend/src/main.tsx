@@ -21,16 +21,23 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 分钟
+      gcTime: 10 * 60 * 1000, // 10 分钟
+      timeout: 15000, // 15 秒超时
     },
   },
 })
 
 // 全局错误处理
 window.addEventListener('error', (event) => {
+  // 生产环境可以发送到错误监控服务
+  // eslint-disable-next-line no-console
   console.error('Global error:', event.error)
 })
 
 window.addEventListener('unhandledrejection', (event) => {
+  // 生产环境可以发送到错误监控服务
+  // eslint-disable-next-line no-console
   console.error('Unhandled promise rejection:', event.reason)
 })
 

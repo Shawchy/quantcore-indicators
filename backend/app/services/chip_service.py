@@ -7,7 +7,6 @@ from sqlalchemy import select
 from app.adapters import data_source_manager, ChipData
 from app.storage import cache_manager, ChipData as ChipDataDB, get_session
 from app.core.exceptions import DataNotFoundException
-from app.api.v1.endpoints.data_source_control import should_use_mock_data
 
 
 class ChipService:
@@ -18,12 +17,15 @@ class ChipService:
         end_date: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         cache_key = f"chip_data_{code}_{start_date}_{end_date}"
+        
+        # 1. 检查内存缓存
         cached = await cache_manager.get("chip", cache_key)
         if cached:
+            logger.debug(f"从内存缓存获取筹码数据：{code}")
             return cached
         
-        # 在模拟数据模式下，从数据库读取
-        if should_use_mock_data():
+        # 2. 优先从数据库读取（避免每次都从数据源拉取）
+        try:
             async with get_session() as session:
                 query = select(ChipDataDB).where(ChipDataDB.code == code)
                 if start_date:
@@ -34,25 +36,37 @@ class ChipService:
                 result = await session.execute(query)
                 chip_data = result.scalars().all()
                 
-                if not chip_data:
-                    raise DataNotFoundException(f"股票 {code} 筹码数据不存在")
-                
-                result = [{
-                    "code": c.code,
-                    "date": c.date,
-                    "shareholder_count": c.shareholder_count,
-                    "avg_shares_per_holder": c.avg_shares_per_holder,
-                    "control_degree": c.control_degree,
-                    "concentration": c.concentration
-                } for c in chip_data]
-                
-                await cache_manager.set("chip", cache_key, result)
-                return result
+                if chip_data:
+                    logger.debug(f"从数据库获取筹码数据：{code} ({len(chip_data)}条)")
+                    result = [{
+                        "code": c.code,
+                        "date": c.date,
+                        "shareholder_count": c.shareholder_count,
+                        "avg_shares_per_holder": c.avg_shares_per_holder,
+                        "control_degree": c.control_degree,
+                        "concentration": c.concentration
+                    } for c in chip_data]
+                    
+                    await cache_manager.set("chip", cache_key, result)
+                    return result
+        except Exception as e:
+            logger.warning(f"从数据库读取筹码数据失败：{code}, {e}")
         
+        # 3. 数据库没有数据时，从数据源获取
+        logger.info(f"数据库无筹码数据，从数据源获取：{code}")
+        
+        # 从数据源获取数据
         chip_data = await data_source_manager.get_chip_data(code, start_date, end_date)
         
         if not chip_data:
             raise DataNotFoundException(f"股票 {code} 筹码数据不存在")
+        
+        # 保存到数据库
+        try:
+            await self._save_chip_data(code, chip_data)
+            logger.info(f"保存 {len(chip_data)} 条筹码数据到数据库：{code}")
+        except Exception as e:
+            logger.warning(f"保存筹码数据失败：{e}")
         
         result = [{
             "code": c.code,
@@ -65,6 +79,54 @@ class ChipService:
         await cache_manager.set("chip", cache_key, result)
         
         return result
+    
+    async def _save_chip_data(self, code: str, chip_data: List[ChipData]):
+        """批量保存筹码数据到数据库"""
+        logger.debug(f"开始保存筹码数据：{code}, 共{len(chip_data)}条")
+        
+        if not chip_data:
+            logger.warning(f"没有数据需要保存：{code}")
+            return
+        
+        try:
+            async with get_session() as session:
+                # 1. 查询已存在的记录
+                dates = [c.date for c in chip_data]
+                logger.debug(f"查询已存在记录：{code}, 日期范围：{min(dates)}-{max(dates)}")
+                
+                query = select(ChipDataDB.date).where(
+                    ChipDataDB.code == code,
+                    ChipDataDB.date.in_(dates)
+                )
+                result = await session.execute(query)
+                existing_dates = set(result.scalars().all())
+                
+                logger.debug(f"已存在 {len(existing_dates)} 条记录，需要插入 {len(chip_data) - len(existing_dates)} 条")
+                
+                # 2. 过滤出需要插入的记录
+                to_insert = []
+                for c in chip_data:
+                    if c.date not in existing_dates:
+                        db_chip = ChipDataDB(
+                            code=code,
+                            date=c.date,
+                            shareholder_count=c.shareholder_count,
+                            avg_shares_per_holder=c.avg_shares_per_holder
+                        )
+                        to_insert.append(db_chip)
+                
+                # 3. 批量插入
+                if to_insert:
+                    logger.debug(f"批量插入 {len(to_insert)} 条记录：{code}")
+                    session.add_all(to_insert)
+                    await session.commit()
+                    logger.info(f"批量保存 {len(to_insert)} 条筹码数据：{code}")
+                else:
+                    logger.debug(f"所有数据已存在，无需插入：{code}")
+                    
+        except Exception as e:
+            logger.error(f"保存筹码数据到数据库失败：{code}, 错误：{str(e)}", exc_info=True)
+            raise
     
     async def calculate_control_degree(
         self,

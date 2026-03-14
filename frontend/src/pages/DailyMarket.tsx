@@ -8,7 +8,6 @@ import {
   Flex,
   Text,
   Input,
-  Button,
   InputGroup,
   InputLeftElement,
   VStack,
@@ -16,7 +15,6 @@ import {
   Card,
   CardBody,
   Badge,
-  HStack,
 } from '@chakra-ui/react'
 import { SearchIcon } from '@chakra-ui/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -166,6 +164,8 @@ const DailyMarketPage: React.FC = () => {
               code={currentCode}
               name={basicData?.data?.name}
               onExport={(exportedData) => {
+                // 导出数据功能待实现
+                // eslint-disable-next-line no-console
                 console.log('导出数据:', exportedData)
               }}
             />

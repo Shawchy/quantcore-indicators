@@ -4,8 +4,8 @@
  */
 import React from 'react'
 import { 
-  Box, Flex, Text, Table, Thead, Tbody, Tr, Th, Td, 
-  TableContainer, Badge, Stat, StatLabel, StatNumber, StatHelpText,
+  Box, Flex, Text, Table, Tbody, Tr, Td, 
+  TableContainer, Stat, StatNumber, StatHelpText,
   Spinner, Alert, AlertIcon
 } from '@chakra-ui/react'
 import type { RealtimeQuoteData } from '../types'
@@ -33,7 +33,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
   }
 
   // 渲染五档盘口行
-  const renderBidAskRow = (item: any, index: number, type: 'bid' | 'ask') => {
+  const renderBidAskRow = (item: { price: number; volume: number } | null, index: number, type: 'bid' | 'ask') => {
     const color = type === 'bid' ? 'red.500' : 'green.500'
     const bgColor = type === 'bid' ? 'red.50' : 'green.50'
     

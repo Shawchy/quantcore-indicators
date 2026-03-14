@@ -81,15 +81,15 @@ class YFinanceAdapter(BaseDataAdapter):
             )
             
             klines = []
-            for index, row in df.iterrows():
+            for idx, row in enumerate(df.itertuples(index=False)):
                 klines.append(KLineData(
                     code=code,
-                    date=index.strftime("%Y-%m-%d"),
-                    open=float(row["Open"]),
-                    high=float(row["High"]),
-                    low=float(row["Low"]),
-                    close=float(row["Close"]),
-                    volume=float(row["Volume"]),
+                    date=df.index[idx].strftime("%Y-%m-%d"),
+                    open=float(row.Open),
+                    high=float(row.High),
+                    low=float(row.Low),
+                    close=float(row.Close),
+                    volume=float(row.Volume),
                     amount=None
                 ))
             return klines

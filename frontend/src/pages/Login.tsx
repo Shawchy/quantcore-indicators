@@ -58,12 +58,12 @@ const Login = () => {
     }
 
     try {
-      const result = await dispatch(login({ username, password })).unwrap()
+      await dispatch(login({ username, password })).unwrap()
       // 登录成功后获取用户信息
       await dispatch(getCurrentUser()).unwrap()
       navigate(from, { replace: true })
-    } catch (err) {
-      // 错误已在 authSlice 中处理
+    } catch {
+      // 错误已在 authSlice 中处理，无需处理异常
     }
   }
 

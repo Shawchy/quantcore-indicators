@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -31,6 +32,50 @@ def setup_logging():
     )
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动事件
+    setup_logging()
+    logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 启动中...")
+    
+    from app.storage.sqlite import init_database
+    await init_database()
+    logger.info("数据库初始化完成")
+    
+    # 同步初始化数据源，确保 API 请求前数据源已就绪
+    from app.adapters import data_source_manager
+    try:
+        await data_source_manager.initialize()
+        logger.info(f"数据源初始化完成，默认数据源：{data_source_manager._default_source}")
+    except Exception as e:
+        logger.error(f"数据源初始化失败：{e}")
+    
+    # 启动数据加载器（按需加载，不自动预加载）
+    from app.services.data_loader import data_loader
+    await data_loader.start()
+    logger.info("数据加载器已启动（按需加载模式）")
+    
+    # 启动定期性能报告任务
+    import asyncio
+    from app.middleware.performance import periodic_performance_report
+    asyncio.create_task(periodic_performance_report())
+    logger.info("性能监控已启动")
+    
+    Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)
+    logger.info("数据目录初始化完成")
+    
+    yield  # 应用运行期间
+    
+    # 关闭事件
+    logger.info(f"{settings.APP_NAME} 关闭中...")
+    
+    # 停止数据加载器
+    await data_loader.stop()
+    logger.info("数据加载器已停止")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
@@ -38,7 +83,8 @@ def create_app() -> FastAPI:
         description="个人股票量化分析系统 - 支持技术分析、板块分析、筹码选股、策略回测",
         docs_url="/docs",
         redoc_url="/redoc",
-        openapi_url="/openapi.json"
+        openapi_url="/openapi.json",
+        lifespan=lifespan  # 使用新的 lifespan 方式
     )
     
     # 添加性能监控中间件
@@ -78,47 +124,6 @@ def create_app() -> FastAPI:
             }
         )
     
-    @app.on_event("startup")
-    async def startup_event():
-        setup_logging()
-        logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 启动中...")
-        
-        from app.storage.sqlite import init_database
-        await init_database()
-        logger.info("数据库初始化完成")
-        
-        # 同步初始化数据源，确保 API 请求前数据源已就绪
-        from app.adapters import data_source_manager
-        try:
-            await data_source_manager.initialize()
-            logger.info(f"数据源初始化完成，默认数据源：{data_source_manager._default_source}")
-        except Exception as e:
-            logger.error(f"数据源初始化失败：{e}")
-        
-        # 启动数据加载器（按需加载，不自动预加载）
-        from app.services.data_loader import data_loader
-        await data_loader.start()
-        logger.info("数据加载器已启动（按需加载模式）")
-        
-        # 启动定期性能报告任务
-        import asyncio
-        from app.middleware.performance import periodic_performance_report
-        asyncio.create_task(periodic_performance_report())
-        logger.info("性能监控已启动")
-        
-        Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
-        Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)
-        logger.info("数据目录初始化完成")
-    
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        logger.info(f"{settings.APP_NAME} 关闭中...")
-        
-        # 停止数据加载器
-        from app.services.data_loader import data_loader
-        await data_loader.stop()
-        logger.info("数据加载器已停止")
-    
     @app.get("/health")
     async def health_check():
         return {
@@ -127,26 +132,7 @@ def create_app() -> FastAPI:
             "version": settings.APP_VERSION
         }
     
-    @app.get("/metrics/performance")
-    async def performance_metrics():
-        """获取性能指标"""
-        from app.middleware.performance import get_performance_stats
-        stats = await get_performance_stats()
-        return {
-            "success": True,
-            "data": stats
-        }
-    
     return app
 
 
 app = create_app()
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.DEBUG
-    )

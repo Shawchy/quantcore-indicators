@@ -127,9 +127,9 @@ class AkShareAdapter(BaseDataAdapter):
             # 从数据源获取
             df = ak.stock_zh_a_spot_em()
             stocks = []
-            for _, row in df.iterrows():
-                code = str(row["代码"])
-                name = str(row["名称"])
+            for row in df.itertuples(index=False):
+                code = str(row.代码)
+                name = str(row.名称)
                 market_tag = "SH" if code.startswith("6") else "SZ"
                 stocks.append(StockBasicInfo(
                     code=code,
@@ -224,16 +224,16 @@ class AkShareAdapter(BaseDataAdapter):
                 )
             
             klines = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 klines.append(KLineData(
                     code=code,
-                    date=self.format_date(str(row["日期"])),
-                    open=float(row["开盘"]),
-                    high=float(row["最高"]),
-                    low=float(row["最低"]),
-                    close=float(row["收盘"]),
-                    volume=float(row["成交量"]),
-                    amount=float(row["成交额"]) if "成交额" in row else None,
+                    date=self.format_date(str(row.日期)),
+                    open=float(row.开盘),
+                    high=float(row.最高),
+                    low=float(row.最低),
+                    close=float(row.收盘),
+                    volume=float(row.成交量),
+                    amount=float(row.成交额) if hasattr(row, '成交额') else None,
                     turnover_rate=float(row["换手率"]) if "换手率" in row else None
                 ))
             
@@ -301,16 +301,16 @@ class AkShareAdapter(BaseDataAdapter):
                 )
             
             klines = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 klines.append(KLineData(
                     code=index_code,
-                    date=self.format_date(str(row["日期"])),
-                    open=float(row["开盘"]),
-                    high=float(row["最高"]),
-                    low=float(row["最低"]),
-                    close=float(row["收盘"]),
-                    volume=float(row["成交量"]),
-                    amount=float(row["成交额"]) if "成交额" in row else None,
+                    date=self.format_date(str(row.日期)),
+                    open=float(row.开盘),
+                    high=float(row.最高),
+                    low=float(row.最低),
+                    close=float(row.收盘),
+                    volume=float(row.成交量),
+                    amount=float(row.成交额) if hasattr(row, '成交额') else None,
                     turnover_rate=0.0  # 指数无换手率
                 ))
             
@@ -375,13 +375,13 @@ class AkShareAdapter(BaseDataAdapter):
                 df = ak.stock_board_industry_name_em()
             
             sectors = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 sectors.append(SectorInfo(
-                    code=str(row["板块名称"]),
-                    name=str(row["板块名称"]),
+                    code=str(row.板块名称),
+                    name=str(row.板块名称),
                     sector_type=sector_type,
-                    change_pct=float(row["涨跌幅"]) if "涨跌幅" in row else None,
-                    volume=float(row["总市值"]) if "总市值" in row else None
+                    change_pct=float(row.涨跌幅) if hasattr(row, '涨跌幅') else None,
+                    volume=float(row.总市值) if hasattr(row, '总市值') else None
                 ))
             return sectors
         except Exception as e:
@@ -413,12 +413,12 @@ class AkShareAdapter(BaseDataAdapter):
             df = df.head(limit)
             
             sectors = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 sectors.append(SectorInfo(
-                    code=str(row["板块名称"]),
-                    name=str(row["板块名称"]),
+                    code=str(row.板块名称),
+                    name=str(row.板块名称),
                     sector_type=sector_type,
-                    change_pct=float(row["涨跌幅"]) if "涨跌幅" in row else None
+                    change_pct=float(row.涨跌幅) if hasattr(row, '涨跌幅') else None
                 ))
             return sectors
         except Exception as e:
@@ -436,25 +436,55 @@ class AkShareAdapter(BaseDataAdapter):
             if df.empty:
                 return []
             
+            # 清理列名（去除空格）
+            df.columns = df.columns.str.strip()
+            logger.debug(f"获取筹码数据 {code}，列名：{df.columns.tolist()}")
+            
             # 动态检测字段名
             date_column = None
-            # 优先匹配带"-本次"的字段，其次匹配不带后缀的字段
-            for col in ['股东户数统计截止日 - 本次', '股东户数统计截止日', '统计截止日期 - 本次', 
-                       '统计截止日期', '截止日期 - 本次', '截止日期', '日期']:
+            # 扩展字段匹配列表，包含更多可能的字段名
+            date_candidates = [
+                '股东户数统计截止日 - 本次',
+                '股东户数统计截止日',
+                '股东户数截止日期 - 本次',
+                '股东户数截止日期',
+                '统计截止日期 - 本次',
+                '统计截止日期',
+                '截止日期 - 本次',
+                '截止日期',
+                '日期',
+                '报告期',
+                '公告日期'
+            ]
+            
+            for col in date_candidates:
                 if col in df.columns:
                     date_column = col
+                    logger.debug(f"使用日期字段：{col}")
                     break
+            
+            if not date_column:
+                # 尝试模糊匹配包含"日期"或"截止"的字段
+                for col in df.columns:
+                    if '日期' in col or '截止' in col:
+                        date_column = col
+                        logger.debug(f"模糊匹配日期字段：{col}")
+                        break
             
             if not date_column:
                 logger.warning(f"未找到日期字段，可用字段：{df.columns.tolist()}")
                 return []
             
             chip_data = []
-            for _, row in df.iterrows():
-                date = str(row[date_column])
-                # 清理日期格式
+            for row in df.itertuples(index=False):
+                date = str(getattr(row, date_column, ''))
+                # 清理日期格式（处理 "2026-03-14" 或 "2026-03-14 00:00:00"）
                 if ' ' in date:
                     date = date.split(' ')[0]
+                # 转换为 YYYYMMDD 格式
+                if '-' in date:
+                    date = date.replace('-', '')
+                
                 if start_date and date < start_date:
                     continue
                 if end_date and date > end_date:
@@ -462,7 +492,16 @@ class AkShareAdapter(BaseDataAdapter):
                 
                 # 动态检测股东户数字段
                 count_column = None
-                for col in ['股东户数 - 本次', '股东户数', '股东人数 - 本次', '股东人数']:
+                count_candidates = [
+                    '股东户数 - 本次',
+                    '股东户数',
+                    '股东人数 - 本次',
+                    '股东人数',
+                    '户数',
+                    '股东总人数'
+                ]
+                
+                for col in count_candidates:
                     if col in df.columns:
                         count_column = col
                         break
@@ -470,16 +509,24 @@ class AkShareAdapter(BaseDataAdapter):
                 if not count_column:
                     # 尝试使用第一列数值型字段
                     for col in df.columns:
-                        if '户数' in col or '人数' in col:
-                            count_column = col
-                            break
+                        if '户数' in col or '人数' in col or '股东' in col:
+                            try:
+                                # 验证是否为数值型
+                                val = getattr(row, col, None)
+                                if val not in [None, '', '-']:
+                                    float(val)
+                                    count_column = col
+                                    break
+                            except (ValueError, TypeError):
+                                continue
                 
                 if not count_column:
+                    logger.warning(f"未找到股东户数字段，股票：{code}")
                     continue
                 
                 # 获取户均持股数量
                 avg_shares = None
-                for col in ['户均持股数量', '户均持股市值']:
+                for col in ['户均持股数量', '户均持股市值', '户均持股']:
                     if col in df.columns:
                         try:
                             avg_shares = float(row[col])
@@ -487,12 +534,25 @@ class AkShareAdapter(BaseDataAdapter):
                         except (ValueError, TypeError):
                             continue
                 
+                # 获取股东户数
+                try:
+                    shareholder_count = float(row[count_column])
+                    if shareholder_count in [None, '', '-']:
+                        shareholder_count = None
+                except (ValueError, TypeError):
+                    shareholder_count = None
+                
+                if shareholder_count is None:
+                    continue
+                
                 chip_data.append(ChipData(
                     code=code,
                     date=date,
-                    shareholder_count=float(row[count_column]) if row[count_column] not in [None, '', '-'] else None,
+                    shareholder_count=shareholder_count,
                     avg_shares_per_holder=avg_shares
                 ))
+            
+            logger.info(f"获取筹码数据成功 {code}: {len(chip_data)} 条")
             return chip_data
         except Exception as e:
             logger.error(f"获取筹码数据失败 {code}: {e}")
@@ -545,19 +605,20 @@ class AkShareAdapter(BaseDataAdapter):
             
             # 转换为字典格式
             result = {}
-            for _, row in df.iterrows():
-                indicator_name = row["单日情况"]
+            for row in df.itertuples(index=False):
+                indicator_name = getattr(row, '单日情况', '')
                 result[indicator_name] = {}
                 # 动态获取所有列（除了"单日情况"列）
-                for col in df.columns:
-                    if col != "单日情况":
-                        value = row[col]
-                        # 处理 NaN 值
-                        import math
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                            result[indicator_name][col] = None
-                        else:
-                            result[indicator_name][col] = float(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        if col != "单日情况":
+                            value = getattr(row, col)
+                            # 处理 NaN 值
+                            import math
+                            if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                                result[indicator_name][col] = None
+                            else:
+                                result[indicator_name][col] = float(value)
             
             return result
         except Exception as e:
@@ -610,20 +671,21 @@ class AkShareAdapter(BaseDataAdapter):
             
             # 转换为字典列表
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 stock_data = {}
-                for col in df.columns:
-                    value = row[col]
-                    # 处理 NaN 值
-                    import math
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                        stock_data[col] = None
-                    else:
-                        # 根据字段类型转换
-                        if col in ['序号']:
-                            stock_data[col] = int(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        value = getattr(row, col)
+                        # 处理 NaN 值
+                        import math
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                            stock_data[col] = None
                         else:
-                            stock_data[col] = float(value)
+                            # 根据字段类型转换
+                            if col in ['序号']:
+                                stock_data[col] = int(value)
+                            else:
+                                stock_data[col] = float(value)
                 
                 result.append(stock_data)
             
@@ -681,20 +743,21 @@ class AkShareAdapter(BaseDataAdapter):
             
             # 转换为字典列表
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 stock_data = {}
-                for col in df.columns:
-                    value = row[col]
-                    # 处理 NaN 值
-                    import math
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                        stock_data[col] = None
-                    else:
-                        # 根据字段类型转换
-                        if col in ['序号']:
-                            stock_data[col] = int(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        value = getattr(row, col)
+                        # 处理 NaN 值
+                        import math
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                            stock_data[col] = None
                         else:
-                            stock_data[col] = float(value)
+                            # 根据字段类型转换
+                            if col in ['序号']:
+                                stock_data[col] = int(value)
+                            else:
+                                stock_data[col] = float(value)
                 
                 result.append(stock_data)
             
@@ -752,20 +815,21 @@ class AkShareAdapter(BaseDataAdapter):
             
             # 转换为字典列表
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 stock_data = {}
-                for col in df.columns:
-                    value = row[col]
-                    # 处理 NaN 值
-                    import math
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                        stock_data[col] = None
-                    else:
-                        # 根据字段类型转换
-                        if col in ['序号']:
-                            stock_data[col] = int(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        value = getattr(row, col)
+                        # 处理 NaN 值
+                        import math
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                            stock_data[col] = None
                         else:
-                            stock_data[col] = float(value)
+                            # 根据字段类型转换
+                            if col in ['序号']:
+                                stock_data[col] = int(value)
+                            else:
+                                stock_data[col] = float(value)
                 
                 result.append(stock_data)
             
@@ -844,9 +908,9 @@ class AkShareAdapter(BaseDataAdapter):
             
             # 转换为字典格式
             result = {}
-            for _, row in df.iterrows():
-                item = row["item"]
-                value = row["value"]
+            for row in df.itertuples(index=False):
+                item = getattr(row, 'item', '')
+                value = getattr(row, 'value', '')
                 # 尝试转换为数值类型
                 if isinstance(value, str):
                     try:
@@ -896,18 +960,19 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 tick_data = {}
-                for col in df.columns:
-                    value = row[col]
-                    import math
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                        tick_data[col] = None
-                    else:
-                        if col in ['手数']:
-                            tick_data[col] = int(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        value = getattr(row, col)
+                        import math
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                            tick_data[col] = None
                         else:
-                            tick_data[col] = float(value) if col != '时间' else str(value)
+                            if col in ['手数']:
+                                tick_data[col] = int(value)
+                            else:
+                                tick_data[col] = float(value) if col != '时间' else str(value)
                 result.append(tick_data)
             
             logger.info(f"获取东方财富分时数据成功 {symbol}: {len(result)} 条")
@@ -957,18 +1022,19 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 tick_data = {}
-                for col in df.columns:
-                    value = row[col]
-                    import math
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                        tick_data[col] = None
-                    else:
-                        if col in ['volume', 'prev_price']:
-                            tick_data[col] = int(value) if value == int(value) else float(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        value = getattr(row, col)
+                        import math
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                            tick_data[col] = None
                         else:
-                            tick_data[col] = float(value) if col not in ['symbol', 'name', 'ticktime', 'kind'] else str(value)
+                            if col in ['volume', 'prev_price']:
+                                tick_data[col] = int(value) if value == int(value) else float(value)
+                            else:
+                                tick_data[col] = float(value) if col not in ['symbol', 'name', 'ticktime', 'kind'] else str(value)
                 result.append(tick_data)
             
             logger.info(f"获取新浪财经分时数据成功 {symbol}: {len(result)} 条")
@@ -1029,20 +1095,21 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 tick_data = {}
-                for col in df.columns:
-                    value = row[col]
-                    import math
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                        tick_data[col] = None
-                    else:
-                        if col in ['day']:
-                            tick_data[col] = str(value)
-                        elif col in ['volume']:
-                            tick_data[col] = int(value) if value == int(value) else float(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        value = getattr(row, col)
+                        import math
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                            tick_data[col] = None
                         else:
-                            tick_data[col] = float(value)
+                            if col in ['day']:
+                                tick_data[col] = str(value)
+                            elif col in ['volume']:
+                                tick_data[col] = int(value) if value == int(value) else float(value)
+                            else:
+                                tick_data[col] = float(value)
                 result.append(tick_data)
             
             logger.info(f"获取新浪财经分时数据成功 {symbol} (周期={period}, 复权={adjust}): {len(result)} 条")
@@ -1149,23 +1216,24 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 tick_data = {}
-                for col in df.columns:
-                    value = row[col]
-                    import math
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
-                        tick_data[col] = None
-                    else:
-                        if col in ['时间', 'day']:
-                            tick_data[col] = str(value)
-                        elif col in ['成交量', 'volume']:
-                            tick_data[col] = int(value) if value == int(value) else float(value)
+                if hasattr(row, '_fields'):
+                    for col in row._fields:
+                        value = getattr(row, col)
+                        import math
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and math.isnan(value)):
+                            tick_data[col] = None
                         else:
-                            try:
-                                tick_data[col] = float(value)
-                            except (ValueError, TypeError):
+                            if col in ['时间', 'day']:
                                 tick_data[col] = str(value)
+                            elif col in ['成交量', 'volume']:
+                                tick_data[col] = int(value) if value == int(value) else float(value)
+                            else:
+                                try:
+                                    tick_data[col] = float(value)
+                                except (ValueError, TypeError):
+                                    tick_data[col] = str(value)
                 result.append(tick_data)
             
             logger.info(f"获取东方财富分时数据成功 {symbol} (周期={period}, 复权={adjust}): {len(result)} 条")
@@ -1213,15 +1281,15 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             klines = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 klines.append(KLineData(
                     code=code,
-                    date=self.format_date(str(row["日期"])),
-                    open=float(row["开盘"]),
-                    high=float(row["最高"]),
-                    low=float(row["最低"]),
-                    close=float(row["收盘"]),
-                    volume=float(row["成交量"])
+                    date=self.format_date(str(row.日期)),
+                    open=float(row.开盘),
+                    high=float(row.最高),
+                    low=float(row.最低),
+                    close=float(row.收盘),
+                    volume=float(row.成交量)
                 ))
             
             logger.info(f"获取周线数据成功 {code}: {len(klines)}条")
@@ -1263,15 +1331,15 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             klines = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 klines.append(KLineData(
                     code=code,
-                    date=self.format_date(str(row["日期"])),
-                    open=float(row["开盘"]),
-                    high=float(row["最高"]),
-                    low=float(row["最低"]),
-                    close=float(row["收盘"]),
-                    volume=float(row["成交量"])
+                    date=self.format_date(str(row.日期)),
+                    open=float(row.开盘),
+                    high=float(row.最高),
+                    low=float(row.最低),
+                    close=float(row.收盘),
+                    volume=float(row.成交量)
                 ))
             
             logger.info(f"获取月线数据成功 {code}: {len(klines)}条")
@@ -1304,16 +1372,16 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 result.append({
-                    "code": row["代码"] if "代码" in row else None,
-                    "name": row["名称"] if "名称" in row else None,
-                    "close": float(row["收盘价"]) if "收盘价" in row else None,
-                    "change_pct": float(row["涨跌幅"]) if "涨跌幅" in row else None,
-                    "amount": float(row["成交额"]) if "成交额" in row else None,
-                    "net_in": float(row["净额"]) if "净额" in row else None,
-                    "buy_amount": float(row["买入额"]) if "买入额" in row else None,
-                    "sell_amount": float(row["卖出额"]) if "卖出额" in row else None
+                    "code": getattr(row, '代码', None),
+                    "name": getattr(row, '名称', None),
+                    "close": float(getattr(row, '收盘价', 0)) if hasattr(row, '收盘价') else None,
+                    "change_pct": float(getattr(row, '涨跌幅', 0)) if hasattr(row, '涨跌幅') else None,
+                    "amount": float(getattr(row, '成交额', 0)) if hasattr(row, '成交额') else None,
+                    "net_in": float(getattr(row, '净额', 0)) if hasattr(row, '净额') else None,
+                    "buy_amount": float(getattr(row, '买入额', 0)) if hasattr(row, '买入额') else None,
+                    "sell_amount": float(getattr(row, '卖出额', 0)) if hasattr(row, '卖出额') else None
                 })
             
             logger.info(f"获取龙虎榜数据成功：{len(result)}条")
@@ -1345,16 +1413,16 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 result.append({
                     "code": code,
-                    "ann_date": str(row["公告日期"]) if "公告日期" in row else ann_date,
-                    "end_date": str(row["报告期"]) if "报告期" in row else None,
-                    "type": row["类型"] if "类型" in row else None,
-                    "net_profit_min": float(row["净利润下限"]) if "净利润下限" in row else None,
-                    "net_profit_max": float(row["净利润上限"]) if "净利润上限" in row else None,
-                    "net_profit_yoy_min": float(row["净利润下限同比"]) if "净利润下限同比" in row else None,
-                    "net_profit_yoy_max": float(row["净利润上限同比"]) if "净利润上限同比" in row else None
+                    "ann_date": str(getattr(row, '公告日期', '')) if hasattr(row, '公告日期') else ann_date,
+                    "end_date": str(getattr(row, '报告期', '')) if hasattr(row, '报告期') else None,
+                    "type": getattr(row, '类型', None) if hasattr(row, '类型') else None,
+                    "net_profit_min": float(getattr(row, '净利润下限', 0)) if hasattr(row, '净利润下限') else None,
+                    "net_profit_max": float(getattr(row, '净利润上限', 0)) if hasattr(row, '净利润上限') else None,
+                    "net_profit_yoy_min": float(getattr(row, '净利润下限同比', 0)) if hasattr(row, '净利润下限同比') else None,
+                    "net_profit_yoy_max": float(getattr(row, '净利润上限同比', 0)) if hasattr(row, '净利润上限同比') else None
                 })
             
             logger.info(f"获取业绩预告数据成功 {code}: {len(result)}条")
@@ -1396,16 +1464,16 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
+            for row in df.itertuples(index=False):
                 result.append({
                     "code": code,
-                    "date": str(row["日期"]) if "日期" in row else None,
-                    "close": float(row["收盘价"]) if "收盘价" in row else None,
-                    "change_pct": float(row["涨跌幅"]) if "涨跌幅" in row else None,
-                    "main_net_in": float(row["主力净流入"]) if "主力净流入" in row else None,
-                    "main_net_in_pct": float(row["主力净流入占比"]) if "主力净流入占比" in row else None,
-                    "super_net_in": float(row["超大单净流入"]) if "超大单净流入" in row else None,
-                    "big_net_in": float(row["大单净流入"]) if "大单净流入" in row else None,
+                    "date": str(getattr(row, '日期', '')) if hasattr(row, '日期') else None,
+                    "close": float(getattr(row, '收盘价', 0)) if hasattr(row, '收盘价') else None,
+                    "change_pct": float(getattr(row, '涨跌幅', 0)) if hasattr(row, '涨跌幅') else None,
+                    "main_net_in": float(getattr(row, '主力净流入', 0)) if hasattr(row, '主力净流入') else None,
+                    "main_net_in_pct": float(getattr(row, '主力净流入占比', 0)) if hasattr(row, '主力净流入占比') else None,
+                    "super_net_in": float(getattr(row, '超大单净流入', 0)) if hasattr(row, '超大单净流入') else None,
+                    "big_net_in": float(getattr(row, '大单净流入', 0)) if hasattr(row, '大单净流入') else None,
                     "mid_net_in": float(row["中单净流入"]) if "中单净流入" in row else None,
                     "small_net_in": float(row["小单净流入"]) if "小单净流入" in row else None
                 })
@@ -1444,8 +1512,8 @@ class AkShareAdapter(BaseDataAdapter):
                 return []
             
             result = []
-            for _, row in df.iterrows():
-                date_str = str(row["日期"]) if "日期" in row else ""
+            for row in df.itertuples(index=False):
+                date_str = str(getattr(row, '日期', '')) if hasattr(row, '日期') else ""
                 if date_str:
                     date_str = date_str.replace("-", "").replace("/", "")[:8]
                 

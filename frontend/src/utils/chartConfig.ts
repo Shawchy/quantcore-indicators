@@ -14,7 +14,7 @@ import { COLORS } from '../constants'
  * @returns ECharts 配置对象
  */
 export const getBarOption = (
-  data: any[],
+  data: Record<string, unknown>[],
   dataKey: string = 'change_pct',
   labelKey: string = 'name',
   title?: string
@@ -61,7 +61,7 @@ export const getBarOption = (
           .map((item) => ({
             value: item[dataKey] || 0,
             itemStyle: {
-              color: (params: any) => (params.value >= 0 ? COLORS.UP : COLORS.DOWN),
+              color: (params: { value: number }) => (params.value >= 0 ? COLORS.UP : COLORS.DOWN),
             },
           }))
           .reverse(),

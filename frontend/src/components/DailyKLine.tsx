@@ -18,10 +18,6 @@ import {
   Button,
   Select,
   HStack,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
   SimpleGrid,
   Spinner,
 } from '@chakra-ui/react'
@@ -55,8 +51,11 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
   onExport,
 }) => {
   const [dateRange, setDateRange] = useState<'all' | 'year' | 'month' | 'week'>('year')
-  const [customStart, setCustomStart] = useState('')
-  const [customEnd, setCustomEnd] = useState('')
+  // 自定义日期范围功能预留
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_customStart, _setCustomStart] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_customEnd, _setCustomEnd] = useState('')
 
   // 根据日期范围过滤数据
   const filteredData = useMemo(() => {
@@ -156,7 +155,7 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
           fontSize: 12,
         },
         extraCssText: 'box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border-radius: 8px; padding: 12px;',
-        formatter: (params: any) => {
+        formatter: (params: { axisValue: string; dataIndex: number }[]) => {
           const item = formatDate(params[0].axisValue)
           const data = filteredData[params[0].dataIndex]
           const change = data.close - data.open
@@ -439,7 +438,7 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
           barWidth: '60%',
           barMaxWidth: 20,
           itemStyle: {
-            color: (params: any) => {
+            color: (params: { dataIndex: number }) => {
               const idx = params.dataIndex
               const open = ohlc[idx][0]
               const close = ohlc[idx][1]
@@ -552,7 +551,7 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
         <HStack>
           <Select
             value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
+            onChange={(e) => setDateRange((e.target.value || 'year') as 'all' | 'month' | 'week' | 'year')}
             size="sm"
             width="120px"
           >
@@ -652,7 +651,7 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
                     {formatVolume(item.volume)}
                   </Td>
                   <Td fontSize="xs" color="gray.600" fontFamily="mono" isNumeric>
-                    {formatAmount(item.amount)}
+                    {formatAmount(item.amount ?? 0)}
                   </Td>
                 </Tr>
                 )

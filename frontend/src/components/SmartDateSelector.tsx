@@ -47,7 +47,6 @@ export const SmartDateSelector = ({
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const bgColor = useColorModeValue('white', 'gray.800')
-  const hoverBg = useColorModeValue('gray.50', 'gray.700')
   const toast = useToast()
 
   // 从缓存加载数据
@@ -71,6 +70,8 @@ export const SmartDateSelector = ({
         }
       }
     } catch (error) {
+      // 缓存加载失败，静默处理
+      // eslint-disable-next-line no-console
       console.warn('加载缓存失败:', error)
     }
     return false
@@ -82,6 +83,8 @@ export const SmartDateSelector = ({
       localStorage.setItem(CACHE_KEY, JSON.stringify(data))
       localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString())
     } catch (error) {
+      // 缓存保存失败，静默处理
+      // eslint-disable-next-line no-console
       console.warn('保存缓存失败:', error)
     }
   }, [])
@@ -106,19 +109,18 @@ export const SmartDateSelector = ({
       try {
         const effectiveResult = await Promise.race([
           screenerApi.getEffectiveDate(),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('请求超时')), 10000)
           )
-        ]) as any
+        ]) as { data: { date: string; is_trading_day: boolean } }
         const effectiveData = effectiveResult.data
-        setEffectiveInfo(effectiveData)
-        
+
         const tradingDaysResult = await Promise.race([
           screenerApi.getTradingDays(20),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('请求超时')), 10000)
           )
-        ]) as any
+        ]) as { data: TradingDay[] }
         const tradingDaysData = tradingDaysResult.data
         
         // 标记选中的日期
@@ -152,9 +154,11 @@ export const SmartDateSelector = ({
             isClosable: true
           })
         }
-      } catch (apiError: any) {
+      } catch (apiError: unknown) {
         // API 失败时不估算，显示错误提示
-        console.error('API 加载失败:', apiError.message)
+        const errorMessage = apiError instanceof Error ? apiError.message : '请求超时'
+        // eslint-disable-next-line no-console
+        console.error('API 加载失败:', errorMessage)
         
         toast({
           title: '数据加载失败',
@@ -169,6 +173,7 @@ export const SmartDateSelector = ({
         loadFromCache()
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('加载交易日失败:', error)
       toast({
         title: '加载失败',

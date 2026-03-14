@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react'
+import { Component, ErrorInfo, ReactNode } from 'react'
 import { Box, Button, Heading, Text, VStack } from '@chakra-ui/react'
 
 interface Props {
@@ -22,6 +22,8 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // 生产环境可以发送到错误监控服务
+    // eslint-disable-next-line no-console
     console.error('ErrorBoundary caught an error:', error, errorInfo)
   }
 

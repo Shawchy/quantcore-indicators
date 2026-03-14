@@ -4,7 +4,18 @@
 
 import pytest
 import asyncio
+import os
+import sys
 from typing import Generator
+
+# 添加项目根目录到 Python 路径
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+# 设置测试环境变量
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
+os.environ.setdefault("DEBUG", "true")
+os.environ.setdefault("LOG_LEVEL", "ERROR")
 
 
 @pytest.fixture(scope="session")
@@ -25,3 +36,42 @@ def sample_stock_code() -> str:
 def sample_date_range() -> tuple:
     """示例日期范围"""
     return ("2024-01-01", "2024-12-31")
+
+
+@pytest.fixture
+def mock_kline_data():
+    """模拟 K 线数据"""
+    return [
+        {
+            "code": "000001",
+            "date": "2024-01-01",
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.0,
+            "close": 10.5,
+            "volume": 10000,
+            "amount": 105000.0,
+        },
+        {
+            "code": "000001",
+            "date": "2024-01-02",
+            "open": 10.5,
+            "high": 12.0,
+            "low": 10.0,
+            "close": 11.5,
+            "volume": 15000,
+            "amount": 172500.0,
+        },
+    ]
+
+
+@pytest.fixture
+def mock_stock_basic_info():
+    """模拟股票基本信息"""
+    return {
+        "code": "000001",
+        "name": "平安银行",
+        "market": "SZ",
+        "industry": "银行",
+        "area": "深圳",
+    }

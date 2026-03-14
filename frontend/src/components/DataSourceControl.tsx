@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import {
   Card,
   CardBody,
@@ -17,7 +16,6 @@ import {
   AlertTitle,
   AlertDescription,
   useToast,
-  Divider,
   Box,
   Flex,
 } from '@chakra-ui/react'
@@ -26,9 +24,8 @@ import { dataSourceApi } from '../services/api'
 import { FiDatabase, FiWifi, FiWifiOff, FiRefreshCw } from 'react-icons/fi'
 
 interface DataSourceStatus {
-  mode: 'online' | 'offline' | 'mock'
+  mode: 'online' | 'offline'
   disabled_sources: string[]
-  mock_data_enabled: boolean
   available_modes: string[]
 }
 
@@ -36,24 +33,27 @@ const DataSourceControl: React.FC = () => {
   const toast = useToast()
   const queryClient = useQueryClient()
 
-  const { data: status, isLoading, refetch } = useQuery<DataSourceStatus>({
+  const { data: status, isLoading, refetch, error } = useQuery<DataSourceStatus>({
     queryKey: ['dataSourceStatus'],
-    queryFn: () => dataSourceApi.getStatus().then(res => res.data),
+    queryFn: () => dataSourceApi.getStatus() as unknown as Promise<DataSourceStatus>,
     refetchInterval: 30000,
+    staleTime: 5 * 60 * 1000, // 5 分钟
+    retry: 2,
+    retryDelay: 1000,
   })
 
   const setModeMutation = useMutation({
-    mutationFn: (mode: 'online' | 'offline' | 'mock') =>
+    mutationFn: (mode: 'online' | 'offline') =>
       dataSourceApi.setMode(mode),
     onSuccess: () => {
-      queryClient.invalidateQueries(['dataSourceStatus'])
+      queryClient.invalidateQueries({ queryKey: ['dataSourceStatus'] })
       toast({
         title: '数据源模式已切换',
         status: 'success',
         duration: 2000,
       })
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: '切换失败',
         description: error.message || '请稍后重试',
@@ -67,14 +67,14 @@ const DataSourceControl: React.FC = () => {
     mutationFn: ({ source, enabled }: { source: string; enabled: boolean }) =>
       dataSourceApi.toggleSource(source, enabled),
     onSuccess: () => {
-      queryClient.invalidateQueries(['dataSourceStatus'])
+      queryClient.invalidateQueries({ queryKey: ['dataSourceStatus'] })
       toast({
         title: '数据源状态已更新',
         status: 'success',
         duration: 2000,
       })
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: '更新失败',
         description: error.message || '请稍后重试',
@@ -87,14 +87,14 @@ const DataSourceControl: React.FC = () => {
   const resetMutation = useMutation({
     mutationFn: () => dataSourceApi.reset(),
     onSuccess: () => {
-      queryClient.invalidateQueries(['dataSourceStatus'])
+      queryClient.invalidateQueries({ queryKey: ['dataSourceStatus'] })
       toast({
         title: '数据源已重置',
         status: 'success',
         duration: 2000,
       })
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: '重置失败',
         description: error.message || '请稍后重试',
@@ -110,8 +110,6 @@ const DataSourceControl: React.FC = () => {
         return <Badge colorScheme="green">在线模式</Badge>
       case 'offline':
         return <Badge colorScheme="orange">离线模式</Badge>
-      case 'mock':
-        return <Badge colorScheme="blue">模拟数据</Badge>
       default:
         return <Badge>未知</Badge>
     }
@@ -123,8 +121,6 @@ const DataSourceControl: React.FC = () => {
         return '正常从外部数据源拉取数据'
       case 'offline':
         return '禁用所有外部数据源，只使用本地缓存/数据库'
-      case 'mock':
-        return '使用模拟测试数据进行开发调试'
       default:
         return ''
     }
@@ -144,6 +140,32 @@ const DataSourceControl: React.FC = () => {
           <Flex justify="center" align="center" h="200px">
             <Spinner size="lg" color="brand.500" />
           </Flex>
+        </CardBody>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardBody>
+          <Alert status="error" borderRadius="md">
+            <AlertIcon />
+            <Box>
+              <AlertTitle>加载失败</AlertTitle>
+              <AlertDescription>
+                无法获取数据源状态，请检查网络连接或刷新页面重试。
+              </AlertDescription>
+            </Box>
+          </Alert>
+          <Button
+            mt={4}
+            width="full"
+            onClick={() => refetch()}
+            leftIcon={<FiRefreshCw />}
+          >
+            重试
+          </Button>
         </CardBody>
       </Card>
     )
@@ -188,19 +210,6 @@ const DataSourceControl: React.FC = () => {
                 </Box>
               </Alert>
             )}
-
-            {status?.mode === 'mock' && (
-              <Alert status="info" borderRadius="md">
-                <AlertIcon />
-                <Box>
-                  <AlertTitle fontSize="sm">模拟数据模式</AlertTitle>
-                  <AlertDescription fontSize="xs">
-                    当前使用模拟测试数据，仅用于开发调试。
-                    生产环境请切换到在线模式。
-                  </AlertDescription>
-                </Box>
-              </Alert>
-            )}
           </VStack>
         </CardBody>
       </Card>
@@ -210,7 +219,7 @@ const DataSourceControl: React.FC = () => {
           <Heading size="sm">切换模式</Heading>
         </CardHeader>
         <CardBody>
-          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
             <Button
               colorScheme="green"
               variant={status?.mode === 'online' ? 'solid' : 'outline'}
@@ -228,15 +237,6 @@ const DataSourceControl: React.FC = () => {
               leftIcon={<FiWifiOff />}
             >
               离线模式
-            </Button>
-            <Button
-              colorScheme="blue"
-              variant={status?.mode === 'mock' ? 'solid' : 'outline'}
-              onClick={() => setModeMutation.mutate('mock')}
-              isLoading={setModeMutation.isPending}
-              leftIcon={<FiDatabase />}
-            >
-              模拟数据
             </Button>
           </SimpleGrid>
         </CardBody>

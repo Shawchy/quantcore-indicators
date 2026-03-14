@@ -1,9 +1,19 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
+    """应用配置类
+    
+    使用 Pydantic V2 的 SettingsConfigDict 替代旧的 class Config
+    """
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"  # 忽略额外的环境变量
+    )
+    
     APP_NAME: str = "Quant Analysis System"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
@@ -92,10 +102,6 @@ class Settings(BaseSettings):
     # 默认用户密码（开发环境）
     DEFAULT_ADMIN_PASSWORD: str = "admin123"
     DEFAULT_USER_PASSWORD: str = "user123"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 @lru_cache()

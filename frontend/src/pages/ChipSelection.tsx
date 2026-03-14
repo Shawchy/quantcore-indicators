@@ -19,10 +19,6 @@ import {
   SliderFilledTrack,
   SliderThumb,
   Box,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
   SimpleGrid,
   Flex,
 } from '@chakra-ui/react'

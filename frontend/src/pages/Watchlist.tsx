@@ -1,8 +1,6 @@
 import {
-  Box,
   Card,
   CardBody,
-  CardHeader,
   Heading,
   VStack,
   HStack,
@@ -25,6 +23,7 @@ import {
   AlertDialogContent,
   AlertDialogOverlay,
   useDisclosure,
+  useToast,
   Input,
   Modal,
   ModalBody,
@@ -45,6 +44,7 @@ import { watchlistApi } from '../services/api'
 const Watchlist = () => {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const toast = useToast()
   const [selectedCode, setSelectedCode] = useState<string>('')
   const [noteValue, setNoteValue] = useState('')
   const [addCode, setAddCode] = useState('')
@@ -54,7 +54,9 @@ const Watchlist = () => {
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure()
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure()
 
-  const { data: watchlistData, isLoading } = useQuery({
+  // 自选股列表数据（预留）
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { data: _watchlistData, isLoading } = useQuery({
     queryKey: ['watchlist'],
     queryFn: () => watchlistApi.getList(),
   })

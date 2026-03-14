@@ -45,9 +45,9 @@ class KLine(Base):
     high: Mapped[float] = mapped_column(Float)
     low: Mapped[float] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float)
-    volume: Mapped[float] = mapped_column(Float)
+    volume: Mapped[float] = mapped_column(Float, index=True)  # 新增索引
     amount: Mapped[Optional[float]] = mapped_column(Float)
-    turnover_rate: Mapped[Optional[float]] = mapped_column(Float)
+    turnover_rate: Mapped[Optional[float]] = mapped_column(Float, index=True)  # 新增索引
     adjust_type: Mapped[str] = mapped_column(String(10), default="qfq")
     
     __table_args__ = (
@@ -55,6 +55,9 @@ class KLine(Base):
         # 复合索引优化查询性能
         Index("idx_kline_code_date", "code", "date"),
         Index("idx_kline_code_adjust", "code", "adjust_type"),
+        # 新增复合索引
+        Index("idx_kline_volume_date", "volume", "date"),  # 成交量排序
+        Index("idx_kline_turnover_date", "turnover_rate", "date"),  # 换手率排序
     )
 
 
@@ -68,10 +71,10 @@ class TechnicalIndicatorDB(Base):
     ma10: Mapped[Optional[float]] = mapped_column(Float)
     ma20: Mapped[Optional[float]] = mapped_column(Float)
     ma60: Mapped[Optional[float]] = mapped_column(Float)
-    rsi6: Mapped[Optional[float]] = mapped_column(Float)
+    rsi6: Mapped[Optional[float]] = mapped_column(Float, index=True)  # 新增索引
     rsi12: Mapped[Optional[float]] = mapped_column(Float)
     rsi24: Mapped[Optional[float]] = mapped_column(Float)
-    macd: Mapped[Optional[float]] = mapped_column(Float)
+    macd: Mapped[Optional[float]] = mapped_column(Float, index=True)  # 新增索引
     macd_signal: Mapped[Optional[float]] = mapped_column(Float)
     macd_hist: Mapped[Optional[float]] = mapped_column(Float)
     
@@ -80,6 +83,9 @@ class TechnicalIndicatorDB(Base):
         # 复合索引优化查询性能
         Index("idx_indicator_code_date", "code", "date"),
         Index("idx_indicator_ma", "code", "ma5", "ma10", "ma20"),
+        # 新增复合索引
+        Index("idx_indicator_macd", "code", "macd", "macd_signal"),  # MACD 选股
+        Index("idx_indicator_rsi", "code", "rsi6"),  # RSI 选股
     )
 
 
@@ -99,13 +105,15 @@ class ChipData(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    shareholder_count: Mapped[Optional[float]] = mapped_column(Float)
+    shareholder_count: Mapped[Optional[float]] = mapped_column(Float, index=True)  # 新增索引
     avg_shares_per_holder: Mapped[Optional[float]] = mapped_column(Float)
     control_degree: Mapped[Optional[float]] = mapped_column(Float)
-    concentration: Mapped[Optional[float]] = mapped_column(Float)
+    concentration: Mapped[Optional[float]] = mapped_column(Float, index=True)  # 新增索引
     
     __table_args__ = (
         UniqueConstraint("code", "date", name="u_chip_code_date"),
+        # 新增复合索引
+        Index("idx_chip_concentration_date", "concentration", "date"),  # 集中度排序
     )
 
 
@@ -115,7 +123,7 @@ class SectorInfo(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
-    sector_type: Mapped[str] = mapped_column(String(20))
+    sector_type: Mapped[str] = mapped_column(String(20), index=True)  # 添加索引
     change_pct: Mapped[Optional[float]] = mapped_column(Float)
     volume: Mapped[Optional[float]] = mapped_column(Float)
     amount: Mapped[Optional[float]] = mapped_column(Float)
@@ -160,13 +168,19 @@ class TradeRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     backtest_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     trade_type: Mapped[str] = mapped_column(String(10))
-    code: Mapped[str] = mapped_column(String(10))
+    code: Mapped[str] = mapped_column(String(10), index=True)  # 新增索引
     price: Mapped[float] = mapped_column(Float)
     quantity: Mapped[float] = mapped_column(Float)
     amount: Mapped[float] = mapped_column(Float)
     commission: Mapped[float] = mapped_column(Float, default=0)
-    trade_date: Mapped[str] = mapped_column(String(20))
+    trade_date: Mapped[str] = mapped_column(String(20), index=True)  # 新增索引
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    
+    __table_args__ = (
+        # 新增复合索引
+        Index("idx_trade_backtest_date", "backtest_id", "trade_date"),  # 回测时间分布
+        Index("idx_trade_code_date", "code", "trade_date"),  # 个股交易历史
+    )
 
 
 class User(Base):
@@ -184,6 +198,36 @@ class User(Base):
     
     __table_args__ = (
         Index("idx_user_username_email", "username", "email"),
+    )
+
+
+class RealtimeQuote(Base):
+    __tablename__ = "realtime_quote"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    price: Mapped[float] = mapped_column(Float)  # 最新价
+    change: Mapped[float] = mapped_column(Float)  # 涨跌额
+    change_pct: Mapped[float] = mapped_column(Float)  # 涨跌幅
+    volume: Mapped[float] = mapped_column(Float)  # 成交量
+    amount: Mapped[float] = mapped_column(Float)  # 成交额
+    high: Mapped[float] = mapped_column(Float)  # 最高价
+    low: Mapped[float] = mapped_column(Float)  # 最低价
+    open: Mapped[float] = mapped_column(Float)  # 今开
+    prev_close: Mapped[float] = mapped_column(Float)  # 昨收
+    turnover_rate: Mapped[Optional[float]] = mapped_column(Float)  # 换手率
+    quote_time: Mapped[str] = mapped_column(String(20), index=True)  # 行情时间
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    __table_args__ = (
+        # 唯一约束：每只股票只有一个最新行情
+        UniqueConstraint("code", name="u_quote_code"),
+        # 复合索引优化查询性能
+        Index("idx_quote_code_time", "code", "quote_time"),
+        Index("idx_quote_change_pct", "change_pct"),  # 涨跌幅排行
+        Index("idx_quote_volume", "volume"),  # 成交量排行
     )
 
 

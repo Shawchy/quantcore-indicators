@@ -5,6 +5,13 @@ from enum import Enum
 import asyncio
 from loguru import logger
 
+from app.utils.load_progress import (
+    get_progress_manager, 
+    LoadTaskStatus, 
+    DataType, 
+    DataSource
+)
+
 
 class LoadPriority(Enum):
     """加载优先级"""
@@ -60,6 +67,7 @@ class DataLoader:
         self.completed_tasks: Dict[str, LoadTask] = {}
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
+        self._progress_manager = get_progress_manager()
     
     async def start(self):
         """启动后台加载器"""
@@ -108,6 +116,25 @@ class DataLoader:
         else:
             start_date = "19900101"  # A 股起始日期
         
+        # 创建进度追踪任务
+        task_id = await self._progress_manager.create_task(
+            task_name=f"加载 K 线数据 - {code}",
+            data_type=DataType.KLINE,
+            data_source=DataSource.MIXED,
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
+            total=100  # 假设总进度为 100%
+        )
+        
+        # 更新进度：开始
+        await self._progress_manager.update_progress(
+            task_id=task_id,
+            status=LoadTaskStatus.RUNNING,
+            message=f"开始加载 {code} 的 K 线数据",
+            current=10
+        )
+        
         # 创建加载任务
         task = LoadTask(
             code=code,
@@ -121,6 +148,13 @@ class DataLoader:
         self.active_tasks[f"{code}_{priority.value}"] = task
         
         try:
+            # 更新进度：获取数据中
+            await self._progress_manager.update_progress(
+                task_id=task_id,
+                message="正在从数据源获取数据...",
+                current=30
+            )
+            
             # 从数据源拉取数据
             klines = await data_source_manager.get_kline(
                 code=code,
@@ -131,9 +165,25 @@ class DataLoader:
             
             task.loaded_count = len(klines)
             
+            # 更新进度：保存数据中
+            await self._progress_manager.update_progress(
+                task_id=task_id,
+                message=f"已获取 {len(klines)} 条数据，正在保存到数据库...",
+                current=70,
+                loaded_count=len(klines)
+            )
+            
             # 保存到数据库
             if klines:
                 await data_persistence.save_klines(code, klines, "qfq")
+            
+            # 更新进度：完成
+            await self._progress_manager.update_progress(
+                task_id=task_id,
+                status=LoadTaskStatus.COMPLETED,
+                message=f"成功加载 {len(klines)} 条 K 线数据",
+                current=100
+            )
             
             # 检查是否还有更多历史数据
             has_more = len(klines) >= 2000  # 假设单次最多返回 2000 条
@@ -173,6 +223,15 @@ class DataLoader:
         except Exception as e:
             task.status = LoadStatus.FAILED
             task.error = str(e)
+            
+            # 更新进度：失败
+            await self._progress_manager.update_progress(
+                task_id=task_id,
+                status=LoadTaskStatus.FAILED,
+                message=f"加载失败：{str(e)}",
+                error_message=str(e)
+            )
+            
             logger.error(f"加载 K 线数据失败 {code}: {e}")
             raise
         

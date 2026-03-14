@@ -28,7 +28,7 @@ const MarketRankingPage: React.FC = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await marketApi.getRanking(topN, dataSource)
+      const response = await marketApi.getRanking(topN, dataSource) as unknown as { success?: boolean; data?: MarketRankingData; message?: string }
       
       if (response.success && response.data) {
         setMarketData(response.data)
@@ -36,9 +36,10 @@ const MarketRankingPage: React.FC = () => {
       } else {
         setError(response.message || '获取数据失败')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      // eslint-disable-next-line no-console
       console.error('获取市场排行榜失败:', err)
-      setError(err.message || '网络错误')
+      setError(err instanceof Error ? err.message : '网络错误')
     } finally {
       setLoading(false)
     }
@@ -48,13 +49,14 @@ const MarketRankingPage: React.FC = () => {
   const fetchMarketOverview = async () => {
     try {
       setLoadingOverview(true)
-      const response = await marketApi.getOverview()
+      const response = await marketApi.getOverview() as unknown as { success?: boolean; data?: MarketOverviewData }
       
       if (response.success && response.data) {
         setOverviewData(response.data)
       }
-    } catch (err: any) {
-      console.error('获取市场概览失败:', err)
+    } catch (err: unknown) {
+      // eslint-disable-next-line no-console
+      console.error('获取市场概览失败:', err instanceof Error ? err.message : err)
     } finally {
       setLoadingOverview(false)
     }

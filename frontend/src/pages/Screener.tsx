@@ -13,16 +13,13 @@ import {
   FormControl,
   FormLabel,
   Input,
-  Stat,
-  StatLabel,
-  StatNumber,
   Flex,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { screenerApi } from '../services/api'
 import { StatCard } from '../components/StatCard'
-import { PresetCondition, MarketStats } from '../types'
+import { PresetCondition, MarketIndustryStats } from '../types'
 
 interface ScreenerConditions {
   industry: string
@@ -61,7 +58,7 @@ const Screener = () => {
   })
 
   const presets = presetsData?.data || []
-  const marketStats = marketStatsData?.data as MarketStats | undefined
+  const marketStats = (marketStatsData as { data?: MarketIndustryStats } | undefined)?.data
   const results = resultsData?.data || []
 
   const handleSearch = () => {
@@ -70,7 +67,17 @@ const Screener = () => {
   }
 
   const handlePresetSelect = (preset: PresetCondition) => {
-    setConditions({ ...conditions, ...preset.conditions })
+    const raw = preset.conditions as Record<string, string | number | undefined>
+    const next: ScreenerConditions = {
+      ...conditions,
+      industry: String(raw.industry ?? ''),
+      market_cap_min: String(raw.market_cap_min ?? ''),
+      market_cap_max: String(raw.market_cap_max ?? ''),
+      pe_min: String(raw.pe_min ?? ''),
+      pe_max: String(raw.pe_max ?? ''),
+      control_degree_min: String(raw.control_degree_min ?? ''),
+    }
+    setConditions(next)
     setHasSearched(true)
     setTimeout(() => refetch(), 100)
   }

@@ -6,7 +6,6 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
-  Text,
   Menu,
   MenuButton,
   MenuList,
@@ -29,7 +28,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   const [searchValue, setSearchValue] = useState('')
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
-  const { user, isAuthenticated } = useAppSelector((state) => state.auth)
+  const { user } = useAppSelector((state) => state.auth)
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,6 +43,8 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       await dispatch(logout()).unwrap()
       navigate('/login')
     } catch (error) {
+      // 登出失败，静默处理
+      // eslint-disable-next-line no-console
       console.error('登出失败:', error)
     }
   }

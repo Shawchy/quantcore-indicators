@@ -9,18 +9,13 @@ import time
 from app.api.deps import OptionalCurrentUser
 from app.models.schemas import ResponseModel
 from app.storage.cache import cache_manager
+from app.config import settings
 import tushare as ts
-from pathlib import Path
-from dotenv import load_dotenv
-import os
 
 router = APIRouter()
 
-# 加载 Tushare Token
-env_file = Path(__file__).parent.parent.parent / ".env"
-load_dotenv(env_file)
-token = os.getenv('TUSHARE_TOKEN')
-ts.set_token(token)
+if settings.TUSHARE_TOKEN:
+    ts.set_token(settings.TUSHARE_TOKEN)
 
 
 @router.get("/market-ranking", response_model=ResponseModel[Dict[str, Any]])

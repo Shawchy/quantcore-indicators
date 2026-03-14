@@ -1,13 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { authApi } from '../../services/api'
+import { authApi, type ApiUser, type AuthToken } from '../../services/api'
 
-interface User {
-  user_id: number
-  username: string
-  email?: string
-  role: string
-  is_active?: boolean
-}
+export type User = ApiUser
 
 interface AuthState {
   user: User | null
@@ -38,40 +32,51 @@ const initialState: AuthState = {
   error: null,
 }
 
-export const login = createAsyncThunk(
+export const login = createAsyncThunk<
+  AuthToken,
+  { username: string; password: string },
+  { rejectValue: string }
+>(
   'auth/login',
-  async ({ username, password }: { username: string; password: string }, { rejectWithValue }) => {
+  async ({ username, password }, { rejectWithValue }) => {
     try {
       const response = await authApi.login(username, password)
-      // 使用 sessionStorage 替代 localStorage，关闭浏览器后自动失效
       sessionStorage.setItem('access_token', response.access_token)
       sessionStorage.setItem('refresh_token', response.refresh_token)
       return response
-    } catch (error: any) {
-      return rejectWithValue(error.message || '登录失败')
+    } catch (error: unknown) {
+      return rejectWithValue(
+        error instanceof Error ? error.message : '登录失败'
+      )
     }
   }
 )
 
-export const getCurrentUser = createAsyncThunk(
+export const getCurrentUser = createAsyncThunk<
+  ApiUser,
+  void,
+  { rejectValue: string }
+>(
   'auth/getCurrentUser',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await authApi.getCurrentUser()
-      return response
-    } catch (error: any) {
-      return rejectWithValue(error.message || '获取用户信息失败')
+      return await authApi.getCurrentUser()
+    } catch (error: unknown) {
+      return rejectWithValue(
+        error instanceof Error ? error.message : '获取用户信息失败'
+      )
     }
   }
 )
 
 export const logout = createAsyncThunk(
   'auth/logout',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue: _rejectWithValue }) => {
     try {
       await authApi.logout()
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 即使登出接口失败，也要清除本地 token
+      // eslint-disable-next-line no-console
       console.error('登出接口调用失败:', error)
     }
   }

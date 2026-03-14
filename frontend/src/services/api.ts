@@ -1,20 +1,40 @@
 import axios from 'axios'
 import type { RootState, AppDispatch } from '../store'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? '/api/v1'
+
+/** 登录/刷新接口返回的 Token 结构（与后端 Token 模型一致） */
+export interface AuthToken {
+  access_token: string
+  refresh_token: string
+  token_type?: string
+}
+
+/** 当前用户信息（与后端 User 模型一致） */
+export interface ApiUser {
+  user_id: number
+  username: string
+  email?: string
+  role: string
+  is_active?: boolean
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 60000, // 60 秒超时（数据加载需要更长时间）
   headers: {
     'Content-Type': 'application/json',
   },
+  // 优化重试配置
+  timeoutErrorMessage: '请求超时，请检查网络连接或稍后重试',
 })
 
 // Token 刷新锁
 let isRefreshing = false
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let failedQueue: Array<{ resolve: (value?: any) => void; reject: (reason?: any) => void }> = []
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach(prom => {
     if (error) {
@@ -49,6 +69,7 @@ api.interceptors.request.use(
       }
     } catch (error) {
       // Store 未初始化时不阻塞请求
+      // eslint-disable-next-line no-console
       console.warn('Failed to get auth token:', error)
     }
     
@@ -85,16 +106,18 @@ api.interceptors.response.use(
         
         if (refreshToken) {
           try {
-            const response = await axios.post('/api/v1/auth/refresh', {
-              refresh_token: refreshToken
-            })
-            
-            const newToken = response.data.access_token
+            const baseURL = import.meta.env?.VITE_API_BASE_URL ?? '/api/v1'
+            const response = await axios.post<AuthToken>(
+              `${baseURL}/auth/refresh`,
+              { refresh_token: refreshToken }
+            )
+            const data = response.data
+            const newToken = data.access_token
             store.dispatch({
               type: 'auth/setToken',
               payload: {
                 access_token: newToken,
-                refresh_token: response.data.refresh_token
+                refresh_token: data.refresh_token
               }
             })
             
@@ -104,13 +127,14 @@ api.interceptors.response.use(
           } catch (refreshError) {
             processQueue(refreshError, null)
             // 刷新失败，显示提示并跳转到登录页
+            // eslint-disable-next-line no-console
             console.error('Token 刷新失败:', refreshError)
             store.dispatch({ type: 'auth/localLogout' })
             // 使用 toast 提示用户（如果已导入）
             try {
-              const { toast } = window.__chakraToast__
-              if (toast) {
-                toast({
+              const chakra = window.__chakraToast__
+              if (chakra?.toast) {
+                chakra.toast({
                   title: '登录已过期',
                   description: '请重新登录',
                   status: 'warning',
@@ -118,7 +142,7 @@ api.interceptors.response.use(
                   isClosable: true,
                 })
               }
-            } catch (e) {
+            } catch {
               // toast 不可用时不处理
             }
             window.location.href = '/login'
@@ -127,6 +151,7 @@ api.interceptors.response.use(
         }
       } catch (storeError) {
         // Store 访问失败
+        // eslint-disable-next-line no-console
         console.error('Failed to access store:', storeError)
         processQueue(storeError, null)
       } finally {
@@ -140,15 +165,15 @@ api.interceptors.response.use(
 )
 
 export const authApi = {
-  login: (username: string, password: string) =>
+  login: (username: string, password: string): Promise<AuthToken> =>
     api.post('/auth/login', { username, password }),
   
   logout: () => api.post('/auth/logout'),
   
-  refreshToken: (refreshToken: string) =>
+  refreshToken: (refreshToken: string): Promise<AuthToken> =>
     api.post('/auth/refresh', { refresh_token: refreshToken }),
   
-  getCurrentUser: () => api.get('/auth/me'),
+  getCurrentUser: (): Promise<ApiUser> => api.get('/auth/me'),
 }
 
 export const stockApi = {
@@ -169,6 +194,7 @@ export const stockApi = {
         adjust: params?.adjust || 'qfq',
         priority_load: params?.priorityLoad ?? true,
       },
+      timeout: 120000, // K 线数据加载需要更长时间（2 分钟）
     }),
   getWeeklyKline: (
     code: string,
@@ -183,7 +209,8 @@ export const stockApi = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         adjust: params?.adjust || 'qfq'
-      }
+      },
+      timeout: 120000, // 周线数据加载（2 分钟）
     }),
   getMonthlyKline: (
     code: string,
@@ -198,7 +225,8 @@ export const stockApi = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         adjust: params?.adjust || 'qfq'
-      }
+      },
+      timeout: 120000, // 月线数据加载（2 分钟）
     }),
   getIndicators: (code: string, startDate?: string, endDate?: string) =>
     api.get(`/stock/${code}/indicators`, { params: { start_date: startDate, end_date: endDate } }),
@@ -244,7 +272,7 @@ export const chipApi = {
 }
 
 export const screenerApi = {
-  query: (conditions: any) => api.post('/screener/query', conditions),
+  query: (conditions: unknown) => api.post('/screener/query', conditions),
   getMarketStats: (tradeDate?: string) => api.get('/screener/market-stats', { params: { trade_date: tradeDate } }),
   getSectorStats: (sectorCode: string) => api.get(`/screener/sector-stats/${sectorCode}`),
   getPresetConditions: () => api.get('/screener/preset-conditions'),
@@ -255,15 +283,15 @@ export const screenerApi = {
 export const strategyApi = {
   getList: () => api.get('/strategy/list'),
   get: (strategyId: string) => api.get(`/strategy/${strategyId}`),
-  create: (config: any) => api.post('/strategy/create', config),
-  update: (strategyId: string, config: any) => api.put(`/strategy/${strategyId}`, config),
+  create: (config: unknown) => api.post('/strategy/create', config),
+  update: (strategyId: string, config: unknown) => api.put(`/strategy/${strategyId}`, config),
   delete: (strategyId: string) => api.delete(`/strategy/${strategyId}`),
-  optimize: (strategyId: string, paramRanges: any, method: string = 'bayesian') =>
+  optimize: (strategyId: string, paramRanges: unknown, method: string = 'bayesian') =>
     api.post(`/strategy/${strategyId}/optimize`, paramRanges, { params: { method } }),
 }
 
 export const backtestApi = {
-  run: (config: any) => api.post('/backtest/run', config),
+  run: (config: unknown) => api.post('/backtest/run', config),
   getResult: (backtestId: string) => api.get(`/backtest/result/${backtestId}`),
   getPerformance: (backtestId: string) => api.get(`/backtest/performance/${backtestId}`),
   getTrades: (backtestId: string, page: number = 1, pageSize: number = 50) =>
@@ -307,12 +335,24 @@ export const moneyflowApi = {
 export const dataSourceApi = {
   getStatus: () =>
     api.get('/data-source/status'),
-  setMode: (mode: 'online' | 'offline' | 'mock') =>
+  setMode: (mode: 'online' | 'offline') =>
     api.post('/data-source/mode', null, { params: { mode } }),
   toggleSource: (source: string, enabled: boolean) =>
     api.post('/data-source/toggle', null, { params: { source, enabled } }),
   reset: () =>
     api.post('/data-source/reset'),
+}
+
+// 数据加载进度 API
+export const loadingProgressApi = {
+  getTasks: (status?: string, dataType?: string) =>
+    api.get('/loading/tasks', { params: { status, data_type: dataType } }),
+  getTask: (taskId: string) =>
+    api.get(`/loading/task/${taskId}`),
+  removeTask: (taskId: string) =>
+    api.delete(`/loading/task/${taskId}`),
+  cleanupTasks: (maxAgeHours: number = 24) =>
+    api.post('/loading/cleanup', null, { params: { max_age_hours: maxAgeHours } }),
 }
 
 export default api

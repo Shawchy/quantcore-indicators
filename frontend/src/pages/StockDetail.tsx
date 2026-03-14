@@ -1,6 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Box,
   Card,
   CardBody,
   CardHeader,
@@ -12,7 +11,6 @@ import {
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText,
   StatArrow,
   SimpleGrid,
   Spinner,
@@ -34,77 +32,70 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
 import { stockApi, realtimeApi } from '../services/api'
-import RealtimeQuote from '../components/RealtimeQuote'
+import RealtimeQuotePanel from '../components/RealtimeQuote'
 import TickDataTable from '../components/TickDataTable'
-import type { RealtimeQuoteData, TickData } from '../types'
-import { useEffect, useState } from 'react'
+import type { RealtimeQuoteData, TickData, StockBasic, KLineData, TechnicalIndicator, RealtimeQuote } from '../types'
+import { useEffect } from 'react'
+
+const queryEnabled = (code: string | undefined, valid: boolean) => Boolean(code && valid)
 
 const StockDetail = () => {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
   const toast = useToast()
   
-  // 验证股票代码格式
-  const isValidCode = code && /^[0-9]{6}$/.test(code)
+  const isValidCode = Boolean(code && /^[0-9]{6}$/.test(code))
+  const enabled = queryEnabled(code, isValidCode)
   
   const { data: basicData, isLoading: basicLoading } = useQuery({
     queryKey: ['stockBasic', code],
     queryFn: () => stockApi.getBasic(code!),
-    enabled: !!code && isValidCode,
+    enabled,
   })
 
   const { data: klineData, isLoading: klineLoading } = useQuery({
     queryKey: ['stockKline', code],
     queryFn: () => stockApi.getKline(code!),
-    enabled: !!code && isValidCode,
+    enabled,
   })
 
   const { data: weeklyKlineData, isLoading: weeklyKlineLoading } = useQuery({
     queryKey: ['stockWeeklyKline', code],
     queryFn: () => stockApi.getWeeklyKline(code!),
-    enabled: !!code && isValidCode,
+    enabled,
   })
 
   const { data: monthlyKlineData, isLoading: monthlyKlineLoading } = useQuery({
     queryKey: ['stockMonthlyKline', code],
     queryFn: () => stockApi.getMonthlyKline(code!),
-    enabled: !!code && isValidCode,
+    enabled,
   })
 
   const { data: indicatorData, isLoading: indicatorLoading } = useQuery({
     queryKey: ['stockIndicators', code],
     queryFn: () => stockApi.getIndicators(code!),
-    enabled: !!code && isValidCode,
+    enabled,
   })
 
-  const { data: realtimeData, isLoading: realtimeLoading } = useQuery({
+  const { data: realtimeData } = useQuery({
     queryKey: ['stockRealtime', code],
     queryFn: () => stockApi.getRealtime(code!),
-    enabled: !!code && isValidCode,
+    enabled,
     refetchInterval: 30000,
   })
 
-  // 实时盘口数据
-  const { 
-    data: realtimeQuoteData, 
-    isLoading: quoteLoading,
-    refetch: refetchQuote 
-  } = useQuery<RealtimeQuoteData>({
+  const { data: realtimeQuoteData, isLoading: quoteLoading } = useQuery<RealtimeQuoteData>({
     queryKey: ['realtimeQuote', code],
-    queryFn: () => realtimeApi.getQuote(code!).then(res => res.data),
-    enabled: !!code && isValidCode,
-    refetchInterval: 10000, // 10 秒刷新一次
+    queryFn: () => realtimeApi.getQuote(code!) as unknown as Promise<RealtimeQuoteData>,
+    enabled,
+    refetchInterval: 10000,
   })
 
-  // 成交明细数据
-  const { 
-    data: tickData, 
-    isLoading: tickLoading 
-  } = useQuery<TickData>({
+  const { data: tickData, isLoading: tickLoading } = useQuery<TickData>({
     queryKey: ['tickData', code],
-    queryFn: () => realtimeApi.getTickData(code!, 'dc', 100).then(res => res.data),
-    enabled: !!code && isValidCode,
-    refetchInterval: 30000, // 30 秒刷新一次
+    queryFn: () => realtimeApi.getTickData(code!, 'dc', 100) as unknown as Promise<TickData>,
+    enabled,
+    refetchInterval: 30000,
   })
   
   // 显示错误提示
@@ -121,12 +112,12 @@ const StockDetail = () => {
     }
   }, [code, isValidCode, navigate])
 
-  const stock = basicData?.data
-  const quote = realtimeData?.data
-  const klines = klineData?.data || []
-  const weeklyKlines = weeklyKlineData?.data || []
-  const monthlyKlines = monthlyKlineData?.data || []
-  const indicators = indicatorData?.data || []
+  const stock = (basicData as { data?: StockBasic } | undefined)?.data
+  const quote = (realtimeData as { data?: RealtimeQuote } | undefined)?.data
+  const klines = ((klineData as { data?: KLineData[] } | undefined)?.data) || []
+  const weeklyKlines = ((weeklyKlineData as { data?: KLineData[] } | undefined)?.data) || []
+  const monthlyKlines = ((monthlyKlineData as { data?: KLineData[] } | undefined)?.data) || []
+  const indicators = ((indicatorData as { data?: TechnicalIndicator[] } | undefined)?.data) || []
 
   const getKlineOption = () => {
     if (!klines.length) return {}
@@ -469,8 +460,8 @@ const StockDetail = () => {
           </Flex>
         </CardHeader>
         <CardBody>
-          <RealtimeQuote
-            data={realtimeQuoteData}
+          <RealtimeQuotePanel
+            data={realtimeQuoteData ?? null}
             loading={quoteLoading}
             error={null}
           />
@@ -493,7 +484,7 @@ const StockDetail = () => {
         </CardHeader>
         <CardBody>
           <TickDataTable
-            data={tickData}
+            data={tickData ?? null}
             loading={tickLoading}
             error={null}
           />

@@ -10,6 +10,7 @@ from .sqlite import (
     BacktestRecord,
     TradeRecord,
     User,
+    RealtimeQuote,
     init_database,
     get_session
 )
@@ -28,6 +29,7 @@ __all__ = [
     "BacktestRecord",
     "TradeRecord",
     "User",
+    "RealtimeQuote",
     "init_database",
     "get_session",
     "cache_manager",

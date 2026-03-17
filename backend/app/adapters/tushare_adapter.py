@@ -9,7 +9,13 @@ from .base import (
     StockBasicInfo,
     KLineData,
     SectorInfo,
-    ChipData
+    ChipData,
+    BillboardEntry,
+    BoardInfo,
+    ShareholderInfo,
+    IndexComponent,
+    CapitalFlowItem,
+    MarketQuote
 )
 from app.config import settings
 from app.utils.tushare_points_manager import get_points_manager
@@ -49,12 +55,16 @@ class TushareAdapter(BaseDataAdapter):
             except Exception as e:
                 logger.warning(f"积分管理器初始化失败：{e}")
             
-            # 测试连接
+            # 测试连接（使用 120 积分可访问的接口）
             try:
-                df = self._pro.trade_cal(exchange='', start_date='20240101', end_date='20240107', fields='pre_cal_flag')
-                if not df.empty:
+                # 使用 new_share（新股列表）接口测试，只需 120 积分
+                # 注意：trade_cal 需要 2000 积分，不适合低积分用户
+                df = self._pro.new_share(ts_code='', start_date='20240101', end_date='20240110')
+                if df is not None:  # new_share 返回可能为空，但不代表失败
                     self._is_initialized = True
-                    logger.info("Tushare 适配器初始化成功")
+                    logger.info("Tushare 适配器初始化成功（120 积分权限）")
+                    logger.info("当前可用接口：日线行情 (daily)、新股列表 (new_share) 等基础接口")
+                    logger.info("提示：升级积分可解锁更多接口，详见 https://tushare.pro/document/1?doc_id=108")
                     
                     # 自动注册所有 API 方法
                     try:
@@ -65,11 +75,13 @@ class TushareAdapter(BaseDataAdapter):
                     
                     return True
                 else:
-                    logger.warning("Tushare 连接测试失败，无法获取交易日历数据")
-                    return False
+                    logger.warning("Tushare 连接测试返回空数据，但接口可能可用")
+                    self._is_initialized = True
+                    return True
             except Exception as test_error:
                 logger.error(f"Tushare 连接测试失败：{test_error}")
                 logger.error("可能原因：Token 无效、积分不足或网络问题")
+                logger.error("提示：120 积分可使用 daily（日线）和 new_share（新股）接口")
                 return False
                 
         except Exception as e:
@@ -178,17 +190,21 @@ class TushareAdapter(BaseDataAdapter):
                     logger.warning("积分不足，无法获取复权因子，使用非复权数据")
             
             klines = []
+            prev_close = None
             for row in df.sort_values("trade_date").itertuples(index=False):
+                current_close = float(row.close)
                 klines.append(KLineData(
                     code=code,
                     date=self.format_date(str(row.trade_date)),
                     open=float(row.open),
                     high=float(row.high),
                     low=float(row.low),
-                    close=float(row.close),
+                    close=current_close,
                     volume=float(row.vol),
-                    amount=float(row.amount) * 1000 if hasattr(row, 'amount') else None
+                    amount=float(row.amount) * 1000 if hasattr(row, 'amount') else None,
+                    pre_close=prev_close  # 上一日的收盘价
                 ))
+                prev_close = current_close
             return klines
         except Exception as e:
             logger.error(f"获取 K 线数据失败 {code}: {e}")
@@ -224,6 +240,86 @@ class TushareAdapter(BaseDataAdapter):
             return {}
     
     @api_call_cache(ttl=1800)  # 缓存 30 分钟
+    async def get_index_basic(
+        self,
+        ts_code: Optional[str] = None,
+        name: Optional[str] = None,
+        market: Optional[str] = None,
+        publisher: Optional[str] = None,
+        category: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        获取指数基础信息
+        
+        Args:
+            ts_code: 指数代码
+            name: 指数简称
+            market: 交易所或服务商 (SSE, SZSE, CSI, MSCI, SW, CICC, OTH)
+            publisher: 发布商
+            category: 指数类别
+        
+        Returns:
+            指数基础信息列表
+        
+        市场说明：
+            - MSCI: MSCI 指数
+            - CSI: 中证指数
+            - SSE: 上交所指数
+            - SZSE: 深交所指数
+            - CICC: 中金指数
+            - SW: 申万指数
+            - OTH: 其他指数
+        
+        指数类别：
+            - 主题指数、规模指数、策略指数、风格指数、综合指数
+            - 成长指数、价值指数、行业指数等
+        """
+        try:
+            # 检查权限
+            if self._points_manager:
+                if not self._points_manager.check_and_log_permission("index_basic", "akshare"):
+                    logger.warning("无 index_basic 接口权限")
+                    return []
+            
+            # 调用接口
+            df = self._pro.index_basic(
+                ts_code=ts_code or '',
+                name=name or '',
+                market=market or '',
+                publisher=publisher or '',
+                category=category or ''
+            )
+            
+            if df.empty:
+                return []
+            
+            # 转换为字典列表
+            result = []
+            for row in df.itertuples(index=False):
+                result.append({
+                    'ts_code': str(row.ts_code),
+                    'name': str(row.name),
+                    'fullname': str(getattr(row, 'fullname', '')),
+                    'market': str(getattr(row, 'market', '')),
+                    'publisher': str(getattr(row, 'publisher', '')),
+                    'index_type': str(getattr(row, 'index_type', '')),
+                    'category': str(getattr(row, 'category', '')),
+                    'base_date': str(getattr(row, 'base_date', '')),
+                    'base_point': float(getattr(row, 'base_point', 0)),
+                    'list_date': str(getattr(row, 'list_date', '')),
+                    'weight_rule': str(getattr(row, 'weight_rule', '')),
+                    'desc': str(getattr(row, 'desc', '')),
+                    'exp_date': str(getattr(row, 'exp_date', ''))
+                })
+            
+            logger.info(f"获取指数基础信息成功，共{len(result)}条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取指数基础信息失败：{e}")
+            return []
+    
+    @api_call_cache(ttl=1800)  # 缓存 30 分钟
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
         try:
             df = self._pro.index_classify(level="L1", src="SW")
@@ -236,7 +332,7 @@ class TushareAdapter(BaseDataAdapter):
                 ))
             return sectors
         except Exception as e:
-            logger.error(f"获取板块列表失败: {e}")
+            logger.error(f"获取板块列表失败：{e}")
             return []
     
     @api_call_cache(ttl=1800)  # 缓存 30 分钟
@@ -472,7 +568,7 @@ class TushareAdapter(BaseDataAdapter):
 
     # ========== 新增 API 方法 ==========
     
-    @api_call_cache(ttl=600)  # 缓存 10 分钟
+    @api_call_cache(ttl=1800)  # 缓存 30 分钟（周线数据变化较慢）
     async def get_weekly_kline(
         self,
         code: str,
@@ -496,12 +592,12 @@ class TushareAdapter(BaseDataAdapter):
             # 检查适配器是否已初始化
             if not self._is_initialized or not self._pro:
                 logger.error("Tushare 适配器未初始化")
-                return []
+                raise RuntimeError("Tushare 适配器未初始化")
             
             # 检查权限
-            if not api_registry.check_permission("get_weekly"):
+            if not api_registry.check_permission("weekly"):
                 logger.warning(f"Tushare 周线需要 2000 积分，当前只有{settings.TUSHARE_POINTS}分，使用备选数据源")
-                return []
+                raise PermissionError(f"Tushare 周线需要 2000 积分，当前只有{settings.TUSHARE_POINTS}分")
             
             ts_code = f"{code}.SH" if code.startswith("6") else f"{code}.SZ"
             adj_map = {"qfq": None, "hfq": "hfq", "": None}
@@ -527,11 +623,14 @@ class TushareAdapter(BaseDataAdapter):
             
             logger.info(f"获取周线数据成功 {code}: {len(klines)}条")
             return klines
+        except PermissionError as pe:
+            # 权限不足，抛出异常让降级逻辑处理
+            raise pe
         except Exception as e:
             logger.error(f"获取周线数据失败 {code}: {e}")
             return []
 
-    @api_call_cache(ttl=600)  # 缓存 10 分钟
+    @api_call_cache(ttl=1800)  # 缓存 30 分钟（月线数据变化较慢）
     async def get_monthly_kline(
         self,
         code: str,
@@ -552,11 +651,11 @@ class TushareAdapter(BaseDataAdapter):
             # 检查适配器是否已初始化
             if not self._is_initialized or not self._pro:
                 logger.error("Tushare 适配器未初始化")
-                return []
+                raise RuntimeError("Tushare 适配器未初始化")
             
-            if not api_registry.check_permission("get_monthly"):
+            if not api_registry.check_permission("monthly"):
                 logger.warning(f"Tushare 月线需要 2000 积分，使用备选数据源")
-                return []
+                raise PermissionError(f"Tushare 月线需要 2000 积分，当前只有{settings.TUSHARE_POINTS}分")
             
             ts_code = f"{code}.SH" if code.startswith("6") else f"{code}.SZ"
             adj_map = {"qfq": None, "hfq": "hfq", "": None}
@@ -582,6 +681,9 @@ class TushareAdapter(BaseDataAdapter):
             
             logger.info(f"获取月线数据成功 {code}: {len(klines)}条")
             return klines
+        except PermissionError as pe:
+            # 权限不足，抛出异常让降级逻辑处理
+            raise pe
         except Exception as e:
             logger.error(f"获取月线数据失败 {code}: {e}")
             return []
@@ -772,4 +874,160 @@ class TushareAdapter(BaseDataAdapter):
             return result
         except Exception as e:
             logger.error(f"获取大盘资金流向数据失败：{e}")
+            return []
+    
+    async def get_daily_billboard(self, trade_date: Optional[str] = None) -> List[BillboardEntry]:
+        """获取龙虎榜数据（使用 top_list 接口）"""
+        try:
+            if not self._is_initialized or not self._pro:
+                return []
+            
+            # 检查权限
+            if not api_registry.check_permission("get_top_list"):
+                logger.warning(f"Tushare 龙虎榜需要 200 积分，使用备选数据源")
+                return []
+            
+            df = self._pro.top_list(trade_date=trade_date.replace("-", "") if trade_date else None)
+            
+            if df.empty:
+                return []
+            
+            entries = []
+            for row in df.itertuples(index=False):
+                code = row.ts_code.split(".")[0] if "." in row.ts_code else row.ts_code
+                entries.append(BillboardEntry(
+                    code=code,
+                    name=row.name,
+                    close_price=float(row.close) if pd.notna(row.close) else None,
+                    change_pct=float(row.pct_chg) if pd.notna(row.pct_chg) else None,
+                    turnover_amount=float(row.amount) if pd.notna(row.amount) else None,
+                    net_amount=float(row.net_in) if pd.notna(row.net_in) else None,
+                    buy_amount=float(row.buy_amount) if pd.notna(row.buy_amount) else None,
+                    sell_amount=float(row.sell_amount) if pd.notna(row.sell_amount) else None,
+                    reason=row.reason if hasattr(row, 'reason') else '',
+                    trade_date=trade_date or ''
+                ))
+            
+            logger.info(f"获取龙虎榜数据成功：{len(entries)}条")
+            return entries
+        except Exception as e:
+            logger.error(f"获取龙虎榜数据失败：{e}")
+            return []
+    
+    async def get_belong_board(self, code: str) -> List[BoardInfo]:
+        """获取股票所属板块（暂不支持）"""
+        logger.warning(f"Tushare 暂不支持获取股票所属板块 {code}")
+        return []
+    
+    async def get_members(self, index_code: str) -> List[IndexComponent]:
+        """获取指数成分股（暂不支持）"""
+        logger.warning(f"Tushare 暂不支持获取指数成分股 {index_code}")
+        return []
+    
+    async def get_today_bill(self, trade_date: Optional[str] = None) -> List[CapitalFlowItem]:
+        """获取当日资金流向（暂不支持）"""
+        logger.warning(f"Tushare 暂不支持获取当日资金流向 {trade_date}")
+        return []
+    
+    async def get_history_bill(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[CapitalFlowItem]:
+        """获取历史资金流向（使用 moneyflow 接口，需要 5000 积分）"""
+        try:
+            if not self._is_initialized or not self._pro:
+                return []
+            
+            if not api_registry.check_permission("get_moneyflow"):
+                logger.warning(f"Tushare 资金流向需要 5000 积分，使用备选数据源")
+                return []
+            
+            ts_code = f"{code}.SH" if code.startswith("6") else f"{code}.SZ"
+            df = self._pro.moneyflow(
+                ts_code=ts_code,
+                trade_date=start_date.replace("-", "") if start_date else None
+            )
+            
+            if df.empty:
+                return []
+            
+            flows = []
+            for row in df.sort_values("trade_date").itertuples(index=False):
+                date = str(row.trade_date)
+                
+                # 日期范围筛选
+                if start_date and date < start_date.replace("-", ""):
+                    continue
+                if end_date and date > end_date.replace("-", ""):
+                    continue
+                
+                flows.append(CapitalFlowItem(
+                    code=code,
+                    name='',
+                    close_price=float(row.close) if pd.notna(row.close) else None,
+                    change_pct=float(row.pct_chg) if pd.notna(row.pct_chg) else None,
+                    main_net_amount=float(row.net_mf_amount) if pd.notna(row.net_mf_amount) else None,
+                    main_net_amount_rate=None,
+                    buy_elg_amount=float(row.buy_elg_amount) if pd.notna(row.buy_elg_amount) else None,
+                    buy_lg_amount=float(row.buy_lg_amount) if pd.notna(row.buy_lg_amount) else None,
+                    buy_md_amount=float(row.buy_md_amount) if pd.notna(row.buy_md_amount) else None,
+                    buy_sm_amount=float(row.buy_sm_amount) if pd.notna(row.buy_sm_amount) else None,
+                    trade_date=date
+                ))
+            
+            logger.info(f"获取历史资金流向成功 {code}: {len(flows)}条")
+            return flows
+        except Exception as e:
+            logger.error(f"获取历史资金流向失败 {code}: {e}")
+            return []
+    
+    async def get_top10_stock_holder_info(self, code: str) -> List[ShareholderInfo]:
+        """获取前十大股东信息（使用 top10_holders 接口）"""
+        try:
+            if not self._is_initialized or not self._pro:
+                return []
+            
+            # 检查权限
+            if not api_registry.check_permission("get_top10_holders"):
+                logger.warning(f"Tushare 股东数据需要相应积分，使用备选数据源")
+                return []
+            
+            ts_code = f"{code}.SH" if code.startswith("6") else f"{code}.SZ"
+            df = self._pro.top10_holders(ts_code=ts_code)
+            
+            if df.empty:
+                return []
+            
+            shareholders = []
+            for row in df.itertuples(index=False):
+                shareholders.append(ShareholderInfo(
+                    code=code,
+                    shareholder_name=row.holder_name if hasattr(row, 'holder_name') else '',
+                    shareholder_type='',
+                    hold_amount=float(row.hold_amount) if pd.notna(row.hold_amount) else None,
+                    hold_ratio=float(row.hold_ratio) if pd.notna(row.hold_ratio) else None,
+                    change_amount=float(row.change_amount) if pd.notna(row.change_amount) else None,
+                    change_ratio=float(row.change_ratio) if pd.notna(row.change_ratio) else None,
+                    report_date=str(row.end_date) if hasattr(row, 'end_date') else ''
+                ))
+            
+            logger.info(f"获取前十大股东信息成功 {code}: {len(shareholders)}条")
+            return shareholders
+        except Exception as e:
+            logger.error(f"获取前十大股东信息失败 {code}: {e}")
+            return []
+    
+    async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:
+        """获取市场实时行情（使用 sina_md 接口）"""
+        try:
+            if not self._is_initialized or not self._pro:
+                return []
+            
+            # Tushare 不支持按市场类型获取，返回空列表使用其他数据源
+            logger.warning(f"Tushare 不支持按市场类型获取实时行情，使用备选数据源")
+            return []
+        except Exception as e:
+            logger.error(f"获取市场实时行情失败：{e}")
             return []

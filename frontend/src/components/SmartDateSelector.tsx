@@ -110,7 +110,7 @@ export const SmartDateSelector = ({
         const effectiveResult = await Promise.race([
           screenerApi.getEffectiveDate(),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('请求超时')), 10000)
+            setTimeout(() => reject(new Error('请求超时')), 30000)
           )
         ]) as { data: { date: string; is_trading_day: boolean } }
         const effectiveData = effectiveResult.data
@@ -118,7 +118,7 @@ export const SmartDateSelector = ({
         const tradingDaysResult = await Promise.race([
           screenerApi.getTradingDays(20),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('请求超时')), 10000)
+            setTimeout(() => reject(new Error('请求超时')), 30000)
           )
         ]) as { data: TradingDay[] }
         const tradingDaysData = tradingDaysResult.data

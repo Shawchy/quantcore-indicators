@@ -202,26 +202,37 @@ class StrategyOptimizer:
         n_iterations: int = 20,
         method: str = "bayesian"
     ) -> OptimizationResult:
+        """
+        优化策略参数（按需加载数据）
+        
+        优化策略：
+        1. 只拉取指定股票的 K 线数据
+        2. 数据保存到数据库后，下次优化直接使用
+        3. 不会批量拉取多只股票数据
+        """
         from app.core.backtest import BacktestEngine
         from app.adapters import data_source_manager
+        from app.services.data_persistence import data_persistence
         import pandas as pd
         import asyncio
+        
+        # 按需拉取单只股票数据
+        logger.info(f"开始优化 {code} 的策略参数，日期范围：{start_date} - {end_date}")
         
         klines = asyncio.run(
             data_source_manager.get_kline(code, start_date, end_date, "qfq")
         )
         
-        # 持久化保存到数据库和 Parquet
+        # 持久化保存到数据库
         if klines:
-            from app.services.data_persistence import data_persistence
             try:
-                # 使用 asyncio.run() 运行异步函数
                 asyncio.run(data_persistence.save_klines(code, klines, "qfq"))
-                logger.info(f"回测优化：已保存 {len(klines)} 条 K 线数据：{code}")
+                logger.info(f"已保存 {len(klines)} 条 K 线数据：{code}")
             except Exception as e:
-                logger.warning(f"回测优化：保存 K 线数据失败：{e}")
+                logger.warning(f"保存 K 线数据失败：{e}")
         
         if not klines:
+            logger.warning(f"无法获取 K 线数据：{code}")
             return OptimizationResult(
                 best_params={},
                 best_score=0,

@@ -12,9 +12,16 @@ from .base import (
     StockBasicInfo,
     KLineData,
     SectorInfo,
-    ChipData
+    ChipData,
+    BillboardEntry,
+    BoardInfo,
+    ShareholderInfo,
+    IndexComponent,
+    CapitalFlowItem,
+    MarketQuote
 )
 from app.utils.data_validator import validator
+from app.utils.tushare_cache_stats import api_call_cache
 
 
 class AkShareAdapter(BaseDataAdapter):
@@ -224,18 +231,22 @@ class AkShareAdapter(BaseDataAdapter):
                 )
             
             klines = []
+            prev_close = None
             for row in df.itertuples(index=False):
+                current_close = float(row.收盘)
                 klines.append(KLineData(
                     code=code,
                     date=self.format_date(str(row.日期)),
                     open=float(row.开盘),
                     high=float(row.最高),
                     low=float(row.最低),
-                    close=float(row.收盘),
+                    close=current_close,
                     volume=float(row.成交量),
                     amount=float(row.成交额) if hasattr(row, '成交额') else None,
-                    turnover_rate=float(row["换手率"]) if "换手率" in row else None
+                    turnover_rate=float(row["换手率"]) if "换手率" in row else None,
+                    pre_close=prev_close  # 上一日的收盘价
                 ))
+                prev_close = current_close
             
             # 数据验证
             is_valid, errors = validator.validate_kline(klines, code)
@@ -323,6 +334,126 @@ class AkShareAdapter(BaseDataAdapter):
             return []
         except Exception as e:
             logger.error(f"获取指数 K 线失败 {index_code}: {e}")
+            return []
+    
+    async def get_weekly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        """获取周 K 线数据（使用日线数据模拟）"""
+        # akshare 周 K 数据：period="weekly"
+        try:
+            cache_key = self._get_cache_key('kline_weekly', code=code, start=start_date, end=end_date, adjust=adjust)
+            cached = self._get_from_cache(cache_key, 'kline')
+            if cached:
+                return cached
+            
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else datetime(1990, 1, 1)
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime(2099, 12, 31)
+            
+            # 为了获取完整的周 K 数据，需要将开始时间往前推 1 年
+            start_dt = datetime(max(1990, start_dt.year - 1), start_dt.month, start_dt.day)
+            start_date = start_dt.strftime("%Y-%m-%d")
+            
+            async with asyncio.timeout(10):
+                df = ak.stock_zh_a_hist(
+                    symbol=code,
+                    period="weekly",
+                    start_date=start_date.replace("-", "") if start_date else "19900101",
+                    end_date=end_date.replace("-", "") if end_date else "20991231",
+                    adjust=adjust_type
+                )
+            
+            if df.empty:
+                return []
+            
+            klines = []
+            prev_close = None
+            for row in df.itertuples(index=False):
+                current_close = float(row.收盘)
+                klines.append(KLineData(
+                    code=code,
+                    date=self.format_date(str(row.日期)),
+                    open=float(row.开盘),
+                    high=float(row.最高),
+                    low=float(row.最低),
+                    close=current_close,
+                    volume=float(row.成交量),
+                    amount=float(row.成交额) if hasattr(row, '成交额') else None,
+                    turnover_rate=float(row["换手率"]) if "换手率" in row else None,
+                    pre_close=prev_close  # 上一周的收盘价
+                ))
+                prev_close = current_close
+            
+            self._set_to_cache(cache_key, klines, 'kline')
+            logger.info(f"获取周 K 线数据成功 {code}: {len(klines)}条")
+            return klines
+            
+        except Exception as e:
+            logger.error(f"获取周 K 线数据失败 {code}: {e}")
+            return []
+    
+    async def get_monthly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        """获取月 K 线数据（使用日线数据模拟）"""
+        # akshare 月 K 数据：period="monthly"
+        try:
+            cache_key = self._get_cache_key('kline_monthly', code=code, start=start_date, end=end_date, adjust=adjust)
+            cached = self._get_from_cache(cache_key, 'kline')
+            if cached:
+                return cached
+            
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else datetime(1990, 1, 1)
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else datetime(2099, 12, 31)
+            
+            # 为了获取完整的月 K 数据，需要将开始时间往前推 5 年
+            start_dt = datetime(max(1990, start_dt.year - 5), start_dt.month, start_dt.day)
+            start_date = start_dt.strftime("%Y-%m-%d")
+            
+            async with asyncio.timeout(10):
+                df = ak.stock_zh_a_hist(
+                    symbol=code,
+                    period="monthly",
+                    start_date=start_date.replace("-", "") if start_date else "19900101",
+                    end_date=end_date.replace("-", "") if end_date else "20991231",
+                    adjust=adjust_type
+                )
+            
+            if df.empty:
+                return []
+            
+            klines = []
+            prev_close = None
+            for row in df.itertuples(index=False):
+                current_close = float(row.收盘)
+                klines.append(KLineData(
+                    code=code,
+                    date=self.format_date(str(row.日期)),
+                    open=float(row.开盘),
+                    high=float(row.最高),
+                    low=float(row.最低),
+                    close=current_close,
+                    volume=float(row.成交量),
+                    amount=float(row.成交额) if hasattr(row, '成交额') else None,
+                    turnover_rate=float(row["换手率"]) if "换手率" in row else None,
+                    pre_close=prev_close  # 上一月的收盘价
+                ))
+                prev_close = current_close
+            
+            self._set_to_cache(cache_key, klines, 'kline')
+            logger.info(f"获取月 K 线数据成功 {code}: {len(klines)}条")
+            return klines
+            
+        except Exception as e:
+            logger.error(f"获取月 K 线数据失败 {code}: {e}")
             return []
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
@@ -1247,6 +1378,7 @@ class AkShareAdapter(BaseDataAdapter):
 
     # ========== 新增 API 方法（对应 Tushare） ==========
     
+    @api_call_cache(ttl=1800)  # 缓存 30 分钟
     async def get_weekly_kline(
         self,
         code: str,
@@ -1267,17 +1399,35 @@ class AkShareAdapter(BaseDataAdapter):
             周线 K 线数据列表
         """
         try:
-            # 使用东方财富的周线数据 API
-            async with asyncio.timeout(10):
-                df = ak.stock_zh_a_hist(
-                    symbol=code,
-                    period="weekly",
-                    start_date=start_date.replace("-", "") if start_date else "19900101",
-                    end_date=end_date.replace("-", "") if end_date else "20991231",
-                    adjust=adjust if adjust in ['qfq', 'hfq'] else ""
-                )
+            # 重试机制：最多重试 3 次
+            df = None
+            for attempt in range(3):
+                try:
+                    async with asyncio.timeout(10):
+                        # 使用东方财富的周线数据 API
+                        df = ak.stock_zh_a_hist(
+                            symbol=code,
+                            period="weekly",
+                            start_date=start_date.replace("-", "") if start_date else "19900101",
+                            end_date=end_date.replace("-", "") if end_date else "20991231",
+                            adjust=adjust if adjust in ['qfq', 'hfq'] else ""
+                        )
+                        break  # 成功则跳出
+                except asyncio.TimeoutError:
+                    if attempt < 2:
+                        logger.debug(f"获取周线数据超时，重试 {attempt+1}/3")
+                        await asyncio.sleep(0.5 * (attempt + 1))
+                    else:
+                        logger.warning(f"获取周线数据超时 {code}（重试 3 次失败）")
+                        return []
+                except Exception as retry_error:
+                    if attempt < 2:
+                        logger.debug(f"获取周线数据失败，重试 {attempt+1}/3: {retry_error}")
+                        await asyncio.sleep(0.5 * (attempt + 1))
+                    else:
+                        raise retry_error
             
-            if df.empty:
+            if df is None or df.empty:
                 return []
             
             klines = []
@@ -1294,13 +1444,11 @@ class AkShareAdapter(BaseDataAdapter):
             
             logger.info(f"获取周线数据成功 {code}: {len(klines)}条")
             return klines
-        except asyncio.TimeoutError:
-            logger.error(f"获取周线数据超时 {code}")
-            return []
         except Exception as e:
-            logger.error(f"获取周线数据失败 {code}: {e}")
+            logger.warning(f"获取周线数据失败 {code}（网络不稳定）: {e}")
             return []
 
+    @api_call_cache(ttl=1800)  # 缓存 30 分钟
     async def get_monthly_kline(
         self,
         code: str,
@@ -1318,16 +1466,34 @@ class AkShareAdapter(BaseDataAdapter):
             adjust: 复权类型
         """
         try:
-            async with asyncio.timeout(10):
-                df = ak.stock_zh_a_hist(
-                    symbol=code,
-                    period="monthly",
-                    start_date=start_date.replace("-", "") if start_date else "19900101",
-                    end_date=end_date.replace("-", "") if end_date else "20991231",
-                    adjust=adjust if adjust in ['qfq', 'hfq'] else ""
-                )
+            # 重试机制：最多重试 3 次
+            df = None
+            for attempt in range(3):
+                try:
+                    async with asyncio.timeout(10):
+                        df = ak.stock_zh_a_hist(
+                            symbol=code,
+                            period="monthly",
+                            start_date=start_date.replace("-", "") if start_date else "19900101",
+                            end_date=end_date.replace("-", "") if end_date else "20991231",
+                            adjust=adjust if adjust in ['qfq', 'hfq'] else ""
+                        )
+                        break  # 成功则跳出
+                except asyncio.TimeoutError:
+                    if attempt < 2:
+                        logger.debug(f"获取月线数据超时，重试 {attempt+1}/3")
+                        await asyncio.sleep(0.5 * (attempt + 1))
+                    else:
+                        logger.warning(f"获取月线数据超时 {code}（重试 3 次失败）")
+                        return []
+                except Exception as retry_error:
+                    if attempt < 2:
+                        logger.debug(f"获取月线数据失败，重试 {attempt+1}/3: {retry_error}")
+                        await asyncio.sleep(0.5 * (attempt + 1))
+                    else:
+                        raise retry_error
             
-            if df.empty:
+            if df is None or df.empty:
                 return []
             
             klines = []
@@ -1344,11 +1510,8 @@ class AkShareAdapter(BaseDataAdapter):
             
             logger.info(f"获取月线数据成功 {code}: {len(klines)}条")
             return klines
-        except asyncio.TimeoutError:
-            logger.error(f"获取月线数据超时 {code}")
-            return []
         except Exception as e:
-            logger.error(f"获取月线数据失败 {code}: {e}")
+            logger.warning(f"获取月线数据失败 {code}（网络不稳定）: {e}")
             return []
 
     async def get_top_list(self, trade_date: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1532,20 +1695,20 @@ class AkShareAdapter(BaseDataAdapter):
                 
                 result.append({
                     "trade_date": date_str,
-                    "close_sh": safe_float(row.get("上证-收盘价")),
-                    "pct_change_sh": safe_float(row.get("上证-涨跌幅")),
-                    "close_sz": safe_float(row.get("深证-收盘价")),
-                    "pct_change_sz": safe_float(row.get("深证-涨跌幅")),
-                    "net_amount": safe_float(row.get("主力净流入-净额")),
-                    "net_amount_rate": safe_float(row.get("主力净流入-净占比")),
-                    "buy_elg_amount": safe_float(row.get("超大单净流入-净额")),
-                    "buy_elg_amount_rate": safe_float(row.get("超大单净流入-净占比")),
-                    "buy_lg_amount": safe_float(row.get("大单净流入-净额")),
-                    "buy_lg_amount_rate": safe_float(row.get("大单净流入-净占比")),
-                    "buy_md_amount": safe_float(row.get("中单净流入-净额")),
-                    "buy_md_amount_rate": safe_float(row.get("中单净流入-净占比")),
-                    "buy_sm_amount": safe_float(row.get("小单净流入-净额")),
-                    "buy_sm_amount_rate": safe_float(row.get("小单净流入-净占比")),
+                    "close_sh": safe_float(getattr(row, '上证-收盘价', None)),
+                    "pct_change_sh": safe_float(getattr(row, '上证-涨跌幅', None)),
+                    "close_sz": safe_float(getattr(row, '深证-收盘价', None)),
+                    "pct_change_sz": safe_float(getattr(row, '深证-涨跌幅', None)),
+                    "net_amount": safe_float(getattr(row, '主力净流入-净额', None)),
+                    "net_amount_rate": safe_float(getattr(row, '主力净流入-净占比', None)),
+                    "buy_elg_amount": safe_float(getattr(row, '超大单净流入-净额', None)),
+                    "buy_elg_amount_rate": safe_float(getattr(row, '超大单净流入-净占比', None)),
+                    "buy_lg_amount": safe_float(getattr(row, '大单净流入-净额', None)),
+                    "buy_lg_amount_rate": safe_float(getattr(row, '大单净流入-净占比', None)),
+                    "buy_md_amount": safe_float(getattr(row, '中单净流入-净额', None)),
+                    "buy_md_amount_rate": safe_float(getattr(row, '中单净流入-净占比', None)),
+                    "buy_sm_amount": safe_float(getattr(row, '小单净流入-净额', None)),
+                    "buy_sm_amount_rate": safe_float(getattr(row, '小单净流入-净占比', None)),
                 })
             
             logger.info(f"获取大盘资金流向数据成功：{len(result)}条")
@@ -1555,4 +1718,175 @@ class AkShareAdapter(BaseDataAdapter):
             return []
         except Exception as e:
             logger.error(f"获取大盘资金流向数据失败：{e}")
+            return []
+    
+    async def get_daily_billboard(self, trade_date: Optional[str] = None) -> List[BillboardEntry]:
+        """获取龙虎榜单数据（使用东方财富 API）"""
+        try:
+            date_str = trade_date if trade_date else datetime.now().strftime("%Y%m%d")
+            
+            async with asyncio.timeout(10):
+                df = ak.stock_lhb_detail_em(trade_date=date_str)
+            
+            if df.empty:
+                return []
+            
+            entries = []
+            for row in df.itertuples(index=False):
+                entries.append(BillboardEntry(
+                    code=getattr(row, '代码', ''),
+                    name=getattr(row, '名称', ''),
+                    close_price=float(getattr(row, '收盘价', 0) or 0),
+                    change_pct=float(getattr(row, '涨跌幅', 0) or 0),
+                    turnover_amount=float(getattr(row, '成交额', 0) or 0),
+                    net_amount=float(getattr(row, '净额', 0) or 0),
+                    buy_amount=float(getattr(row, '买入额', 0) or 0),
+                    sell_amount=float(getattr(row, '卖出额', 0) or 0),
+                    reason='',
+                    trade_date=trade_date or ''
+                ))
+            
+            logger.info(f"获取龙虎榜数据成功：{len(entries)}条")
+            return entries
+        except asyncio.TimeoutError:
+            logger.error("获取龙虎榜数据超时")
+            return []
+        except Exception as e:
+            logger.error(f"获取龙虎榜数据失败：{e}")
+            return []
+    
+    async def get_belong_board(self, code: str) -> List[BoardInfo]:
+        """获取股票所属板块（暂不支持）"""
+        logger.warning(f"AkShare 暂不支持获取股票所属板块 {code}")
+        return []
+    
+    async def get_members(self, index_code: str) -> List[IndexComponent]:
+        """获取指数成分股（暂不支持）"""
+        logger.warning(f"AkShare 暂不支持获取指数成分股 {index_code}")
+        return []
+    
+    async def get_today_bill(self, trade_date: Optional[str] = None) -> List[CapitalFlowItem]:
+        """获取当日资金流向（暂不支持）"""
+        logger.warning(f"AkShare 暂不支持获取当日资金流向 {trade_date}")
+        return []
+    
+    async def get_history_bill(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[CapitalFlowItem]:
+        """获取历史资金流向（使用东方财富 API）"""
+        try:
+            async with asyncio.timeout(10):
+                df = ak.stock_individual_fund_flow(symbol=code)
+            
+            if df.empty:
+                return []
+            
+            flows = []
+            for row in df.itertuples(index=False):
+                date = str(getattr(row, '日期', ''))
+                if len(date) == 10:
+                    date = date.replace('-', '')
+                
+                if start_date and date < start_date:
+                    continue
+                if end_date and date > end_date:
+                    continue
+                
+                def safe_float(val):
+                    try:
+                        return float(val) if val is not None and str(val) not in ['', '-', 'None', 'nan'] else None
+                    except (ValueError, TypeError):
+                        return None
+                
+                flows.append(CapitalFlowItem(
+                    code=code,
+                    name='',
+                    close_price=safe_float(getattr(row, '收盘价', None)),
+                    change_pct=safe_float(getattr(row, '涨跌幅', None)),
+                    main_net_amount=safe_float(getattr(row, '主力净流入', None)),
+                    main_net_amount_rate=safe_float(getattr(row, '主力净流入占比', None)),
+                    buy_elg_amount=safe_float(getattr(row, '超大单净流入', None)),
+                    buy_lg_amount=safe_float(getattr(row, '大单净流入', None)),
+                    buy_md_amount=safe_float(getattr(row, '中单净流入', None)),
+                    buy_sm_amount=safe_float(getattr(row, '小单净流入', None)),
+                    trade_date=date
+                ))
+            
+            logger.info(f"获取 {code} 历史资金流向成功：{len(flows)}条")
+            return flows
+        except asyncio.TimeoutError:
+            logger.error(f"获取资金流向数据超时 {code}")
+            return []
+        except Exception as e:
+            logger.error(f"获取资金流向数据失败 {code}: {e}")
+            return []
+    
+    async def get_top10_stock_holder_info(self, code: str) -> List[ShareholderInfo]:
+        """获取前十大股东信息（暂不支持）"""
+        logger.warning(f"AkShare 暂不支持获取前十大股东信息 {code}")
+        return []
+    
+    async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:
+        """获取市场实时行情（使用东方财富 API）"""
+        try:
+            # 使用东方财富实时行情 API
+            if market_types:
+                # 如果指定了市场类型，调用对应 API
+                if '沪深 A 股' in market_types or market_types == ['沪深 A 股']:
+                    df = ak.stock_zh_a_spot_em()
+                elif '创业板' in market_types:
+                    df = ak.stock_cy_a_spot_em()
+                elif '科创板' in market_types:
+                    df = ak.stock_kc_a_spot_em()
+                else:
+                    # 默认获取沪深 A 股
+                    df = ak.stock_zh_a_spot_em()
+            else:
+                # 默认获取沪深 A 股
+                df = ak.stock_zh_a_spot_em()
+            
+            if df.empty:
+                return []
+            
+            quotes = []
+            for row in df.itertuples(index=False):
+                def safe_float(value, default=None):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                code = str(getattr(row, '代码', '')).zfill(6)
+                if not code:
+                    continue
+                
+                quotes.append(MarketQuote(
+                    code=code,
+                    name=getattr(row, '名称', ''),
+                    change_pct=safe_float(getattr(row, '涨跌幅', None)),
+                    price=safe_float(getattr(row, '最新价', None)),
+                    high=safe_float(getattr(row, '最高', None)),
+                    low=safe_float(getattr(row, '最低', None)),
+                    open=safe_float(getattr(row, '今开', None)),
+                    change=safe_float(getattr(row, '涨跌额', None)),
+                    turnover_rate=safe_float(getattr(row, '换手率', None)),
+                    volume_ratio=safe_float(getattr(row, '量比', None)),
+                    pe_ratio=safe_float(getattr(row, '市盈率 - 动态', None)),
+                    volume=safe_float(getattr(row, '成交量', None)),
+                    amount=safe_float(getattr(row, '成交额', None)),
+                    prev_close=safe_float(getattr(row, '昨收', None)),
+                    total_market_cap=safe_float(getattr(row, '总市值', None)),
+                    float_market_cap=safe_float(getattr(row, '流通市值', None)),
+                    market_type='A 股'
+                ))
+            
+            logger.info(f"获取市场实时行情成功：{len(quotes)}条")
+            return quotes
+        except Exception as e:
+            logger.error(f"获取市场实时行情失败：{e}")
             return []

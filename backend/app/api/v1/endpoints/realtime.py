@@ -2,10 +2,11 @@
 实时盘口 TICK 快照接口
 提供个股实时盘口数据（买一卖一等）
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional, Dict, Any, List
 import pandas as pd
 import time
+import asyncio
 from app.api.deps import OptionalCurrentUser
 from app.models.schemas import ResponseModel
 from app.storage.cache import cache_manager
@@ -16,6 +17,11 @@ router = APIRouter()
 
 if settings.TUSHARE_TOKEN:
     ts.set_token(settings.TUSHARE_TOKEN)
+
+
+# 超时时间（秒）
+REALTIME_TIMEOUT = 5  # 实时数据超时 5 秒
+TICK_TIMEOUT = 10     # 分笔成交超时 10 秒
 
 
 @router.get("/quote/{code}", response_model=ResponseModel[Dict[str, Any]])
@@ -48,9 +54,27 @@ async def get_realtime_quote(
                 message="从缓存获取数据"
             )
         
-        # 获取实时数据
+        # 获取实时数据（添加超时控制）
         start_time = time.time()
-        df = ts.realtime_quote(ts_code=code, src=src)
+        try:
+            # 使用 asyncio.wait_for 添加超时控制
+            df = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: ts.realtime_quote(ts_code=code, src=src)
+                ),
+                timeout=REALTIME_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail=f"获取实时数据超时（{REALTIME_TIMEOUT}秒），请重试或切换数据源"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"获取数据失败：{str(e)}"
+            )
+        
         elapsed = time.time() - start_time
         
         if df is None or len(df) == 0:
@@ -150,9 +174,27 @@ async def get_realtime_tick_data(
                 message="从缓存获取数据"
             )
         
-        # 获取实时成交数据
+        # 获取实时成交数据（添加超时控制）
         start_time = time.time()
-        df = ts.realtime_tick(ts_code=code, src=src)
+        try:
+            # 使用 asyncio.wait_for 添加超时控制
+            df = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: ts.realtime_tick(ts_code=code, src=src)
+                ),
+                timeout=TICK_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail=f"获取成交数据超时（{TICK_TIMEOUT}秒），请重试或切换数据源"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"获取数据失败：{str(e)}"
+            )
+        
         elapsed = time.time() - start_time
         
         if df is None or len(df) == 0:

@@ -23,47 +23,106 @@ class StockService:
         self.indicator_calc = IndicatorCalculator()
     
     async def get_stock_basic(self, code: str) -> Dict[str, Any]:
+        """
+        获取股票基本信息（优先从数据库/缓存获取）
+        
+        优先级：
+        1. 内存缓存（最快）
+        2. 数据库（本地存储）
+        3. 数据源（最后选择，受频率限制）
+        """
+        # L1: 内存缓存
         cache_key = f"stock_basic_{code}"
         cached = await cache_manager.get("kline", cache_key)
         if cached:
+            logger.debug(f"从缓存获取股票信息：{code}")
             return cached
         
-        async with get_session() as session:
-            result = await session.execute(
-                select(StockInfo).where(StockInfo.code == code)
-            )
-            stock = result.scalar_one_or_none()
-            
-            if stock:
-                data = {
-                    "code": stock.code,
-                    "name": stock.name,
-                    "market": stock.market,
-                    "industry": stock.industry,
-                    "sector": stock.sector,
-                    "area": stock.area,
-                    "list_date": stock.list_date,
-                    "total_shares": stock.total_shares,
-                    "float_shares": stock.float_shares
-                }
-                await cache_manager.set("kline", cache_key, data)
-                return data
+        # L2: 数据库
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(StockInfo).where(StockInfo.code == code)
+                )
+                stock = result.scalar_one_or_none()
+                
+                if stock:
+                    data = {
+                        "code": stock.code,
+                        "name": stock.name,
+                        "market": stock.market,
+                        "industry": stock.industry,
+                        "sector": stock.sector,
+                        "area": stock.area,
+                        "list_date": stock.list_date,
+                        "total_shares": stock.total_shares,
+                        "float_shares": stock.float_shares
+                    }
+                    # 更新缓存
+                    await cache_manager.set("kline", cache_key, data, ttl=3600)  # 1 小时
+                    logger.debug(f"从数据库获取股票信息：{code}")
+                    return data
+        except Exception as e:
+            logger.warning(f"从数据库读取股票信息失败 {code}: {e}")
         
-        stock_info = await data_source_manager.get_stock_info(code)
-        if stock_info:
-            return {
-                "code": stock_info.code,
-                "name": stock_info.name,
-                "market": stock_info.market,
-                "industry": stock_info.industry,
-                "sector": stock_info.sector,
-                "area": stock_info.area,
-                "list_date": stock_info.list_date,
-                "total_shares": stock_info.total_shares,
-                "float_shares": stock_info.float_shares
-            }
+        # L3: 数据源（最后选择）
+        try:
+            stock_info = await data_source_manager.get_stock_info(code)
+            if stock_info:
+                data = {
+                    "code": stock_info.code,
+                    "name": stock_info.name,
+                    "market": stock_info.market,
+                    "industry": stock_info.industry,
+                    "sector": stock_info.sector,
+                    "area": stock_info.area,
+                    "list_date": stock_info.list_date,
+                    "total_shares": stock_info.total_shares,
+                    "float_shares": stock_info.float_shares
+                }
+                # 异步保存到数据库和缓存
+                asyncio.create_task(self._save_stock_info_to_db(code, data))
+                logger.debug(f"从数据源获取股票信息：{code}")
+                return data
+        except Exception as e:
+            logger.error(f"从数据源获取股票信息失败 {code}: {e}")
+            # 如果数据源失败，检查是否有缓存的旧数据
+            old_cached = await cache_manager.get("kline", cache_key)
+            if old_cached:
+                logger.warning(f"使用缓存的旧数据：{code}")
+                return old_cached
         
         raise DataNotFoundException(f"股票 {code} 不存在")
+    
+    async def _save_stock_info_to_db(self, code: str, data: Dict[str, Any]):
+        """异步保存股票信息到数据库"""
+        try:
+            async with get_session() as session:
+                # 检查是否已存在
+                result = await session.execute(
+                    select(StockInfo).where(StockInfo.code == code)
+                )
+                if result.scalar_one_or_none():
+                    logger.debug(f"股票信息已存在，跳过保存：{code}")
+                    return
+                
+                # 保存新记录
+                stock = StockInfo(
+                    code=code,
+                    name=data["name"],
+                    market=data.get("market", ""),
+                    industry=data.get("industry"),
+                    sector=data.get("sector"),
+                    area=data.get("area"),
+                    list_date=data.get("list_date"),
+                    total_shares=data.get("total_shares"),
+                    float_shares=data.get("float_shares")
+                )
+                session.add(stock)
+                await session.commit()
+                logger.info(f"保存股票信息到数据库：{code}")
+        except Exception as e:
+            logger.warning(f"保存股票信息到数据库失败 {code}: {e}")
     
     async def get_kline(
         self,
@@ -76,71 +135,33 @@ class StockService:
         priority_load: bool = True
     ) -> Dict[str, Any]:
         """
-        获取 K 线数据（支持分层加载）
+        获取 K 线数据（按需加载）
+        
+        策略：
+        1. 优先从数据库缓存读取
+        2. 如果数据库没有，才从数据源拉取
+        3. 拉取后保存到数据库供后续使用
         
         Returns:
             {
-                "status": "partial" | "complete",
+                "status": "complete",
                 "data": [...],
-                "coverage": {...},
-                "background_loading": True | False
+                "coverage": None,
+                "background_loading": False
             }
         """
-        # 如果指定了日期范围或禁用优先加载，使用传统方式
-        if start_date or end_date or not priority_load:
-            klines = await self._load_kline_traditional(
-                code, start_date, end_date, adjust, use_cache, persist
-            )
-            return {
-                "status": "complete",
-                "data": klines,
-                "coverage": None,
-                "background_loading": False
-            }
-        
-        # 启用优先加载模式
-        return await self._load_kline_priority(code, adjust, persist)
+        # 按需加载：先查数据库，没有才拉取
+        klines = await self._load_kline_on_demand(
+            code, start_date, end_date, adjust, use_cache, persist
+        )
+        return {
+            "status": "complete",
+            "data": klines,
+            "coverage": None,
+            "background_loading": False
+        }
     
-    async def _load_kline_priority(self, code: str, adjust: str, persist: bool) -> Dict[str, Any]:
-        """优先加载本月和本年数据"""
-        try:
-            # 第一优先：加载本月数据
-            progress = await data_loader.load_kline_priority(
-                code=code,
-                data_source_manager=data_source_manager,
-                data_persistence=data_persistence,
-                priority=LoadPriority.CURRENT_MONTH
-            )
-            
-            # 处理数据
-            df = pd.DataFrame(progress.data)
-            if not df.empty:
-                df = self.processor.process_kline(df)
-                result = df.to_dict("records")
-            else:
-                result = []
-            
-            return {
-                "status": progress.status,
-                "data": result,
-                "coverage": progress.coverage,
-                "background_loading": progress.background_loading,
-                "total_expected": progress.total_expected,
-                "loaded": progress.loaded
-            }
-            
-        except Exception as e:
-            logger.error(f"优先加载失败 {code}: {e}")
-            # 降级到传统方式
-            klines = await self._load_kline_traditional(code, None, None, adjust, True, persist)
-            return {
-                "status": "complete",
-                "data": klines,
-                "coverage": None,
-                "background_loading": False
-            }
-    
-    async def _load_kline_traditional(
+    async def _load_kline_on_demand(
         self,
         code: str,
         start_date: Optional[str],
@@ -149,39 +170,52 @@ class StockService:
         use_cache: bool,
         persist: bool
     ) -> List[Dict[str, Any]]:
-        """传统方式加载全部数据"""
+        """
+        按需加载 K 线数据（Lazy Loading）
+        
+        加载策略：
+        1. 优先从数据库读取（已缓存的数据）
+        2. 如果数据库没有或数据不足，才从数据源拉取
+        3. 拉取的数据保存到数据库，下次直接使用
+        """
         cache_key = f"kline_{code}_{start_date}_{end_date}_{adjust}"
         
+        # 1. 尝试从缓存读取
         if use_cache:
             cached = await cache_manager.get("kline", cache_key)
             if cached:
-                logger.info(f"从缓存读取 {len(cached)} 条 K 线：{code}, 日期范围：{start_date} - {end_date}")
+                logger.info(f"缓存命中：{code}, {len(cached)} 条")
                 return cached
         
+        # 2. 从数据库读取
         db_klines = await data_persistence.get_klines_from_db(
             code, start_date, end_date, adjust
         )
         
-        logger.info(f"数据库查询结果：{len(db_klines) if db_klines else 0} 条，日期范围：{start_date} - {end_date}")
-        
         if db_klines and len(db_klines) >= 100:
+            # 数据库有足够数据，直接使用
+            logger.info(f"数据库命中：{code}, {len(db_klines)} 条")
             klines = db_klines
-            logger.info(f"从本地数据库读取 {len(klines)} 条 K 线：{code}")
         else:
-            logger.info(f"数据库数据不足，从数据源获取：{code}, 日期范围：{start_date} - {end_date}")
+            # 3. 数据库不足，从数据源拉取
+            logger.info(f"数据库不足，从数据源拉取：{code}")
             klines = await data_source_manager.get_kline(code, start_date, end_date, adjust)
-            logger.info(f"数据源返回 {len(klines) if klines else 0} 条 K 线：{code}")
             
-            if persist and klines:
+            if not klines:
+                logger.warning(f"数据源返回空数据：{code}")
+                raise DataNotFoundException(f"股票 {code} K 线数据不存在")
+            
+            logger.info(f"从数据源拉取 {len(klines)} 条：{code}")
+            
+            # 4. 保存到数据库（如果启用持久化）
+            if persist:
                 try:
                     await data_persistence.save_klines(code, klines, adjust)
-                    logger.info(f"保存 {len(klines)} 条 K 线数据到数据库：{code}")
+                    logger.info(f"已保存到数据库：{code}, {len(klines)} 条")
                 except Exception as e:
-                    logger.warning(f"保存 K 线数据失败：{e}")
+                    logger.warning(f"保存失败：{e}")
         
-        if not klines:
-            raise DataNotFoundException(f"股票 {code} K 线数据不存在")
-        
+        # 5. 处理数据并返回
         df = pd.DataFrame([{
             "date": k.date,
             "open": k.open,
@@ -194,15 +228,31 @@ class StockService:
         } for k in klines])
         
         df = self.processor.process_kline(df)
-        
         result = df.to_dict("records")
         
+        # 6. 更新缓存
         if use_cache:
             await cache_manager.set("kline", cache_key, result)
         
-        logger.info(f"返回 {len(result)} 条 K 线数据：{code}")
-        
         return result
+    
+    async def _load_kline_priority(self, code: str, adjust: str, persist: bool) -> Dict[str, Any]:
+        """优先加载本月和本年数据（已废弃，保留兼容）"""
+        logger.warning("_load_kline_priority 已废弃，使用 _load_kline_on_demand")
+        return await self._load_kline_on_demand(code, None, None, adjust, True, persist)
+    
+    async def _load_kline_traditional(
+        self,
+        code: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        adjust: str,
+        use_cache: bool,
+        persist: bool
+    ) -> List[Dict[str, Any]]:
+        """传统方式加载全部数据（已废弃，保留兼容）"""
+        logger.warning("_load_kline_traditional 已废弃，使用 _load_kline_on_demand")
+        return await self._load_kline_on_demand(code, start_date, end_date, adjust, use_cache, persist)
     
     async def get_technical_indicators(
         self,
@@ -247,18 +297,24 @@ class StockService:
         """
         获取实时行情（三级缓存优化）
         
-        L1: 内存缓存 (60 秒)
-        L2: 数据库缓存 (永久，直到更新)
-        L3: 数据源实时拉取
+        L1: 内存缓存 (60 秒) - 最快
+        L2: 数据库缓存 (永久，直到更新) - 次快
+        L3: 数据源实时拉取 - 最慢，受频率限制
+        
+        优先级策略：
+        1. 优先使用缓存，避免触发数据源频率限制
+        2. 数据源失败时，降级使用旧缓存
+        3. 异步更新缓存，不阻塞返回
         """
         cache_key = f"realtime_{code}"
         
-        # L1: 检查内存缓存
+        # L1: 检查内存缓存（最快）
         cached = await cache_manager.get("realtime", cache_key)
         if cached:
+            logger.debug(f"从内存缓存获取实时行情：{code}")
             return cached
         
-        # L2: 检查数据库缓存
+        # L2: 检查数据库缓存（次快）
         try:
             async with get_session() as session:
                 result = await session.execute(
@@ -284,7 +340,7 @@ class StockService:
                         "quote_time": db_quote.quote_time,
                     }
                     
-                    # 更新内存缓存
+                    # 更新内存缓存（60 秒）
                     await cache_manager.set("realtime", cache_key, quote, ttl=60)
                     
                     logger.debug(f"从数据库获取实时行情：{code}")
@@ -292,7 +348,7 @@ class StockService:
         except Exception as e:
             logger.warning(f"从数据库读取实时行情失败 {code}: {e}")
         
-        # L3: 从数据源获取
+        # L3: 从数据源获取（最后选择）
         try:
             quote = await data_source_manager.get_realtime_quote(code)
             
@@ -310,6 +366,12 @@ class StockService:
             
         except Exception as e:
             logger.error(f"获取实时行情失败 {code}: {e}")
+            # 降级策略：如果数据源失败，检查是否有旧缓存
+            old_cached = await cache_manager.get("realtime", cache_key)
+            if old_cached:
+                logger.warning(f"使用缓存的旧实时行情：{code}")
+                return old_cached
+            
             raise DataNotFoundException(f"股票 {code} 实时行情获取失败：{e}")
     
     async def _save_realtime_quote_to_db(self, code: str, quote: Dict[str, Any]):
@@ -500,96 +562,126 @@ class StockService:
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = "qfq"
+        adjust: str = "qfq",
+        use_cache: bool = True,
+        persist: bool = True
     ) -> List[KLineData]:
         """
-        获取周线 K 线数据
+        获取周线 K 线数据（支持缓存和持久化）
         
         Args:
             code: 股票代码
             start_date: 开始日期
             end_date: 结束日期
             adjust: 复权类型
+            use_cache: 是否使用缓存
+            persist: 是否持久化到数据库
             
         Returns:
             周线 K 线数据列表
         """
-        from app.adapters.factory import get_data_source
+        cache_key = f"kline_weekly_{code}_{start_date}_{end_date}_{adjust}"
         
-        data_source = await get_data_source()
-        return await data_source.get_weekly_kline(code, start_date, end_date, adjust)
+        # 1. 尝试从缓存读取
+        if use_cache:
+            cached = await cache_manager.get("kline", cache_key)
+            if cached:
+                logger.info(f"周线缓存命中：{code}, {len(cached)} 条")
+                return cached
+        
+        # 2. 从数据库读取
+        db_klines = await data_persistence.get_klines_from_db(
+            code, start_date, end_date, adjust
+        )
+        
+        if db_klines and len(db_klines) >= 50:
+            # 数据库有足够数据，直接使用
+            logger.info(f"周线数据库命中：{code}, {len(db_klines)} 条")
+            klines = db_klines
+        else:
+            # 3. 数据库不足，从数据源拉取
+            logger.info(f"周线数据库不足，从数据源拉取：{code}")
+            try:
+                klines = await data_source_manager.get_weekly_kline(code, start_date, end_date, adjust)
+            except PermissionError as pe:
+                logger.warning(f"周线数据权限不足 {code}，已自动切换备选数据源：{pe}")
+                klines = []
+            except Exception as e:
+                logger.error(f"获取周线数据失败 {code}: {e}")
+                klines = []
+            
+            # 4. 保存到数据库（如果启用持久化）
+            if persist and klines:
+                await data_persistence.save_klines(code, klines, adjust)
+        
+        # 5. 更新缓存
+        if use_cache and klines:
+            await cache_manager.set("kline", cache_key, klines)
+        
+        return klines
     
     async def get_monthly_kline(
         self,
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = "qfq"
+        adjust: str = "qfq",
+        use_cache: bool = True,
+        persist: bool = True
     ) -> List[KLineData]:
         """
-        获取月线 K 线数据
+        获取月线 K 线数据（支持缓存和持久化）
         
         Args:
             code: 股票代码
             start_date: 开始日期
             end_date: 结束日期
             adjust: 复权类型
+            use_cache: 是否使用缓存
+            persist: 是否持久化到数据库
             
         Returns:
             月线 K 线数据列表
         """
-        from app.adapters.factory import get_data_source
+        cache_key = f"kline_monthly_{code}_{start_date}_{end_date}_{adjust}"
         
-        data_source = await get_data_source()
-        return await data_source.get_monthly_kline(code, start_date, end_date, adjust)
-    
-    async def get_top_list(self, trade_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        获取龙虎榜数据
+        # 1. 尝试从缓存读取
+        if use_cache:
+            cached = await cache_manager.get("kline", cache_key)
+            if cached:
+                logger.info(f"月线缓存命中：{code}, {len(cached)} 条")
+                return cached
         
-        Args:
-            trade_date: 交易日期
+        # 2. 从数据库读取
+        db_klines = await data_persistence.get_klines_from_db(
+            code, start_date, end_date, adjust
+        )
+        
+        if db_klines and len(db_klines) >= 20:
+            # 数据库有足够数据，直接使用
+            logger.info(f"月线数据库命中：{code}, {len(db_klines)} 条")
+            klines = db_klines
+        else:
+            # 3. 数据库不足，从数据源拉取
+            logger.info(f"月线数据库不足，从数据源拉取：{code}")
+            try:
+                klines = await data_source_manager.get_monthly_kline(code, start_date, end_date, adjust)
+            except PermissionError as pe:
+                logger.warning(f"月线数据权限不足 {code}，已自动切换备选数据源：{pe}")
+                klines = []
+            except Exception as e:
+                logger.error(f"获取月线数据失败 {code}: {e}")
+                klines = []
             
-        Returns:
-            龙虎榜数据列表
-        """
-        from app.adapters.factory import get_data_source
+            # 4. 保存到数据库（如果启用持久化）
+            if persist and klines:
+                await data_persistence.save_klines(code, klines, adjust)
         
-        data_source = await get_data_source()
-        return await data_source.get_top_list(trade_date)
-    
-    async def get_forecast(self, code: str, ann_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        获取业绩预告数据
+        # 5. 更新缓存
+        if use_cache and klines:
+            await cache_manager.set("kline", cache_key, klines)
         
-        Args:
-            code: 股票代码
-            ann_date: 公告日期
-            
-        Returns:
-            业绩预告数据列表
-        """
-        from app.adapters.factory import get_data_source
-        
-        data_source = await get_data_source()
-        return await data_source.get_forecast(code, ann_date)
-    
-    async def get_moneyflow(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        获取资金流向数据
-        
-        Args:
-            code: 股票代码
-            start_date: 开始日期
-            end_date: 结束日期
-            
-        Returns:
-            资金流向数据列表
-        """
-        from app.adapters.factory import get_data_source
-        
-        data_source = await get_data_source()
-        return await data_source.get_moneyflow(code, start_date, end_date)
+        return klines
 
 
 # 单例

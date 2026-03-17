@@ -2,83 +2,57 @@
  * 市场排行榜页面
  * 显示实时涨跌幅排名、市场情绪等
  */
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   Box, Flex, Grid, GridItem, Text, Select, Button, Spinner,
   Alert, AlertIcon, AlertTitle, Badge, HStack, Stat, StatLabel, StatNumber, StatHelpText
 } from '@chakra-ui/react'
 import { RepeatIcon } from '@chakra-ui/icons'
+import { useQuery } from '@tanstack/react-query'
 import { marketApi } from '../services/api'
 import type { MarketRankingData, MarketOverviewData } from '../types'
 import MarketSentimentCard from '../components/MarketSentimentCard'
 import StockRankingTable from '../components/StockRankingTable'
 
 const MarketRankingPage: React.FC = () => {
-  const [marketData, setMarketData] = useState<MarketRankingData | null>(null)
-  const [overviewData, setOverviewData] = useState<MarketOverviewData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingOverview, setLoadingOverview] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [dataSource, setDataSource] = useState('sina')
   const [topN, setTopN] = useState(50)
-  const [lastUpdateTime, setLastUpdateTime] = useState<string>('')
 
-  // 获取市场排行榜数据
-  const fetchMarketRanking = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await marketApi.getRanking(topN, dataSource) as unknown as { success?: boolean; data?: MarketRankingData; message?: string }
-      
-      if (response.success && response.data) {
-        setMarketData(response.data)
-        setLastUpdateTime(new Date().toLocaleTimeString())
-      } else {
-        setError(response.message || '获取数据失败')
-      }
-    } catch (err: unknown) {
-      // eslint-disable-next-line no-console
-      console.error('获取市场排行榜失败:', err)
-      setError(err instanceof Error ? err.message : '网络错误')
-    } finally {
-      setLoading(false)
-    }
+  // 使用 React Query 获取市场排行榜数据（自动缓存和去重）
+  const { 
+    data: marketData, 
+    isLoading: loading, 
+    error: rankingError,
+    refetch: refetchRanking 
+  } = useQuery({
+    queryKey: ['marketRanking', dataSource, topN],
+    queryFn: () => marketApi.getRanking(topN, dataSource),
+    staleTime: 30000,  // 30 秒内使用缓存
+    gcTime: 120000,    // 缓存 2 分钟
+    refetchOnWindowFocus: false,
+  })
+
+  // 使用 React Query 获取市场概览数据（自动缓存和去重）
+  const { 
+    data: overviewData, 
+    isLoading: loadingOverview,
+    refetch: refetchOverview 
+  } = useQuery({
+    queryKey: ['marketOverview'],
+    queryFn: () => marketApi.getOverview(),
+    staleTime: 30000,  // 30 秒内使用缓存
+    gcTime: 120000,    // 缓存 2 分钟
+    refetchOnWindowFocus: false,
+    refetchInterval: 60000, // 60 秒自动刷新
+  })
+
+  // 手动刷新
+  const handleRefresh = () => {
+    refetchRanking()
   }
-
-  // 获取市场概览数据
-  const fetchMarketOverview = async () => {
-    try {
-      setLoadingOverview(true)
-      const response = await marketApi.getOverview() as unknown as { success?: boolean; data?: MarketOverviewData }
-      
-      if (response.success && response.data) {
-        setOverviewData(response.data)
-      }
-    } catch (err: unknown) {
-      // eslint-disable-next-line no-console
-      console.error('获取市场概览失败:', err instanceof Error ? err.message : err)
-    } finally {
-      setLoadingOverview(false)
-    }
-  }
-
-  // 初始加载
-  useEffect(() => {
-    fetchMarketRanking()
-    fetchMarketOverview()
-  }, [dataSource, topN])
-
-  // 自动刷新（每 60 秒）
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchMarketOverview() // 只刷新概览数据
-    }, 60000)
-    
-    return () => clearInterval(interval)
-  }, [])
 
   // 渲染加载状态
-  if (loading && !marketData) {
+  if (loading && !marketData?.data) {
     return (
       <Flex justify="center" align="center" h="400px">
         <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
@@ -87,18 +61,22 @@ const MarketRankingPage: React.FC = () => {
   }
 
   // 渲染错误状态
-  if (error && !marketData) {
+  if (rankingError && !marketData?.data) {
     return (
       <Alert status="error" borderRadius="lg" p={6}>
         <AlertIcon />
         <AlertTitle mr={2}>获取数据失败</AlertTitle>
-        {error}
-        <Button size="sm" colorScheme="red" ml={4} onClick={fetchMarketRanking}>
+        {rankingError instanceof Error ? rankingError.message : '未知错误'}
+        <Button size="sm" colorScheme="red" ml={4} onClick={handleRefresh}>
           重试
         </Button>
       </Alert>
     )
   }
+
+  const rankingData = marketData?.data as MarketRankingData | undefined
+  const overview = overviewData?.data as MarketOverviewData | undefined
+  const lastUpdateTime = new Date().toLocaleTimeString()
 
   return (
     <Box>
@@ -139,7 +117,7 @@ const MarketRankingPage: React.FC = () => {
             size="sm"
             colorScheme="blue"
             leftIcon={<RepeatIcon />}
-            onClick={fetchMarketRanking}
+            onClick={handleRefresh}
             isLoading={loading}
           >
             刷新
@@ -154,7 +132,7 @@ const MarketRankingPage: React.FC = () => {
             <Box bg="white" p={6} borderRadius="lg" textAlign="center">
               <Spinner size="md" />
             </Box>
-          ) : overviewData ? (
+          ) : overview ? (
             <Box bg="white" p={6} borderRadius="lg" boxShadow="md">
               <Text fontWeight="bold" fontSize="lg" mb={4} color="gray.700">
                 📈 市场概览
@@ -165,30 +143,30 @@ const MarketRankingPage: React.FC = () => {
                   <StatNumber 
                     fontSize="2xl" 
                     fontWeight="bold"
-                    color={overviewData.statistics.avg_pct_change > 0 ? 'red.500' : 'green.500'}
+                    color={overview.statistics.avg_pct_change > 0 ? 'red.500' : 'green.500'}
                   >
-                    {overviewData.statistics.avg_pct_change > 0 ? '+' : ''}
-                    {overviewData.statistics.avg_pct_change.toFixed(2)}%
+                    {overview.statistics.avg_pct_change > 0 ? '+' : ''}
+                    {overview.statistics.avg_pct_change.toFixed(2)}%
                   </StatNumber>
                   <StatHelpText mb={0} fontSize="xs" color="gray.500">
-                    中位数：{overviewData.statistics.median_pct_change.toFixed(2)}%
+                    中位数：{overview.statistics.median_pct_change.toFixed(2)}%
                   </StatHelpText>
                 </Stat>
                 
                 <Stat>
                   <StatLabel fontSize="sm" color="gray.600">总成交额</StatLabel>
                   <StatNumber fontSize="2xl" fontWeight="bold" color="blue.500">
-                    {overviewData.statistics.total_amount.toFixed(2)}亿
+                    {overview.statistics.total_amount.toFixed(2)}亿
                   </StatNumber>
                   <StatHelpText mb={0} fontSize="xs" color="gray.500">
-                    平均：{overviewData.statistics.avg_amount.toFixed(2)}百万
+                    平均：{overview.statistics.avg_amount.toFixed(2)}百万
                   </StatHelpText>
                 </Stat>
                 
                 <Stat>
                   <StatLabel fontSize="sm" color="gray.600">股票数量</StatLabel>
                   <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                    {overviewData.total_stocks.toLocaleString()}
+                    {overview.total_stocks.toLocaleString()}
                   </StatNumber>
                   <StatHelpText mb={0} fontSize="xs" color="gray.500">
                     全市场
@@ -200,19 +178,19 @@ const MarketRankingPage: React.FC = () => {
                 <Text fontSize="xs" color="gray.600" mb={2}>涨跌幅分布:</Text>
                 <HStack spacing={2} flexWrap="wrap">
                   <Badge colorScheme="red" fontSize="xs" px={2} py={1}>
-                    &gt;5%: {overviewData.distribution.pct_5_plus}家
+                    &gt;5%: {overview.distribution.pct_5_plus}家
                   </Badge>
                   <Badge colorScheme="orange" fontSize="xs" px={2} py={1}>
-                    3-5%: {overviewData.distribution.pct_3_to_5}家
+                    3-5%: {overview.distribution.pct_3_to_5}家
                   </Badge>
                   <Badge colorScheme="gray" fontSize="xs" px={2} py={1}>
-                    -3~3%: {overviewData.distribution.pct_minus_3_to_3}家
+                    -3~3%: {overview.distribution.pct_minus_3_to_3}家
                   </Badge>
                   <Badge colorScheme="orange" fontSize="xs" px={2} py={1}>
-                    -5~-3%: {overviewData.distribution.pct_minus_5_to_minus_3}家
+                    -5~-3%: {overview.distribution.pct_minus_5_to_minus_3}家
                   </Badge>
                   <Badge colorScheme="green" fontSize="xs" px={2} py={1}>
-                    &lt;-5%: {overviewData.distribution.pct_minus_5}家
+                    &lt;-5%: {overview.distribution.pct_minus_5}家
                   </Badge>
                 </HStack>
               </Box>
@@ -221,11 +199,11 @@ const MarketRankingPage: React.FC = () => {
         </GridItem>
         
         <GridItem>
-          {marketData && (
+          {rankingData && (
             <MarketSentimentCard
-              stats={marketData.market_stats}
-              sentiment={marketData.sentiment}
-              totalStocks={marketData.total_stocks}
+              stats={rankingData.market_stats}
+              sentiment={rankingData.sentiment}
+              totalStocks={rankingData.total_stocks}
             />
           )}
         </GridItem>
@@ -234,9 +212,9 @@ const MarketRankingPage: React.FC = () => {
       {/* 排行榜表格 */}
       <Grid templateColumns="repeat(2, 1fr)" gap={4}>
         <GridItem>
-          {marketData && marketData.rankings.gainers.length > 0 && (
+          {rankingData && rankingData.rankings.gainers.length > 0 && (
             <StockRankingTable
-              data={marketData.rankings.gainers}
+              data={rankingData.rankings.gainers}
               type="gainers"
               showRank={true}
               maxItems={topN}
@@ -245,9 +223,9 @@ const MarketRankingPage: React.FC = () => {
         </GridItem>
         
         <GridItem>
-          {marketData && marketData.rankings.losers.length > 0 && (
+          {rankingData && rankingData.rankings.losers.length > 0 && (
             <StockRankingTable
-              data={marketData.rankings.losers}
+              data={rankingData.rankings.losers}
               type="losers"
               showRank={true}
               maxItems={topN}
@@ -259,9 +237,9 @@ const MarketRankingPage: React.FC = () => {
       {/* 成交额和换手率榜 */}
       <Grid templateColumns="repeat(2, 1fr)" gap={4} mt={4}>
         <GridItem>
-          {marketData && marketData.rankings.amount.length > 0 && (
+          {rankingData && rankingData.rankings.amount.length > 0 && (
             <StockRankingTable
-              data={marketData.rankings.amount}
+              data={rankingData.rankings.amount}
               type="amount"
               showRank={true}
               maxItems={20}
@@ -270,9 +248,9 @@ const MarketRankingPage: React.FC = () => {
         </GridItem>
         
         <GridItem>
-          {marketData && marketData.rankings.turnover.length > 0 && (
+          {rankingData && rankingData.rankings.turnover.length > 0 && (
             <StockRankingTable
-              data={marketData.rankings.turnover}
+              data={rankingData.rankings.turnover}
               type="turnover"
               showRank={true}
               maxItems={20}

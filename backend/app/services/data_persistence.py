@@ -7,7 +7,7 @@ from loguru import logger
 import asyncio
 from sqlalchemy import select, and_
 
-from app.storage.sqlite import get_session, KLine as KLineDB, StockInfo as StockInfoDB
+from app.storage.sqlite import get_session, KLine as KLineDB, StockInfo as StockInfoDB, MarketRanking as MarketRankingDB
 from app.adapters import KLineData
 from app.config import settings
 
@@ -62,6 +62,7 @@ class DataPersistence:
                     volume=k.volume,
                     amount=k.amount,
                     turnover_rate=k.turnover_rate,
+                    pre_close=k.pre_close,  # 添加昨日收盘价
                     adjust_type=adjust
                 )
                 for k in klines if k.date not in existing_dates
@@ -96,6 +97,7 @@ class DataPersistence:
                 "volume": k.volume,
                 "amount": k.amount,
                 "turnover_rate": k.turnover_rate,
+                "pre_close": k.pre_close,  # 添加昨日收盘价
                 "adjust_type": adjust
             } for k in klines])
             
@@ -155,7 +157,8 @@ class DataPersistence:
                     close=k.close,
                     volume=k.volume,
                     amount=k.amount,
-                    turnover_rate=k.turnover_rate
+                    turnover_rate=k.turnover_rate,
+                    pre_close=k.pre_close  # 读取昨日收盘价
                 )
                 for k in klines
             ]
@@ -192,7 +195,8 @@ class DataPersistence:
                     close=row["close"],
                     volume=row["volume"],
                     amount=row.get("amount"),
-                    turnover_rate=row.get("turnover_rate")
+                    turnover_rate=row.get("turnover_rate"),
+                    pre_close=row.get("pre_close")  # 读取昨日收盘价
                 )
                 for _, row in df.iterrows()
             ]
@@ -325,6 +329,137 @@ class DataPersistence:
                 "total_shares": s.total_shares,
                 "float_shares": s.float_shares
             } for s in stocks]
+    
+    async def save_market_ranking(
+        self,
+        ranking_data: Dict[str, Any],
+        ranking_type: str,
+        data_source: str
+    ) -> int:
+        """
+        保存市场排行数据到数据库
+        
+        Args:
+            ranking_data: 排行数据，包含 rankings.gainers/losers/amount/turnover
+            ranking_type: 排行类型 (gainers/losers/amount/turnover)
+            data_source: 数据源 (sina/dc)
+        
+        Returns:
+            保存的记录数
+        """
+        if not ranking_data or not ranking_data.get("rankings"):
+            return 0
+        
+        rankings = ranking_data["rankings"].get(ranking_type, [])
+        if not rankings:
+            return 0
+        
+        # 提取日期和时间
+        ranking_date = datetime.now().strftime("%Y-%m-%d")
+        ranking_time = datetime.now().strftime("%H:%M:%S")
+        
+        async with get_session() as session:
+            try:
+                # 1. 查询当天该类型是否已存在
+                existing_query = await session.execute(
+                    select(MarketRankingDB.id).where(
+                        and_(
+                            MarketRankingDB.ranking_date == ranking_date,
+                            MarketRankingDB.ranking_type == ranking_type
+                        )
+                    )
+                )
+                existing_ids = set(existing_query.scalars().all())
+                
+                # 2. 准备插入数据
+                to_insert = []
+                for rank, stock in enumerate(rankings, 1):
+                    db_ranking = MarketRankingDB(
+                        ranking_date=ranking_date,
+                        ranking_time=ranking_time,
+                        ts_code=stock.get("TS_CODE", stock.get("ts_code", "")),
+                        name=stock.get("NAME", stock.get("name", "")),
+                        price=stock.get("PRICE", stock.get("price", 0)) or 0,
+                        change=stock.get("CHANGE", stock.get("change", 0)) or 0,
+                        change_pct=stock.get("PCT_CHANGE", stock.get("change_pct", 0)) or 0,
+                        volume=stock.get("VOLUME", stock.get("volume", 0)) or 0,
+                        amount=stock.get("AMOUNT", stock.get("amount", 0)) or 0,
+                        open=stock.get("OPEN", stock.get("open", 0)) or 0,
+                        high=stock.get("HIGH", stock.get("high", 0)) or 0,
+                        low=stock.get("LOW", stock.get("low", 0)) or 0,
+                        prev_close=stock.get("PRE_CLOSE", stock.get("prev_close", 0)) or 0,
+                        turnover_rate=stock.get("TURNOVER_RATE", stock.get("turnover_rate")),
+                        ranking_type=ranking_type,
+                        rank_position=rank,
+                        data_source=data_source
+                    )
+                    to_insert.append(db_ranking)
+                
+                # 3. 批量插入
+                if to_insert:
+                    session.add_all(to_insert)
+                    await session.commit()
+                    logger.info(f"批量保存 {len(to_insert)} 条市场排行数据：{ranking_type}")
+                    return len(to_insert)
+                
+                return 0
+                
+            except Exception as e:
+                logger.error(f"保存市场排行数据失败：{e}")
+                return 0
+    
+    async def get_market_ranking_history(
+        self,
+        ranking_type: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        获取市场排行历史数据
+        
+        Args:
+            ranking_type: 排行类型 (gainers/losers/amount/turnover)
+            start_date: 开始日期 YYYY-MM-DD
+            end_date: 结束日期 YYYY-MM-DD
+            limit: 返回记录数限制
+        
+        Returns:
+            历史排行数据列表
+        """
+        async with get_session() as session:
+            query = select(MarketRankingDB).where(
+                MarketRankingDB.ranking_type == ranking_type
+            )
+            
+            if start_date:
+                query = query.where(MarketRankingDB.ranking_date >= start_date)
+            if end_date:
+                query = query.where(MarketRankingDB.ranking_date <= end_date)
+            
+            query = query.order_by(
+                MarketRankingDB.ranking_date.desc(),
+                MarketRankingDB.rank_position.asc()
+            ).limit(limit)
+            
+            result = await session.execute(query)
+            rankings = result.scalars().all()
+            
+            return [{
+                "id": r.id,
+                "ranking_date": r.ranking_date,
+                "ranking_time": r.ranking_time,
+                "ts_code": r.ts_code,
+                "name": r.name,
+                "price": r.price,
+                "change": r.change,
+                "change_pct": r.change_pct,
+                "volume": r.volume,
+                "amount": r.amount,
+                "rank_position": r.rank_position,
+                "ranking_type": r.ranking_type,
+                "data_source": r.data_source
+            } for r in rankings]
 
 
 data_persistence = DataPersistence()

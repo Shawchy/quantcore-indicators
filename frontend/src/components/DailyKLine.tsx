@@ -18,10 +18,25 @@ import {
   Button,
   Select,
   HStack,
+  VStack,
   SimpleGrid,
   Spinner,
+  useToast,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+  useDisclosure,
+  Icon,
+  Stat,
+  StatNumber,
+  StatHelpText,
+  Divider,
 } from '@chakra-ui/react'
-import ReactECharts from 'echarts-for-react'
+import { KLineChart } from './KLineChart'
 import { DownloadIcon } from '@chakra-ui/icons'
 
 interface KLineData {
@@ -50,7 +65,10 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
   name = '',
   onExport,
 }) => {
+  const toast = useToast()
+  const { isOpen, onOpen, onClose } = useDisclosure()
   const [dateRange, setDateRange] = useState<'all' | 'year' | 'month' | 'week'>('year')
+  const [exportCount, setExportCount] = useState(0)
   // 自定义日期范围功能预留
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_customStart, _setCustomStart] = useState('')
@@ -121,336 +139,6 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
     return dateStr
   }
 
-  // K 线图配置
-  const getKLineOption = () => {
-    if (filteredData.length === 0) return {}
-
-    const dates = filteredData.map((d) => formatDate(d.date))
-    const ohlc = filteredData.map((d) => [d.open, d.close, d.low, d.high])
-    const volumes = filteredData.map((d) => d.volume)
-    const ma5 = calculateMA(filteredData, 5)
-    const ma10 = calculateMA(filteredData, 10)
-    const ma20 = calculateMA(filteredData, 20)
-
-    return {
-      backgroundColor: 'transparent',
-      animation: true,
-      animationDuration: 800,
-      animationEasing: 'cubicOut',
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { 
-          type: 'cross',
-          crossStyle: {
-            color: '#999',
-            width: 1,
-            type: 'dashed',
-          },
-        },
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        borderColor: '#e2e8f0',
-        borderWidth: 1,
-        textStyle: { 
-          color: '#1e293b',
-          fontSize: 12,
-        },
-        extraCssText: 'box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border-radius: 8px; padding: 12px;',
-        formatter: (params: { axisValue: string; dataIndex: number }[]) => {
-          const item = formatDate(params[0].axisValue)
-          const data = filteredData[params[0].dataIndex]
-          const change = data.close - data.open
-          const changePct = (change / data.open) * 100
-          return `
-            <div style="padding: 4px 0;">
-              <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">${item}</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-                <div><span style="color: #64748b;">开盘：</span><span style="font-weight: 500;">${data.open.toFixed(2)}</span></div>
-                <div><span style="color: #64748b;">收盘：</span><span style="font-weight: 500; color: ${change >= 0 ? '#ef4444' : '#10b981'};">${data.close.toFixed(2)}</span></div>
-                <div><span style="color: #64748b;">最低：</span><span style="font-weight: 500; color: #10b981;">${data.low.toFixed(2)}</span></div>
-                <div><span style="color: #64748b;">最高：</span><span style="font-weight: 500; color: #ef4444;">${data.high.toFixed(2)}</span></div>
-                <div><span style="color: #64748b;">涨跌：</span><span style="font-weight: 500; color: ${change >= 0 ? '#ef4444' : '#10b981'};">${change >= 0 ? '+' : ''}${change.toFixed(2)}</span></div>
-                <div><span style="color: #64748b;">幅度：</span><span style="font-weight: 500; color: ${change >= 0 ? '#ef4444' : '#10b981'};">${change >= 0 ? '+' : ''}${changePct.toFixed(2)}%</span></div>
-                <div><span style="color: #64748b;">成交量：</span><span style="font-weight: 500;">${(data.volume / 10000).toFixed(1)}万手</span></div>
-                ${data.amount ? `<div><span style="color: #64748b;">成交额：</span><span style="font-weight: 500;">${(data.amount / 10000).toFixed(0)}万</span></div>` : ''}
-              </div>
-            </div>
-          `
-        },
-      },
-      legend: {
-        data: ['K 线', 'MA5', 'MA10', 'MA20'],
-        bottom: 8,
-        itemWidth: 12,
-        itemHeight: 8,
-        textStyle: { 
-          color: '#64748b',
-          fontSize: 11,
-        },
-        icon: 'roundRect',
-      },
-      grid: [
-        { 
-          left: '8%', 
-          right: '8%', 
-          height: '55%',
-          top: '8%',
-          borderColor: '#f1f5f9',
-          borderWidth: 1,
-        },
-        { 
-          left: '8%', 
-          right: '8%', 
-          top: '72%', 
-          height: '18%',
-          borderColor: '#f1f5f9',
-          borderWidth: 1,
-        },
-      ],
-      xAxis: [
-        {
-          type: 'category',
-          data: dates,
-          gridIndex: 0,
-          axisLine: { 
-            lineStyle: { 
-              color: '#e2e8f0',
-              width: 1,
-            } 
-          },
-          axisLabel: { 
-            color: '#64748b',
-            fontSize: 10,
-            margin: 8,
-            rotate: 0,
-          },
-          axisTick: {
-            show: false,
-          },
-          splitLine: {
-            show: false,
-          },
-        },
-        {
-          type: 'category',
-          data: dates,
-          gridIndex: 1,
-          axisLine: { 
-            lineStyle: { 
-              color: '#e2e8f0',
-              width: 1,
-            } 
-          },
-          axisLabel: { 
-            color: '#64748b',
-            fontSize: 10,
-            margin: 8,
-            rotate: 0,
-          },
-          axisTick: {
-            show: false,
-          },
-          splitLine: {
-            show: false,
-          },
-        },
-      ],
-      yAxis: [
-        {
-          scale: true,
-          gridIndex: 0,
-          axisLine: { 
-            lineStyle: { 
-              color: '#e2e8f0',
-              width: 1,
-            } 
-          },
-          axisLabel: { 
-            color: '#64748b',
-            fontSize: 10,
-            formatter: (value: number) => value.toFixed(2),
-            margin: 8,
-          },
-          axisTick: {
-            show: false,
-          },
-          splitLine: { 
-            lineStyle: { 
-              color: '#f1f5f9',
-              width: 1,
-              type: 'dashed',
-            } 
-          },
-        },
-        {
-          scale: true,
-          gridIndex: 1,
-          splitLine: { show: false },
-          axisLine: { 
-            lineStyle: { 
-              color: '#e2e8f0',
-              width: 1,
-            } 
-          },
-          axisLabel: { 
-            color: '#64748b',
-            fontSize: 10,
-            formatter: (value: number) => {
-              if (value >= 100000000) {
-                return (value / 100000000).toFixed(0) + '亿'
-              }
-              if (value >= 10000) {
-                return (value / 10000).toFixed(0) + '万'
-              }
-              return value.toFixed(0)
-            },
-            margin: 8,
-          },
-          axisTick: {
-            show: false,
-          },
-        },
-      ],
-      dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: [0, 1],
-          start: 50,
-          end: 100,
-          zoomOnMouseWheel: true,
-          moveOnMouseMove: true,
-          zoomLock: false,
-          roam: true,
-        },
-        {
-          show: true,
-          xAxisIndex: [0, 1],
-          type: 'slider',
-          bottom: 8,
-          height: 16,
-          backgroundColor: '#f1f5f9',
-          fillerColor: 'rgba(59, 130, 246, 0.2)',
-          borderColor: '#e2e8f0',
-          textStyle: { 
-            color: '#64748b',
-            fontSize: 10,
-          },
-          handleIcon: 'path://M10.56,5.05c0.16-0.09,0.35-0.09,0.51,0l3.69,2.03c0.46,0.25,0.46,0.92,0,1.17l-3.69,2.03c-0.16,0.09-0.35,0.09-0.51,0l-3.69-2.03C6.42,8.1,6.42,7.43,6.87,7.18L10.56,5.05z M10.56,12.95c-0.16,0.09-0.35,0.09-0.51,0l-3.69-2.03c-0.46-0.25-0.46-0.92,0-1.17l3.69-2.03c0.16-0.09,0.35-0.09,0.51,0l3.69,2.03c0.46,0.25,0.46,0.92,0,1.17L10.56,12.95z',
-          handleSize: '100%',
-          handleStyle: {
-            color: '#94a3b8',
-            shadowBlur: 4,
-            shadowColor: 'rgba(0, 0, 0, 0.2)',
-            shadowOffsetX: 0,
-            shadowOffsetY: 2,
-          },
-          selectedDataBackground: {
-            lineStyle: {
-              color: '#3b82f6',
-            },
-            areaStyle: {
-              color: 'rgba(59, 130, 246, 0.1)',
-            },
-          },
-          zoomLock: false,
-          roam: true,
-        },
-      ],
-      series: [
-        {
-          name: 'K 线',
-          type: 'candlestick',
-          data: ohlc,
-          barWidth: '60%',
-          barMaxWidth: 20,
-          itemStyle: {
-            color: '#ef4444',
-            color0: '#10b981',
-            borderColor: '#ef4444',
-            borderColor0: '#10b981',
-            borderWidth: 1.5,
-          },
-          markLine: {
-            symbol: 'none',
-            label: {
-              show: false,
-            },
-            lineStyle: {
-              color: '#f59e0b',
-              width: 1,
-              type: 'dashed',
-            },
-          },
-        },
-        {
-          name: 'MA5',
-          type: 'line',
-          data: ma5,
-          smooth: true,
-          lineStyle: { 
-            color: '#f59e0b',
-            width: 1.5,
-            type: 'solid',
-          },
-          itemStyle: { 
-            color: '#f59e0b',
-            borderWidth: 2,
-          },
-          showSymbol: false,
-        },
-        {
-          name: 'MA10',
-          type: 'line',
-          data: ma10,
-          smooth: true,
-          lineStyle: { 
-            color: '#3b82f6',
-            width: 1.5,
-            type: 'solid',
-          },
-          itemStyle: { 
-            color: '#3b82f6',
-            borderWidth: 2,
-          },
-          showSymbol: false,
-        },
-        {
-          name: 'MA20',
-          type: 'line',
-          data: ma20,
-          smooth: true,
-          lineStyle: { 
-            color: '#8b5cf6',
-            width: 1.5,
-            type: 'solid',
-          },
-          itemStyle: { 
-            color: '#8b5cf6',
-            borderWidth: 2,
-          },
-          showSymbol: false,
-        },
-        {
-          name: '成交量',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          data: volumes,
-          barWidth: '60%',
-          barMaxWidth: 20,
-          itemStyle: {
-            color: (params: { dataIndex: number }) => {
-              const idx = params.dataIndex
-              const open = ohlc[idx][0]
-              const close = ohlc[idx][1]
-              return close >= open
-                ? 'rgba(239, 68, 68, 0.7)'
-                : 'rgba(16, 185, 129, 0.7)'
-            },
-          },
-        },
-      ],
-    }
-  }
 
   // 计算移动平均线
   const calculateMA = (data: KLineData[], period: number): (number | '-')[] => {
@@ -483,7 +171,14 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
   // 导出数据
   const handleExport = () => {
     if (!filteredData || filteredData.length === 0) {
-      alert('无数据可导出')
+      toast({
+        title: '无数据可导出',
+        description: '请先选择日期范围或等待数据加载完成',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+        position: 'top',
+      })
       return
     }
 
@@ -510,12 +205,70 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
     link.click()
     URL.revokeObjectURL(url)
 
-    alert(`已导出 ${filteredData.length} 条数据`)
+    setExportCount(filteredData.length)
+    onOpen() // 打开导出成功提示框
 
     if (onExport) {
       onExport(filteredData)
     }
   }
+
+  // 导出成功确认框
+  const ExportSuccessModal = () => (
+    <Modal isOpen={isOpen} onClose={onClose} isCentered>
+      <ModalOverlay backdropFilter="blur(5px)" />
+      <ModalContent borderRadius="xl" boxShadow="2xl">
+        <ModalHeader bg="green.50" borderTopRadius="xl" py={4}>
+          <Flex align="center" gap={3}>
+            <Icon as={DownloadIcon} boxSize={6} color="green.500" />
+            <Text fontSize="xl" fontWeight="bold" color="green.700">
+              导出成功
+            </Text>
+          </Flex>
+        </ModalHeader>
+        <ModalCloseButton />
+        <ModalBody py={6}>
+          <VStack spacing={4}>
+            <Text fontSize="md" color="gray.700">
+              已成功导出以下数据：
+            </Text>
+            
+            <Stat w="100%" bg="green.50" p={4} borderRadius="lg">
+              <StatNumber fontSize="4xl" fontWeight="bold" color="green.600">
+                {exportCount}
+              </StatNumber>
+              <StatHelpText fontSize="md" color="green.700" mb={0}>
+                条 K 线数据
+              </StatHelpText>
+            </Stat>
+
+            <Divider />
+
+            <VStack spacing={2} align="start" w="100%">
+              <Text fontSize="sm" color="gray.600" fontWeight="bold">
+                📊 数据详情：
+              </Text>
+              <HStack spacing={4} fontSize="sm" color="gray.600">
+                <Text>• 日期范围：{filteredData.length > 0 ? formatDate(filteredData[0].date) : '-'} 至 {formatDate(filteredData[filteredData.length - 1]?.date)}</Text>
+              </HStack>
+              <HStack spacing={4} fontSize="sm" color="gray.600">
+                <Text>• 数据字段：开盘、最高、最低、收盘、成交量、成交额</Text>
+              </HStack>
+              <HStack spacing={4} fontSize="sm" color="gray.600">
+                <Text>• 文件格式：CSV</Text>
+              </HStack>
+            </VStack>
+          </VStack>
+        </ModalBody>
+
+        <ModalFooter bg="gray.50" borderBottomRadius="xl" py={3}>
+          <Button colorScheme="green" onClick={onClose} size="lg" w="full">
+            确定
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  )
 
   if (loading) {
     return (
@@ -535,6 +288,9 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
 
   return (
     <Box>
+      {/* 导出成功提示框 */}
+      <ExportSuccessModal />
+
       {/* 头部控制栏 */}
       <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={3}>
         <HStack>
@@ -561,8 +317,14 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
             <option value="week">近 1 周</option>
           </Select>
 
-          <Button size="sm" leftIcon={<DownloadIcon />} onClick={handleExport}>
-            导出
+          <Button 
+            size="sm" 
+            leftIcon={<DownloadIcon />} 
+            onClick={handleExport}
+            colorScheme="blue"
+            variant="outline"
+          >
+            导出数据
           </Button>
         </HStack>
       </Flex>
@@ -589,19 +351,20 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
       )}
 
       {/* K 线图 */}
-      <Box 
-        bg="white" 
-        borderRadius="lg" 
-        p={4} 
+      <Box
+        bg="white"
+        borderRadius="lg"
+        p={4}
+        boxShadow="sm"
         mb={4}
         borderWidth="1px"
         borderColor="gray.200"
       >
-        <ReactECharts
-          option={getKLineOption()}
-          style={{ height: '500px' }}
-          showLoading={loading}
-          notMerge={true}
+        <KLineChart
+          data={filteredData}
+          loading={loading}
+          type="daily"
+          height="500px"
         />
       </Box>
 

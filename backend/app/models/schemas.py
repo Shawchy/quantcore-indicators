@@ -44,6 +44,7 @@ class KLineData(BaseModel):
     volume: float
     amount: Optional[float] = None
     turnover_rate: Optional[float] = None
+    pre_close: Optional[float] = None  # 昨日收盘价
 
 
 class TechnicalIndicator(BaseModel):
@@ -78,3 +79,82 @@ class MarketMoneyflowData(BaseModel):
     buy_md_amount_rate: Optional[float] = None
     buy_sm_amount: Optional[float] = None
     buy_sm_amount_rate: Optional[float] = None
+
+
+class BillboardEntry(BaseModel):
+    """龙虎榜单条目"""
+    code: str
+    name: str
+    close_price: Optional[float] = None
+    change_pct: Optional[float] = None
+    turnover_amount: Optional[float] = None
+    net_amount: Optional[float] = None
+    buy_amount: Optional[float] = None
+    sell_amount: Optional[float] = None
+    reason: Optional[str] = None
+    trade_date: str
+
+
+class BoardInfo(BaseModel):
+    """股票所属板块信息"""
+    code: str
+    name: str
+    board_type: str
+    close_price: Optional[float] = None
+    change_pct: Optional[float] = None
+
+
+class ShareholderInfo(BaseModel):
+    """股东信息"""
+    code: str
+    shareholder_name: str
+    shareholder_type: Optional[str] = None
+    hold_amount: Optional[float] = None
+    hold_ratio: Optional[float] = None
+    change_amount: Optional[float] = None
+    change_ratio: Optional[float] = None
+    report_date: str
+
+
+class IndexComponent(BaseModel):
+    """指数成分股"""
+    code: str
+    name: str
+    weight: Optional[float] = None
+    industry: Optional[str] = None
+
+
+class CapitalFlowItem(BaseModel):
+    """资金流向条目"""
+    code: str
+    name: str
+    close_price: Optional[float] = None
+    change_pct: Optional[float] = None
+    main_net_amount: Optional[float] = None
+    main_net_amount_rate: Optional[float] = None
+    buy_elg_amount: Optional[float] = None
+    buy_lg_amount: Optional[float] = None
+    buy_md_amount: Optional[float] = None
+    buy_sm_amount: Optional[float] = None
+    trade_date: str
+
+
+class MarketQuote(BaseModel):
+    """市场实时行情数据"""
+    code: str
+    name: str
+    change_pct: Optional[float] = None
+    price: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    open: Optional[float] = None
+    change: Optional[float] = None
+    turnover_rate: Optional[float] = None
+    volume_ratio: Optional[float] = None
+    pe_ratio: Optional[float] = None
+    volume: Optional[float] = None
+    amount: Optional[float] = None
+    prev_close: Optional[float] = None
+    total_market_cap: Optional[float] = None
+    float_market_cap: Optional[float] = None
+    market_type: Optional[str] = None

@@ -76,14 +76,20 @@ class TradingCalendarService:
             try:
                 import baostock as bs
                 bs.login()
-                df = bs.query_trade_dates()
+                rs = bs.query_trade_dates()
                 bs.logout()
                 
+                # Baostock 返回的是 ResultData 对象，需要转换为 DataFrame
+                import pandas as pd
+                df = pd.DataFrame(rs.get_data())
+                
                 trading_days = []
-                for _, row in df.itertuples(index=False):
-                    if row.is_trading_day == '1':
-                        date = row.calendar_date.replace('-', '')
-                        trading_days.append(date)
+                for row in df.itertuples(index=False):
+                    # DataFrame 列名：calendar_date, is_trading_day
+                    if hasattr(row, 'is_trading_day') and row.is_trading_day == '1':
+                        date = str(getattr(row, 'calendar_date', '')).replace('-', '')
+                        if date and len(date) == 8:
+                            trading_days.append(date)
                 
                 if trading_days:
                     # 缓存
@@ -97,41 +103,11 @@ class TradingCalendarService:
             
             # 使用 AkShare 的另一个 API（中国节假日列表）
             try:
-                # 获取中国节假日数据
-                df = ak.holiday_info()
-                
-                # 生成所有日期，然后排除节假日和周末
-                trading_days = []
-                current = datetime(2000, 1, 1)  # 从 2000 年开始
-                end = datetime.now() + timedelta(days=365)  # 到明年今天
-                
-                # 获取节假日列表
-                holidays = set()
-                if not df.empty:
-                    for row in df.itertuples(index=False):
-                        try:
-                            holiday_date = str(getattr(row, 'date', '')).replace('-', '')
-                            if holiday_date and len(holiday_date) == 8:
-                                holidays.add(holiday_date)
-                        except:
-                            continue
-                
-                while current <= end:
-                    date_str = current.strftime("%Y%m%d")
-                    # 排除周末（5=周六，6=周日）
-                    if current.weekday() < 5:
-                        # 排除节假日
-                        if date_str not in holidays:
-                            trading_days.append(date_str)
-                    current += timedelta(days=1)
-                
-                if trading_days:
-                    # 缓存
-                    self._all_trading_days_cache = trading_days
-                    self._all_trading_days_cache_time = time.time()
-                    self._save_to_local_cache(trading_days)
-                    logger.debug(f"从 AkShare 节假日数据生成交易日，共{len(trading_days)}天")
-                    return trading_days
+                # 获取中国节假日数据（使用正确的接口）
+                # ak.holiday_info() 不存在，改用 ak.stock_info_a_code_name() 或其他方法
+                # 这里使用简单方法：直接估算，因为获取准确的调休数据很复杂
+                logger.debug("AkShare 节假日接口不可用，使用估算方法（排除周末）")
+                return self._estimate_all_trading_days()
                     
             except Exception as ak_error:
                 logger.warning(f"AkShare 节假日数据获取失败：{ak_error}")
@@ -290,32 +266,54 @@ class TradingCalendarService:
                 "previous_trading_day": "20260310"  # 前一个交易日
             }
         """
-        now = datetime.now()
-        today = now.strftime("%Y%m%d")
-        
-        # 获取最新交易日
-        latest_trading_day = await self.get_latest_trading_day()
-        
-        # 判断是否已开盘
-        is_open = await self.is_market_open()
-        
-        # 获取前一个交易日
-        previous_trading_day = await self.get_previous_trading_day(latest_trading_day)
-        
-        # 确定有效日期
-        if is_open:
-            effective_date = latest_trading_day
-        else:
-            effective_date = previous_trading_day
-        
-        return {
-            "effective_date": effective_date,
-            "is_today": effective_date == today,
-            "is_market_open": is_open,
-            "latest_trading_day": latest_trading_day,
-            "previous_trading_day": previous_trading_day,
-            "current_time": now.strftime("%H:%M:%S")
-        }
+        try:
+            now = datetime.now()
+            today = now.strftime("%Y%m%d")
+            
+            # 获取最新交易日（带超时保护）
+            try:
+                latest_trading_day = await self.get_latest_trading_day()
+            except Exception as e:
+                logger.warning(f"获取最新交易日失败，使用估算：{e}")
+                latest_trading_day = today
+            
+            # 判断是否已开盘（简化判断，避免网络请求）
+            is_open = self._is_market_open_simple(now, today, latest_trading_day)
+            
+            # 获取前一个交易日
+            try:
+                previous_trading_day = await self.get_previous_trading_day(latest_trading_day)
+            except Exception as e:
+                logger.warning(f"获取前一个交易日失败，使用估算：{e}")
+                previous_trading_day = self._estimate_previous_day(latest_trading_day)
+            
+            # 确定有效日期
+            if is_open:
+                effective_date = latest_trading_day
+            else:
+                effective_date = previous_trading_day
+            
+            return {
+                "effective_date": effective_date,
+                "is_today": effective_date == today,
+                "is_market_open": is_open,
+                "latest_trading_day": latest_trading_day,
+                "previous_trading_day": previous_trading_day,
+                "current_time": now.strftime("%H:%M:%S")
+            }
+        except Exception as e:
+            logger.error(f"获取有效日期失败：{e}")
+            # 返回默认值
+            now = datetime.now()
+            today = now.strftime("%Y%m%d")
+            return {
+                "effective_date": today,
+                "is_today": True,
+                "is_market_open": False,
+                "latest_trading_day": today,
+                "previous_trading_day": self._estimate_previous_day(today),
+                "current_time": now.strftime("%H:%M:%S")
+            }
     
     async def get_recent_trading_days(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
@@ -332,21 +330,50 @@ class TradingCalendarService:
                 ...
             ]
         """
-        trading_days = await self.get_trading_days(limit=limit)
-        today = datetime.now().strftime("%Y%m%d")
-        latest = trading_days[0] if trading_days else today
-        
-        result = []
-        for i, date in enumerate(trading_days):
-            result.append({
-                "date": date,
-                "display": self._format_date_display(date),
-                "is_today": date == today,
-                "is_latest": date == latest,
-                "is_selected": i == 0
-            })
-        
-        return result
+        try:
+            trading_days = await self.get_trading_days(limit=limit)
+            today = datetime.now().strftime("%Y%m%d")
+            latest = trading_days[0] if trading_days else today
+            
+            result = []
+            for i, date in enumerate(trading_days):
+                result.append({
+                    "date": date,
+                    "display": self._format_date_display(date),
+                    "is_today": date == today,
+                    "is_latest": date == latest,
+                    "is_selected": i == 0
+                })
+            
+            return result
+        except Exception as e:
+            logger.error(f"获取最近交易日失败：{e}")
+            # 返回估算数据
+            return self._estimate_recent_trading_days(limit)
+    
+    def _estimate_recent_trading_days(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """估算最近交易日（降级方案）"""
+        try:
+            result = []
+            current = datetime.now()
+            today = current.strftime("%Y%m%d")
+            
+            while len(result) < limit:
+                if current.weekday() < 5:  # 周一到周五
+                    date = current.strftime("%Y%m%d")
+                    result.append({
+                        "date": date,
+                        "display": self._format_date_display(date),
+                        "is_today": date == today,
+                        "is_latest": len(result) == 0,
+                        "is_selected": len(result) == 0
+                    })
+                current -= timedelta(days=1)
+            
+            return result
+        except Exception as e:
+            logger.error(f"估算交易日失败：{e}")
+            return []
     
     def _format_date_display(self, date: str) -> str:
         """格式化日期显示"""
@@ -355,6 +382,59 @@ class TradingCalendarService:
             return f"{dt.month}月{dt.day}日"
         except:
             return date
+    
+    def _is_market_open_simple(self, now: datetime, today: str, latest_trading_day: str) -> bool:
+        """
+        简化版开盘判断（不需要网络请求）
+        
+        Args:
+            now: 当前时间
+            today: 今天日期
+            latest_trading_day: 最新交易日
+            
+        Returns:
+            True 表示已开盘，False 表示未开盘
+        """
+        try:
+            # 检查是否是周末
+            if now.weekday() >= 5:
+                return False
+            
+            # 检查是否是交易日
+            if today != latest_trading_day:
+                return False
+            
+            # 检查时间（A 股开盘时间 9:30）
+            market_open_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
+            if now < market_open_time:
+                return False
+            
+            return True
+        except Exception as e:
+            logger.warning(f"简化开盘判断失败：{e}")
+            return False
+    
+    def _estimate_previous_day(self, date: str) -> str:
+        """
+        估算前一个交易日（不考虑节假日）
+        
+        Args:
+            date: 日期，格式 YYYYMMDD
+            
+        Returns:
+            前一个交易日
+        """
+        try:
+            dt = datetime.strptime(date, "%Y%m%d")
+            # 向前找，直到找到工作日
+            while True:
+                dt -= timedelta(days=1)
+                if dt.weekday() < 5:  # 周一到周五
+                    return dt.strftime("%Y%m%d")
+        except Exception as e:
+            logger.warning(f"估算前一个交易日失败：{e}")
+            # 简单返回前一天
+            return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 
 
 # 全局实例

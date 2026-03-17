@@ -99,19 +99,21 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
             <StatNumber 
               fontSize="3xl" 
               fontWeight="bold" 
-              color={quote.change_pct >= 0 ? 'red.500' : 'green.500'}
+              color={quote?.change_pct >= 0 ? 'red.500' : 'green.500'}
               fontFamily="mono"
             >
-              {formatPrice(quote.price)}
+              {formatPrice(quote?.price)}
             </StatNumber>
             <StatHelpText 
               mb={0} 
               fontSize="sm" 
               fontWeight="bold"
-              color={quote.change_pct >= 0 ? 'red.500' : 'green.500'}
+              color={quote?.change_pct >= 0 ? 'red.500' : 'green.500'}
             >
-              {quote.change_pct >= 0 ? '+' : ''}{quote.change_pct.toFixed(2)}% 
-              ({quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)})
+              {quote?.change_pct != null ? (quote.change_pct >= 0 ? '+' : '') : ''}
+              {quote?.change_pct != null ? quote.change_pct.toFixed(2) : '-'}% 
+              ({quote?.change != null ? (quote.change >= 0 ? '+' : '') : ''}
+              {quote?.change != null ? quote.change.toFixed(2) : '-'})
             </StatHelpText>
           </Stat>
         </Box>
@@ -119,7 +121,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
         <Box textAlign="right">
           <Text fontSize="xs" color="gray.600" mb={1}>更新时间</Text>
           <Text fontSize="sm" fontWeight="medium" color="gray.700">
-            {data.update_time}
+            {data?.update_time || '-'}
           </Text>
         </Box>
       </Flex>
@@ -127,12 +129,12 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
       {/* 基本行情 */}
       <Flex gap={3} mb={4} flexWrap="wrap">
         {[
-          { label: '今开', value: formatPrice(quote.open) },
-          { label: '最高', value: formatPrice(quote.high), color: 'red.500' },
-          { label: '最低', value: formatPrice(quote.low), color: 'green.500' },
-          { label: '昨收', value: formatPrice(quote.close) },
-          { label: '成交量', value: formatVolume(quote.volume) },
-          { label: '成交额', value: quote.amount >= 100000000 ? `${(quote.amount / 100000000).toFixed(2)}亿` : `${(quote.amount / 10000).toFixed(0)}万` },
+          { label: '今开', value: formatPrice(quote?.open) },
+          { label: '最高', value: formatPrice(quote?.high), color: 'red.500' },
+          { label: '最低', value: formatPrice(quote?.low), color: 'green.500' },
+          { label: '昨收', value: formatPrice(quote?.close) },
+          { label: '成交量', value: formatVolume(quote?.volume) },
+          { label: '成交额', value: quote?.amount != null ? (quote.amount >= 100000000 ? `${(quote.amount / 100000000).toFixed(2)}亿` : `${(quote.amount / 10000).toFixed(0)}万`) : '-' },
         ].map((item, index) => (
           <Box 
             key={index} 
@@ -195,8 +197,8 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
 
       {/* 数据说明 */}
       <Text fontSize="xs" color="gray.500" textAlign="center" mt={3}>
-        数据来源：{data.data_source === 'sina' ? '新浪' : '东方财富'} | 
-        获取耗时：{data.fetch_time}秒
+        数据来源：{data?.data_source === 'sina' ? '新浪' : '东方财富'} | 
+        获取耗时：{data?.fetch_time || '-'}秒
       </Text>
     </Box>
   )

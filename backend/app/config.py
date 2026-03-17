@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     TUSHARE_POINTS: int = 120  # Tushare 积分，默认 120 分（注册 + 完善信息）
     
     # 数据源优先级（从高到低）
-    DATA_SOURCE_PRIORITY: list[str] = ["tushare", "akshare", "baostock"]
+    DATA_SOURCE_PRIORITY: list[str] = ["tushare", "efinance", "akshare", "baostock"]
     
     # Tushare 积分权限配置
     TUSHARE_PERMISSION_CONFIG: dict = {

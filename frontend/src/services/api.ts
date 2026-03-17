@@ -244,7 +244,7 @@ export const marketIndexApi = {
 }
 
 export const watchlistApi = {
-  getList: () => api.get('/watchlist'),
+  getList: () => api.get('/watchlist/list'),
   add: (code: string, note?: string) => api.post('/watchlist/add', { code, note }),
   remove: (code: string) => api.delete(`/watchlist/remove/${code}`),
   update: (code: string, note: string) => api.put(`/watchlist/update/${code}`, { note }),
@@ -306,6 +306,8 @@ export const marketApi = {
   getOverview: () => api.get('/market/market-overview'),
   getSectorPerformance: (sectorType: string = 'industry') =>
     api.get('/market/sector-performance', { params: { sector_type: sectorType } }),
+  getHistory: (rankingType: string, startDate?: string, endDate?: string, limit: number = 100) =>
+    api.get('/market/market-ranking/history', { params: { ranking_type: rankingType, start_date: startDate, end_date: endDate, limit } }),
 }
 
 // 实时盘口 API
@@ -353,6 +355,48 @@ export const loadingProgressApi = {
     api.delete(`/loading/task/${taskId}`),
   cleanupTasks: (maxAgeHours: number = 24) =>
     api.post('/loading/cleanup', null, { params: { max_age_hours: maxAgeHours } }),
+}
+
+// 龙虎榜 API
+export const billboardApi = {
+  getDaily: (tradeDate?: string) =>
+    api.get('/billboard/billboard', { params: { trade_date: tradeDate } }),
+  getStockHistory: (code: string, startDate?: string, endDate?: string) =>
+    api.get(`/billboard/billboard/${code}`, { params: { start_date: startDate, end_date: endDate } }),
+}
+
+// 资金流向 API
+export const capitalFlowApi = {
+  getToday: (tradeDate?: string) =>
+    api.get('/capital-flow/capital-flow/today', { params: { trade_date: tradeDate } }),
+  getStockHistory: (code: string, startDate?: string, endDate?: string) =>
+    api.get(`/capital-flow/capital-flow/${code}`, { params: { start_date: startDate, end_date: endDate } }),
+}
+
+// 板块信息 API
+export const boardApi = {
+  getStockBoards: (code: string) =>
+    api.get(`/board/stock/${code}/boards`),
+}
+
+// 指数成分 API
+export const indexApi = {
+  getComponents: (code: string) =>
+    api.get(`/index/index/${code}/components`),
+}
+
+// 股东信息 API
+export const shareholderApi = {
+  getTop10: (code: string) =>
+    api.get(`/shareholder/stock/${code}/shareholders`),
+}
+
+// 市场实时行情 API
+export const marketQuotesApi = {
+  getMarketQuotes: (marketTypes?: string) =>
+    api.get('/market-quotes/market-quotes', { params: { market_types: marketTypes } }),
+  getSpecificMarketQuotes: (marketType: string, limit?: number) =>
+    api.get(`/market-quotes/market-quotes/${marketType}`, { params: { limit } }),
 }
 
 export default api

@@ -9,7 +9,13 @@ from .base import (
     StockBasicInfo,
     KLineData,
     SectorInfo,
-    ChipData
+    ChipData,
+    BillboardEntry,
+    BoardInfo,
+    ShareholderInfo,
+    IndexComponent,
+    CapitalFlowItem,
+    MarketQuote
 )
 
 
@@ -176,4 +182,44 @@ class BaostockAdapter(BaseDataAdapter):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[ChipData]:
+        return []
+    
+    async def get_daily_billboard(self, trade_date: Optional[str] = None) -> List[BillboardEntry]:
+        """获取龙虎榜单数据（暂不支持）"""
+        logger.warning(f"Baostock 暂不支持获取龙虎榜数据 {trade_date}")
+        return []
+    
+    async def get_belong_board(self, code: str) -> List[BoardInfo]:
+        """获取股票所属板块（暂不支持）"""
+        logger.warning(f"Baostock 暂不支持获取股票所属板块 {code}")
+        return []
+    
+    async def get_members(self, index_code: str) -> List[IndexComponent]:
+        """获取指数成分股（暂不支持）"""
+        logger.warning(f"Baostock 暂不支持获取指数成分股 {index_code}")
+        return []
+    
+    async def get_today_bill(self, trade_date: Optional[str] = None) -> List[CapitalFlowItem]:
+        """获取当日资金流向（暂不支持）"""
+        logger.warning(f"Baostock 暂不支持获取当日资金流向 {trade_date}")
+        return []
+    
+    async def get_history_bill(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[CapitalFlowItem]:
+        """获取历史资金流向（暂不支持）"""
+        logger.warning(f"Baostock 暂不支持获取历史资金流向 {code}")
+        return []
+    
+    async def get_top10_stock_holder_info(self, code: str) -> List[ShareholderInfo]:
+        """获取前十大股东信息（暂不支持）"""
+        logger.warning(f"Baostock 暂不支持获取前十大股东信息 {code}")
+        return []
+    
+    async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:
+        """获取市场实时行情（暂不支持）"""
+        logger.warning(f"Baostock 暂不支持获取市场实时行情")
         return []

@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     await init_database()
     logger.info("数据库初始化完成")
     
-    # 同步初始化数据源，确保 API 请求前数据源已就绪
+    # 初始化数据源（仅初始化，不预加载数据）
     from app.adapters import data_source_manager
     try:
         await data_source_manager.initialize()
@@ -51,10 +51,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"数据源初始化失败：{e}")
     
-    # 启动数据加载器（按需加载，不自动预加载）
-    from app.services.data_loader import data_loader
-    await data_loader.start()
-    logger.info("数据加载器已启动（按需加载模式）")
+    # 数据加载器已初始化为按需模式（不自动预加载）
+    logger.info("数据加载模式：按需加载（用户请求时才拉取数据）")
     
     # 启动定期性能报告任务
     import asyncio
@@ -71,9 +69,8 @@ async def lifespan(app: FastAPI):
     # 关闭事件
     logger.info(f"{settings.APP_NAME} 关闭中...")
     
-    # 停止数据加载器
-    await data_loader.stop()
-    logger.info("数据加载器已停止")
+    # 按需加载模式无需停止数据加载器
+    logger.info("数据加载器已停止（按需模式）")
 
 
 def create_app() -> FastAPI:

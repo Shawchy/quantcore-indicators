@@ -11,6 +11,7 @@ class DataSourceType(str, Enum):
     BAOSTOCK = "baostock"
     YFINANCE = "yfinance"
     TUSHARE = "tushare"
+    EFINANCE = "efinance"
 
 
 @dataclass
@@ -58,6 +59,86 @@ class ChipData:
     top10_holders_ratio: Optional[float] = None
 
 
+@dataclass
+class BillboardEntry:
+    code: str
+    name: str
+    close_price: Optional[float] = None
+    change_pct: Optional[float] = None
+    turnover_amount: Optional[float] = None
+    net_amount: Optional[float] = None
+    buy_amount: Optional[float] = None
+    sell_amount: Optional[float] = None
+    reason: Optional[str] = None
+    trade_date: str = ""
+
+
+@dataclass
+class BoardInfo:
+    code: str
+    name: str
+    board_type: str
+    close_price: Optional[float] = None
+    change_pct: Optional[float] = None
+
+
+@dataclass
+class ShareholderInfo:
+    code: str
+    shareholder_name: str
+    shareholder_type: Optional[str] = None
+    hold_amount: Optional[float] = None
+    hold_ratio: Optional[float] = None
+    change_amount: Optional[float] = None
+    change_ratio: Optional[float] = None
+    report_date: str = ""
+
+
+@dataclass
+class IndexComponent:
+    code: str
+    name: str
+    weight: Optional[float] = None
+    industry: Optional[str] = None
+
+
+@dataclass
+class CapitalFlowItem:
+    code: str
+    name: str
+    close_price: Optional[float] = None
+    change_pct: Optional[float] = None
+    main_net_amount: Optional[float] = None
+    main_net_amount_rate: Optional[float] = None
+    buy_elg_amount: Optional[float] = None
+    buy_lg_amount: Optional[float] = None
+    buy_md_amount: Optional[float] = None
+    buy_sm_amount: Optional[float] = None
+    trade_date: str = ""
+
+
+@dataclass
+class MarketQuote:
+    """市场实时行情"""
+    code: str
+    name: str
+    change_pct: Optional[float] = None
+    price: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    open: Optional[float] = None
+    change: Optional[float] = None
+    turnover_rate: Optional[float] = None
+    volume_ratio: Optional[float] = None
+    pe_ratio: Optional[float] = None
+    volume: Optional[float] = None
+    amount: Optional[float] = None
+    prev_close: Optional[float] = None
+    total_market_cap: Optional[float] = None
+    float_market_cap: Optional[float] = None
+    market_type: Optional[str] = None
+
+
 class BaseDataAdapter(ABC):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
@@ -95,6 +176,26 @@ class BaseDataAdapter(ABC):
         pass
     
     @abstractmethod
+    async def get_weekly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        pass
+    
+    @abstractmethod
+    async def get_monthly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        pass
+    
+    @abstractmethod
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
         pass
     
@@ -113,6 +214,39 @@ class BaseDataAdapter(ABC):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[ChipData]:
+        pass
+    
+    @abstractmethod
+    async def get_daily_billboard(self, trade_date: Optional[str] = None) -> List[BillboardEntry]:
+        pass
+    
+    @abstractmethod
+    async def get_belong_board(self, code: str) -> List[BoardInfo]:
+        pass
+    
+    @abstractmethod
+    async def get_members(self, index_code: str) -> List[IndexComponent]:
+        pass
+    
+    @abstractmethod
+    async def get_today_bill(self, trade_date: Optional[str] = None) -> List[CapitalFlowItem]:
+        pass
+    
+    @abstractmethod
+    async def get_history_bill(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[CapitalFlowItem]:
+        pass
+    
+    @abstractmethod
+    async def get_top10_stock_holder_info(self, code: str) -> List[ShareholderInfo]:
+        pass
+    
+    @abstractmethod
+    async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:
         pass
     
     def normalize_code(self, code: str) -> str:

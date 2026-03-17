@@ -1,6 +1,5 @@
 import { Container, Heading, VStack } from '@chakra-ui/react'
 import DataSourceControl from '../components/DataSourceControl'
-import LoadingProgressPanel from '../components/LoadingProgressPanel'
 
 const Settings: React.FC = () => {
   return (
@@ -8,7 +7,6 @@ const Settings: React.FC = () => {
       <VStack spacing={6} align="stretch">
         <Heading size="lg">系统设置</Heading>
         <DataSourceControl />
-        <LoadingProgressPanel />
       </VStack>
     </Container>
   )

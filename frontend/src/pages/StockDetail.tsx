@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   Card,
   CardBody,
@@ -28,12 +28,18 @@ import {
   TabPanel,
   Flex,
   useToast,
+  Button,
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  Icon,
 } from '@chakra-ui/react'
+import { FiArrowLeft } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
-import ReactECharts from 'echarts-for-react'
-import { stockApi, realtimeApi } from '../services/api'
+import { stockApi, realtimeApi, boardApi, capitalFlowApi, shareholderApi } from '../services/api'
 import RealtimeQuotePanel from '../components/RealtimeQuote'
 import TickDataTable from '../components/TickDataTable'
+import { KLineChart, IndicatorChart } from '../components/KLineChart'
 import type { RealtimeQuoteData, TickData, StockBasic, KLineData, TechnicalIndicator, RealtimeQuote } from '../types'
 import { useEffect } from 'react'
 
@@ -42,7 +48,11 @@ const queryEnabled = (code: string | undefined, valid: boolean) => Boolean(code 
 const StockDetail = () => {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const toast = useToast()
+  
+  // 判断是否来自自选股页面
+  const isFromWatchlist = location.state?.from === 'watchlist'
   
   const isValidCode = Boolean(code && /^[0-9]{6}$/.test(code))
   const enabled = queryEnabled(code, isValidCode)
@@ -84,18 +94,40 @@ const StockDetail = () => {
     refetchInterval: 30000,
   })
 
-  const { data: realtimeQuoteData, isLoading: quoteLoading } = useQuery<RealtimeQuoteData>({
+  const { data: realtimeQuoteData, isLoading: quoteLoading, error: quoteError } = useQuery<RealtimeQuoteData>({
     queryKey: ['realtimeQuote', code],
     queryFn: () => realtimeApi.getQuote(code!) as unknown as Promise<RealtimeQuoteData>,
     enabled,
-    refetchInterval: 10000,
+    refetchInterval: 30000,  // 降低到 30 秒刷新一次
+    retry: 2,  // 失败重试 2 次
+    staleTime: 10000,  // 10 秒内认为是新鲜数据
   })
 
-  const { data: tickData, isLoading: tickLoading } = useQuery<TickData>({
+  const { data: tickData, isLoading: tickLoading, error: tickError } = useQuery<TickData>({
     queryKey: ['tickData', code],
     queryFn: () => realtimeApi.getTickData(code!, 'dc', 100) as unknown as Promise<TickData>,
     enabled,
-    refetchInterval: 30000,
+    refetchInterval: 60000,  // 降低到 60 秒刷新一次
+    retry: 2,  // 失败重试 2 次
+    staleTime: 30000,  // 30 秒内认为是新鲜数据
+  })
+
+  const { data: boardData } = useQuery({
+    queryKey: ['stockBoards', code],
+    queryFn: () => boardApi.getStockBoards(code!),
+    enabled,
+  })
+
+  const { data: capitalFlowData } = useQuery({
+    queryKey: ['stockCapitalFlow', code],
+    queryFn: () => capitalFlowApi.getStockHistory(code!),
+    enabled,
+  })
+
+  const { data: shareholderData } = useQuery({
+    queryKey: ['stockShareholders', code],
+    queryFn: () => shareholderApi.getTop10(code!),
+    enabled,
   })
   
   // 显示错误提示
@@ -114,13 +146,28 @@ const StockDetail = () => {
 
   const stock = (basicData as { data?: StockBasic } | undefined)?.data
   const quote = (realtimeData as { data?: RealtimeQuote } | undefined)?.data
-  const klines = ((klineData as { data?: KLineData[] } | undefined)?.data) || []
-  const weeklyKlines = ((weeklyKlineData as { data?: KLineData[] } | undefined)?.data) || []
-  const monthlyKlines = ((monthlyKlineData as { data?: KLineData[] } | undefined)?.data) || []
+  // 后端返回格式：{status: "complete", data: [...]}
+  const klines = ((klineData as { data?: {data?: KLineData[]} } | undefined)?.data?.data) || []
+  const weeklyKlines = ((weeklyKlineData as { data?: {data?: KLineData[]} } | undefined)?.data?.data) || []
+  const monthlyKlines = ((monthlyKlineData as { data?: {data?: KLineData[]} } | undefined)?.data?.data) || []
   const indicators = ((indicatorData as { data?: TechnicalIndicator[] } | undefined)?.data) || []
+  const boards = ((boardData as { data?: any[] } | undefined)?.data) || []
+  const capitalFlows = ((capitalFlowData as { data?: any[] } | undefined)?.data) || []
+  const shareholders = ((shareholderData as { data?: any[] } | undefined)?.data) || []
 
   const getKlineOption = () => {
-    if (!klines.length) return {}
+    if (!klines.length) {
+      return {
+        title: {
+          text: '暂无数据',
+          left: 'center',
+          top: 'center',
+          textStyle: { color: '#a0aec0', fontSize: 14 }
+        },
+        xAxis: { show: false },
+        yAxis: { show: false }
+      }
+    }
 
     const dates = klines.map((k: any) => k.date)
     const ohlc = klines.map((k: any) => [k.open, k.close, k.low, k.high])
@@ -182,7 +229,18 @@ const StockDetail = () => {
   }
 
   const getWeeklyKlineOption = () => {
-    if (!weeklyKlines.length) return {}
+    if (!weeklyKlines.length) {
+      return {
+        title: {
+          text: '暂无数据',
+          left: 'center',
+          top: 'center',
+          textStyle: { color: '#a0aec0', fontSize: 14 }
+        },
+        xAxis: { show: false },
+        yAxis: { show: false }
+      }
+    }
 
     const dates = weeklyKlines.map((k: any) => k.date)
     const ohlc = weeklyKlines.map((k: any) => [k.open, k.close, k.low, k.high])
@@ -244,7 +302,18 @@ const StockDetail = () => {
   }
 
   const getMonthlyKlineOption = () => {
-    if (!monthlyKlines.length) return {}
+    if (!monthlyKlines.length) {
+      return {
+        title: {
+          text: '暂无数据',
+          left: 'center',
+          top: 'center',
+          textStyle: { color: '#a0aec0', fontSize: 14 }
+        },
+        xAxis: { show: false },
+        yAxis: { show: false }
+      }
+    }
 
     const dates = monthlyKlines.map((k: any) => k.date)
     const ohlc = monthlyKlines.map((k: any) => [k.open, k.close, k.low, k.high])
@@ -306,7 +375,18 @@ const StockDetail = () => {
   }
 
   const getIndicatorOption = () => {
-    if (!indicators.length) return {}
+    if (!indicators.length) {
+      return {
+        title: {
+          text: '暂无数据',
+          left: 'center',
+          top: 'center',
+          textStyle: { color: '#a0aec0', fontSize: 14 }
+        },
+        xAxis: { show: false },
+        yAxis: { show: false }
+      }
+    }
 
     const dates = indicators.map((i: any) => i.date)
     const macd = indicators.map((i: any) => i.macd)
@@ -353,6 +433,38 @@ const StockDetail = () => {
 
   return (
     <VStack spacing={6} align="stretch">
+      {/* 面包屑导航和返回按钮 */}
+      <HStack justify="space-between" mb={2}>
+        <Breadcrumb separator="/">
+          <BreadcrumbItem>
+            <BreadcrumbLink onClick={() => navigate('/')} color="light.textSecondary" _hover={{ color: 'brand.400' }}>
+              首页
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          {isFromWatchlist && (
+            <BreadcrumbItem>
+              <BreadcrumbLink onClick={() => navigate('/watchlist')} color="light.textSecondary" _hover={{ color: 'brand.400' }}>
+                自选股
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+          )}
+          <BreadcrumbItem isCurrentPage>
+            <Text color="light.text" fontWeight="medium">{stock?.name || code}</Text>
+          </BreadcrumbItem>
+        </Breadcrumb>
+        
+        {isFromWatchlist && (
+          <Button
+            leftIcon={<Icon as={FiArrowLeft} />}
+            size="sm"
+            variant="ghost"
+            onClick={() => navigate('/watchlist')}
+          >
+            返回自选股
+          </Button>
+        )}
+      </HStack>
+
       <HStack justify="space-between" flexWrap="wrap" gap={4}>
         <VStack align="start" spacing={1}>
           <Heading size="lg" color="light.text">
@@ -383,7 +495,9 @@ const StockDetail = () => {
               {quote.price?.toFixed(2)}
             </Text>
             <HStack>
-              <StatArrow type={quote.change_pct >= 0 ? 'increase' : 'decrease'} color={quote.change_pct >= 0 ? 'up.500' : 'down.500'} />
+              <Stat>
+                <StatArrow type={quote.change_pct >= 0 ? 'increase' : 'decrease'} color={quote.change_pct >= 0 ? 'up.500' : 'down.500'} />
+              </Stat>
               <Text color={quote.change_pct >= 0 ? 'up.500' : 'down.500'} fontWeight="bold" fontFamily="mono">
                 {quote.change_pct >= 0 ? '+' : ''}{quote.change_pct?.toFixed(2)}%
               </Text>
@@ -414,30 +528,33 @@ const StockDetail = () => {
         <CardBody>
           <Tabs variant="line">
             <TabList borderColor="light.border">
-              <Tab color="light.textSecondary">日K线</Tab>
-              <Tab color="light.textSecondary">周K线</Tab>
-              <Tab color="light.textSecondary">月K线</Tab>
+              <Tab color="light.textSecondary">日 K 线</Tab>
+              <Tab color="light.textSecondary">周 K 线</Tab>
+              <Tab color="light.textSecondary">月 K 线</Tab>
             </TabList>
             <TabPanels>
               <TabPanel p={0} pt={4}>
-                <ReactECharts
-                  option={getKlineOption()}
-                  style={{ height: '400px' }}
-                  showLoading={klineLoading}
+                <KLineChart
+                  data={klines}
+                  loading={klineLoading}
+                  type="daily"
+                  height="400px"
                 />
               </TabPanel>
               <TabPanel p={0} pt={4}>
-                <ReactECharts
-                  option={getWeeklyKlineOption()}
-                  style={{ height: '400px' }}
-                  showLoading={weeklyKlineLoading}
+                <KLineChart
+                  data={weeklyKlines}
+                  loading={weeklyKlineLoading}
+                  type="weekly"
+                  height="400px"
                 />
               </TabPanel>
               <TabPanel p={0} pt={4}>
-                <ReactECharts
-                  option={getMonthlyKlineOption()}
-                  style={{ height: '400px' }}
-                  showLoading={monthlyKlineLoading}
+                <KLineChart
+                  data={monthlyKlines}
+                  loading={monthlyKlineLoading}
+                  type="monthly"
+                  height="400px"
                 />
               </TabPanel>
             </TabPanels>
@@ -491,15 +608,152 @@ const StockDetail = () => {
         </CardBody>
       </Card>
 
+      {/* 所属板块 */}
+      {boards.length > 0 && (
+        <Card>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">所属板块</Heading>
+          </CardHeader>
+          <CardBody>
+            <SimpleGrid columns={[1, 2, 3]} gap={4}>
+              {boards.map((board: any, index: number) => (
+                <Card key={index} size="sm">
+                  <CardBody p={4}>
+                    <VStack align="start" spacing={2}>
+                      <Text fontSize="xs" color="light.textSecondary">{board.board_type}</Text>
+                      <Text fontSize="md" fontWeight="bold" color="light.text">{board.name}</Text>
+                      <HStack spacing={4}>
+                        <Text fontSize="xs" color="light.textSecondary">
+                          价格：{board.close_price?.toFixed(2) || '-'}
+                        </Text>
+                        <Badge colorScheme={board.change_pct && board.change_pct > 0 ? 'red' : 'green'}>
+                          {board.change_pct?.toFixed(2) || 0}%
+                        </Badge>
+                      </HStack>
+                    </VStack>
+                  </CardBody>
+                </Card>
+              ))}
+            </SimpleGrid>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* 资金流向 */}
+      {capitalFlows.length > 0 && (
+        <Card>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">资金流向</Heading>
+          </CardHeader>
+          <CardBody>
+            <TableContainer>
+              <Table size="sm" variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th borderColor="light.border" color="light.textSecondary">日期</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>收盘价</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>涨跌幅</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>主力净流入</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>主力净流入率</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>超大单</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>大单</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>中单</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>小单</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {capitalFlows.slice(-10).reverse().map((item: any, index: number) => (
+                    <Tr key={index} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Td borderColor="light.border" color="light.text">{item.trade_date}</Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {item.close_price?.toFixed(2) || '-'}
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        <Badge colorScheme={item.change_pct && item.change_pct > 0 ? 'red' : 'green'}>
+                          {item.change_pct?.toFixed(2) || 0}%
+                        </Badge>
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        <Badge colorScheme={item.main_net_amount && item.main_net_amount > 0 ? 'red' : 'green'}>
+                          {(item.main_net_amount / 10000).toFixed(0)}万
+                        </Badge>
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {item.main_net_amount_rate?.toFixed(2) || 0}%
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {(item.buy_elg_amount / 10000).toFixed(0)}万
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {(item.buy_lg_amount / 10000).toFixed(0)}万
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {(item.buy_md_amount / 10000).toFixed(0)}万
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {(item.buy_sm_amount / 10000).toFixed(0)}万
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </TableContainer>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* 前十大股东 */}
+      {shareholders.length > 0 && (
+        <Card>
+          <CardHeader pb={2}>
+            <Heading size="sm" color="light.text">前十大股东</Heading>
+          </CardHeader>
+          <CardBody>
+            <TableContainer>
+              <Table size="sm" variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th borderColor="light.border" color="light.textSecondary">股东名称</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>持股数 (股)</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>持股比例</Th>
+                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>持股变化</Th>
+                    <Th borderColor="light.border" color="light.textSecondary">报告期</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {shareholders.map((item: any, index: number) => (
+                    <Tr key={index} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Td borderColor="light.border" color="light.text">{item.shareholder_name}</Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {item.hold_amount?.toLocaleString() || '-'}
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        {item.hold_ratio?.toFixed(2) || 0}%
+                      </Td>
+                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                        <Badge colorScheme={item.change_amount && item.change_amount > 0 ? 'red' : 'green'}>
+                          {item.change_amount?.toLocaleString() || 0}
+                        </Badge>
+                      </Td>
+                      <Td borderColor="light.border" color="light.text">{item.report_date}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </TableContainer>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader pb={2}>
           <Heading size="sm" color="light.text">技术指标</Heading>
         </CardHeader>
         <CardBody>
-          <ReactECharts
-            option={getIndicatorOption()}
-            style={{ height: '300px' }}
-            showLoading={indicatorLoading}
+          <IndicatorChart
+            data={indicators}
+            loading={indicatorLoading}
+            height="300px"
           />
         </CardBody>
       </Card>

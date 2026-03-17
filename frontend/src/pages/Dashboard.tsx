@@ -51,7 +51,9 @@ const Dashboard = () => {
   const { data: realtimeData, isLoading: realtimeLoading } = useQuery({
     queryKey: ['indexRealtime'],
     queryFn: () => marketIndexApi.getRealtime(`${INDEX_CODES.SHANGHAI},${INDEX_CODES.SHENZHEN},${INDEX_CODES.GEM}`),
-    refetchInterval: 5000, // 5 秒刷新一次
+    refetchInterval: 30000, // 优化：30 秒刷新一次（原 5 秒）
+    staleTime: 10000,       // 10 秒内使用缓存
+    gcTime: 60000,          // 缓存 1 分钟
   })
 
   // 获取上证指数 K 线数据
@@ -234,7 +236,7 @@ const Dashboard = () => {
                 大盘实时行情
               </Heading>
               <Badge colorScheme="green" variant="subtle" fontSize="xs">
-                5 秒刷新
+                30 秒刷新
               </Badge>
             </Flex>
           </CardHeader>

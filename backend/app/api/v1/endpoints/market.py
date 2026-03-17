@@ -2,20 +2,26 @@
 实时涨跌幅排名接口
 提供全市场股票实时涨跌幅排行、市场情绪分析等功能
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional, Dict, Any, List
 import pandas as pd
 import time
+import asyncio
 from app.api.deps import OptionalCurrentUser
 from app.models.schemas import ResponseModel
 from app.storage.cache import cache_manager
 from app.config import settings
 import tushare as ts
+from app.services.data_persistence import data_persistence
 
 router = APIRouter()
 
 if settings.TUSHARE_TOKEN:
     ts.set_token(settings.TUSHARE_TOKEN)
+
+# 超时时间配置
+MARKET_RANKING_TIMEOUT = 15  # 市场排行超时 15 秒（数据量大）
+MARKET_OVERVIEW_TIMEOUT = 10  # 市场概览超时 10 秒
 
 
 @router.get("/market-ranking", response_model=ResponseModel[Dict[str, Any]])
@@ -39,7 +45,7 @@ async def get_market_ranking(
     - 市场情绪统计
     """
     try:
-        # 检查缓存（1 分钟有效期）
+        # 检查缓存（5 分钟有效期，优化后）
         cache_key = f"market_ranking_{src}_{top_n}"
         cached_data = await cache_manager.get("realtime", cache_key)
         
@@ -49,9 +55,27 @@ async def get_market_ranking(
                 message="从缓存获取数据"
             )
         
-        # 获取全市场数据
+        # 获取全市场数据（添加超时控制）
         start_time = time.time()
-        df = ts.realtime_list(src=src)
+        try:
+            # 使用 asyncio.wait_for 添加超时控制
+            df = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: ts.realtime_list(src=src)
+                ),
+                timeout=MARKET_RANKING_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail=f"获取市场数据超时（{MARKET_RANKING_TIMEOUT}秒），请重试或切换数据源"
+            )
+        except Exception as e:
+            return ResponseModel(
+                success=False,
+                code="ERROR",
+                message=f"获取数据失败：{str(e)}"
+            )
         elapsed = time.time() - start_time
         
         if df is None or len(df) == 0:
@@ -150,8 +174,11 @@ async def get_market_ranking(
             }
         }
         
-        # 缓存 1 分钟
-        await cache_manager.set("realtime", cache_key, result, ttl=60)
+        # 缓存 5 分钟（优化后）
+        await cache_manager.set("realtime", cache_key, result, ttl=300)
+        
+        # 异步保存到数据库（不阻塞返回）
+        asyncio.create_task(_save_ranking_to_db(result, src))
         
         return ResponseModel(data=result)
         
@@ -163,6 +190,23 @@ async def get_market_ranking(
         )
 
 
+async def _save_ranking_to_db(result: Dict[str, Any], data_source: str):
+    """异步保存市场排行数据到数据库"""
+    try:
+        # 保存 4 种类型的排行数据
+        ranking_types = ["gainers", "losers", "amount", "turnover"]
+        total_saved = 0
+        
+        for ranking_type in ranking_types:
+            saved = await data_persistence.save_market_ranking(result, ranking_type, data_source)
+            total_saved += saved
+        
+        if total_saved > 0:
+            logger.info(f"市场排行数据持久化完成：共保存 {total_saved} 条记录")
+    except Exception as e:
+        logger.error(f"保存市场排行数据到数据库失败：{e}")
+
+
 @router.get("/market-overview", response_model=ResponseModel[Dict[str, Any]])
 async def get_market_overview(
     current_user: OptionalCurrentUser = None
@@ -171,15 +215,33 @@ async def get_market_overview(
     获取市场概览（快速版本，只返回统计信息）
     """
     try:
-        # 检查缓存（30 秒有效期）
+        # 检查缓存（5 分钟有效期，优化后）
         cache_key = "market_overview"
         cached_data = await cache_manager.get("realtime", cache_key)
         
         if cached_data:
             return ResponseModel(data=cached_data)
         
-        # 获取全市场数据
-        df = ts.realtime_list(src='sina')
+        # 获取全市场数据（添加超时控制）
+        try:
+            df = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: ts.realtime_list(src='sina')
+                ),
+                timeout=MARKET_OVERVIEW_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            return ResponseModel(
+                success=False,
+                code="TIMEOUT",
+                message=f"获取数据超时（{MARKET_OVERVIEW_TIMEOUT}秒），请重试"
+            )
+        except Exception as e:
+            return ResponseModel(
+                success=False,
+                code="ERROR",
+                message=f"获取数据失败：{str(e)}"
+            )
         
         if df is None or len(df) == 0:
             return ResponseModel(
@@ -237,8 +299,8 @@ async def get_market_overview(
             }
         }
         
-        # 缓存 30 秒
-        await cache_manager.set("realtime", cache_key, result, ttl=30)
+        # 缓存 5 分钟（优化后）
+        await cache_manager.set("realtime", cache_key, result, ttl=300)
         
         return ResponseModel(data=result)
         
@@ -247,6 +309,60 @@ async def get_market_overview(
             success=False,
             code="ERROR",
             message=f"获取数据失败：{str(e)}"
+        )
+
+
+@router.get("/market-ranking/history", response_model=ResponseModel[List[Dict[str, Any]]])
+async def get_market_ranking_history(
+    ranking_type: str = Query(..., description="排行类型：gainers/losers/amount/turnover"),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    limit: int = Query(100, description="返回记录数限制", ge=1, le=1000),
+    current_user: OptionalCurrentUser = None
+):
+    """
+    获取市场排行历史数据
+    
+    ## 参数说明:
+    - ranking_type: 排行类型（gainers-涨幅榜，losers-跌幅榜，amount-成交额榜，turnover-换手率榜）
+    - start_date: 开始日期（YYYY-MM-DD），不传则查询当天
+    - end_date: 结束日期（YYYY-MM-DD），不传则查询当天
+    - limit: 返回记录数限制（默认 100，最大 1000）
+    
+    ## 返回数据:
+    - 历史排行数据列表（按日期倒序、排名正序排列）
+    """
+    try:
+        # 验证 ranking_type
+        valid_types = ["gainers", "losers", "amount", "turnover"]
+        if ranking_type not in valid_types:
+            return ResponseModel(
+                success=False,
+                code="INVALID_PARAM",
+                message=f"无效的排行类型，必须是：{', '.join(valid_types)}"
+            )
+        
+        # 从数据库查询历史数据
+        history_data = await data_persistence.get_market_ranking_history(
+            ranking_type=ranking_type,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit
+        )
+        
+        if not history_data:
+            return ResponseModel(
+                data=[],
+                message="未找到历史数据"
+            )
+        
+        return ResponseModel(data=history_data)
+        
+    except Exception as e:
+        return ResponseModel(
+            success=False,
+            code="ERROR",
+            message=f"获取历史数据失败：{str(e)}"
         )
 
 

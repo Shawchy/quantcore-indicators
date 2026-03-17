@@ -19,10 +19,10 @@ window.__store__ = store
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 分钟
-      gcTime: 10 * 60 * 1000, // 10 分钟
+      refetchOnWindowFocus: false, // 窗口聚焦时不自动刷新
+      retry: 2, // 失败重试 2 次
+      staleTime: 30 * 1000, // 30 秒内使用缓存（优化后）
+      gcTime: 2 * 60 * 1000, // 缓存 2 分钟（优化后）
       timeout: 15000, // 15 秒超时
     },
   },

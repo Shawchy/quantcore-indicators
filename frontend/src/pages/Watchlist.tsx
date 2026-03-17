@@ -220,7 +220,7 @@ const Watchlist = () => {
                     <Tr
                       key={item.code}
                       _hover={{ bg: 'light.bgSecondary', cursor: 'pointer' }}
-                      onClick={() => navigate(`/stock/${item.code}`)}
+                      onClick={() => navigate(`/stock/${item.code}`, { state: { from: 'watchlist' } })}
                     >
                       <Td borderColor="light.border" fontWeight="medium" color="light.text">{item.code}</Td>
                       <Td borderColor="light.border" color="light.textSecondary">{item.name}</Td>

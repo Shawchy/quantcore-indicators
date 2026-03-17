@@ -72,7 +72,7 @@ const TickDataTable: React.FC<TickDataProps> = ({ data, loading, error }) => {
     )
   }
 
-  if (!data || data.tick_data.length === 0) {
+  if (!data || !data.tick_data || data.tick_data.length === 0) {
     return (
       <Text fontSize="sm" color="gray.500" textAlign="center" py={8}>
         暂无成交明细数据

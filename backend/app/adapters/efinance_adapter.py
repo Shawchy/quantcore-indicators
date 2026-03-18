@@ -1,10 +1,12 @@
 import asyncio
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+from enum import Enum
 from loguru import logger
 from pydantic import BaseModel
 
 try:
     import efinance as ef
+    from efinance.utils import MarketType
     EF_AVAILABLE = True
 except ImportError:
     EF_AVAILABLE = False
@@ -16,7 +18,8 @@ from .base import (
     StockBasicInfo,
     KLineData,
     SectorInfo,
-    ChipData
+    ChipData,
+    IndexMember
 )
 from app.models.schemas import (
     BillboardEntry,
@@ -25,6 +28,54 @@ from app.models.schemas import (
     IndexComponent,
     CapitalFlowItem
 )
+
+
+class CompanyPerformance(BaseModel):
+    """公司业绩表现数据"""
+    code: str
+    name: str
+    report_date: str
+    revenue: float  # 营业收入
+    revenue_growth: float  # 营业收入同比增长
+    revenue_qoq: float  # 营业收入季度环比
+    net_profit: float  # 净利润
+    net_profit_growth: float  # 净利润同比增长
+    net_profit_qoq: float  # 净利润季度环比
+    eps: float  # 每股收益
+    bps: float  # 每股净资产
+    roe: float  # 净资产收益率
+    gross_margin: float  # 销售毛利率
+    cash_flow_per_share: float  # 每股经营现金流量
+
+
+class DealDetail(BaseModel):
+    """股票成交明细数据"""
+    stock_name: str  # 股票名称
+    stock_code: str  # 股票代码
+    prev_close: float  # 昨收价
+    trade_time: str  # 成交时间（HH:MM:SS）
+    price: float  # 成交价
+    volume: int  # 成交量（手）
+    order_count: int  # 成交单数
+
+
+class HistoryBill(BaseModel):
+    """股票历史单子流入流出数据"""
+    stock_name: str  # 股票名称
+    stock_code: str  # 股票代码
+    date: str  # 日期
+    main_net_amount: float  # 主力净流入
+    small_net_amount: float  # 小单净流入
+    medium_net_amount: float  # 中单净流入
+    big_net_amount: float  # 大单净流入
+    super_net_amount: float  # 超大单净流入
+    main_net_ratio: float  # 主力净流入占比
+    small_net_ratio: float  # 小单流入净占比
+    medium_net_ratio: float  # 中单流入净占比
+    big_net_ratio: float  # 大单流入净占比
+    super_net_ratio: float  # 超大单流入净占比
+    close_price: float  # 收盘价
+    change_pct: float  # 涨跌幅
 from app.utils.data_validator import validator
 from app.utils.tushare_cache_stats import api_call_cache
 
@@ -240,34 +291,337 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.error(f"获取股票信息失败 {code}: {e}")
             return None
     
+    async def get_stocks_base_info(self, stock_codes: List[str]) -> List[StockBasicInfo]:
+        """
+        批量获取多只股票的基本信息
+        
+        Args:
+            stock_codes: 股票代码列表，如 ['600519', '000858']
+        
+        Returns:
+            股票基本信息列表
+        """
+        try:
+            if not EF_AVAILABLE:
+                return []
+            
+            if not stock_codes:
+                return []
+            
+            # 生成缓存 key
+            codes_key = '_'.join(sorted(stock_codes))
+            cache_key = self._get_cache_key('stocks_base_info', codes=codes_key)
+            cached = self._get_from_cache(cache_key, 'stock_list')
+            if cached:
+                return cached
+            
+            # 批量获取股票信息
+            df = ef.stock.get_base_info(stock_codes)
+            
+            if df is None or (hasattr(df, 'empty') and df.empty):
+                return []
+            
+            stocks = []
+            for row in df.itertuples(index=False):
+                code = str(getattr(row, '股票代码', '')).zfill(6)
+                if not code:
+                    continue
+                
+                # 安全转换浮点数
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                # 获取最新价用于计算股本
+                latest_price = safe_float(getattr(row, '最新价', 1.0), 1.0)
+                if latest_price == 0:
+                    latest_price = 1.0
+                
+                total_shares_raw = safe_float(getattr(row, '总市值', 0.0), 0.0)
+                float_shares_raw = safe_float(getattr(row, '流通市值', 0.0), 0.0)
+                
+                stocks.append(StockBasicInfo(
+                    code=code,
+                    name=getattr(row, '股票名称', '') or '',
+                    market='SH' if code.startswith('6') else 'SZ',
+                    industry=getattr(row, '所处行业', '') or '',
+                    area='',
+                    list_date='',
+                    total_shares=total_shares_raw / latest_price if total_shares_raw > 0 else 0.0,
+                    float_shares=float_shares_raw / latest_price if float_shares_raw > 0 else 0.0
+                ))
+            
+            self._set_to_cache(cache_key, stocks, 'stock_list')
+            logger.info(f"批量获取股票信息成功：{len(stocks)}只")
+            return stocks
+            
+        except Exception as e:
+            logger.error(f"批量获取股票信息失败：{e}")
+            return []
+    
+    async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[DealDetail]:
+        """
+        获取股票最新交易日成交明细
+        
+        Args:
+            stock_code: 股票代码或股票名称，如 '600519' 或 '贵州茅台'
+            max_count: 最近的最大数据条数，默认 1000000
+            
+        Returns:
+            成交明细数据列表
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> deals = await adapter.get_deal_detail('600519')
+            >>> for deal in deals[:5]:
+            ...     print(f"{deal.trade_time} - {deal.price:.2f}元 - {deal.volume}手")
+        """
+        try:
+            if not EF_AVAILABLE:
+                return []
+            
+            cache_key = self._get_cache_key('deal_detail', code=stock_code, max_count=max_count)
+            cached = self._get_from_cache(cache_key, 'kline')
+            if cached:
+                return cached
+            
+            # 获取成交明细数据
+            df = ef.stock.get_deal_detail(stock_code, max_count=max_count)
+            
+            if df.empty:
+                return []
+            
+            deals = []
+            for row in df.itertuples(index=False):
+                # 安全转换数值
+                def safe_int(value, default=0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return int(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                stock_code_raw = str(getattr(row, '股票代码', '')).zfill(6)
+                if not stock_code_raw:
+                    continue
+                
+                deals.append(DealDetail(
+                    stock_name=getattr(row, '股票名称', '') or '',
+                    stock_code=stock_code_raw,
+                    prev_close=safe_float(getattr(row, '昨收', 0), 0.0),
+                    trade_time=str(getattr(row, '时间', '') or ''),
+                    price=safe_float(getattr(row, '成交价', 0), 0.0),
+                    volume=safe_int(getattr(row, '成交量', 0), 0),
+                    order_count=safe_int(getattr(row, '单数', 0), 0)
+                ))
+            
+            self._set_to_cache(cache_key, deals, 'kline')
+            logger.info(f"获取 {stock_code} 成交明细成功：{len(deals)}条")
+            return deals
+            
+        except Exception as e:
+            logger.error(f"获取成交明细失败 {stock_code}: {e}")
+            return []
+    
+    async def get_history_bill(self, stock_code: str) -> List[HistoryBill]:
+        """
+        获取单只股票历史单子流入流出数据
+        
+        Args:
+            stock_code: 股票代码
+            
+        Returns:
+            历史单子流入流出数据列表
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> bills = await adapter.get_history_bill('600519')
+            >>> for bill in bills[:5]:
+            ...     print(f"{bill.date} - 主力净流入：{bill.main_net_amount/1e8:.2f}亿")
+        """
+        try:
+            if not EF_AVAILABLE:
+                return []
+            
+            cache_key = self._get_cache_key('history_bill', code=stock_code)
+            cached = self._get_from_cache(cache_key, 'kline')
+            if cached:
+                return cached
+            
+            # 获取历史单子流入流出数据
+            df = ef.stock.get_history_bill(stock_code)
+            
+            if df.empty:
+                return []
+            
+            bills = []
+            for row in df.itertuples(index=False):
+                # 安全转换数值
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                stock_code_raw = str(getattr(row, '股票代码', '')).zfill(6)
+                if not stock_code_raw:
+                    continue
+                
+                date_raw = getattr(row, '日期', '')
+                if date_raw:
+                    if isinstance(date_raw, str):
+                        date = date_raw.split(' ')[0].replace('-', '')
+                    else:
+                        date = str(date_raw)[:10].replace('-', '')
+                    if len(date) == 10:  # YYYY-MM-DD 格式
+                        date = date.replace('-', '')
+                else:
+                    date = ''
+                
+                bills.append(HistoryBill(
+                    stock_name=getattr(row, '股票名称', '') or '',
+                    stock_code=stock_code_raw,
+                    date=date,
+                    main_net_amount=safe_float(getattr(row, '主力净流入', 0), 0.0),
+                    small_net_amount=safe_float(getattr(row, '小单净流入', 0), 0.0),
+                    medium_net_amount=safe_float(getattr(row, '中单净流入', 0), 0.0),
+                    big_net_amount=safe_float(getattr(row, '大单净流入', 0), 0.0),
+                    super_net_amount=safe_float(getattr(row, '超大单净流入', 0), 0.0),
+                    main_net_ratio=safe_float(getattr(row, '主力净流入占比', 0), 0.0),
+                    small_net_ratio=safe_float(getattr(row, '小单流入净占比', 0), 0.0),
+                    medium_net_ratio=safe_float(getattr(row, '中单流入净占比', 0), 0.0),
+                    big_net_ratio=safe_float(getattr(row, '大单流入净占比', 0), 0.0),
+                    super_net_ratio=safe_float(getattr(row, '超大单流入净占比', 0), 0.0),
+                    close_price=safe_float(getattr(row, '收盘价', 0), 0.0),
+                    change_pct=safe_float(getattr(row, '涨跌幅', 0), 0.0)
+                ))
+            
+            self._set_to_cache(cache_key, bills, 'kline')
+            logger.info(f"获取 {stock_code} 历史资金流向成功：{len(bills)}条")
+            return bills
+            
+        except Exception as e:
+            logger.error(f"获取历史资金流向失败 {stock_code}: {e}")
+            return []
+    
     async def get_kline(
         self,
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = "qfq"
+        klt: int = 101,
+        fqt: int = 1,
+        market_type: Optional[str] = None,
+        adjust: Optional[str] = None
     ) -> List[KLineData]:
-        """获取 K 线数据"""
+        """
+        获取股票 K 线数据（支持多种周期和复权方式）
+        
+        Args:
+            code: 股票代码或名称，如 '600519' 或 '贵州茅台'
+            start_date: 开始日期，格式：YYYY-MM-DD 或 YYYYMMDD，默认 '1900-01-01'
+            end_date: 结束日期，格式：YYYY-MM-DD 或 YYYYMMDD，默认 '2050-01-01'
+            klt: 时间间隔（秒），默认 101（日线）
+                - 1: 分钟
+                - 5: 5 分钟
+                - 15: 15 分钟
+                - 30: 30 分钟
+                - 60: 60 分钟
+                - 101: 日
+                - 102: 周
+                - 103: 月
+            fqt: 复权方式，默认 1（前复权）
+                - 0: 不复权
+                - 1: 前复权
+                - 2: 后复权
+            market_type: 市场类型，可选值：
+                - 'A_stock': A 股（默认）
+                - 'Hongkong': 港股
+                - 'London_stock_exchange': 英股
+                - 'US_stock': 美股
+            adjust: 兼容旧参数，如果提供则转换为 fqt
+                - 'qfq': 前复权 (fqt=1)
+                - 'hfq': 后复权 (fqt=2)
+                - None: 不复权 (fqt=0)
+        
+        Returns:
+            K 线数据列表
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> # 获取日线数据（前复权）
+            >>> klines = await adapter.get_kline('600519')
+            >>> # 获取周线数据（不复权）
+            >>> weekly = await adapter.get_kline('600519', klt=102, fqt=0)
+            >>> # 获取 60 分钟 K 线
+            >>> hourly = await adapter.get_kline('600519', klt=60)
+        """
         try:
             if not EF_AVAILABLE:
                 return []
             
-            cache_key = self._get_cache_key('kline', code=code, start=start_date, end=end_date, adjust=adjust)
+            # 兼容旧的 adjust 参数
+            if adjust is not None and fqt == 1:
+                if adjust == 'qfq':
+                    fqt = 1
+                elif adjust == 'hfq':
+                    fqt = 2
+                else:
+                    fqt = 0
+            
+            # 格式化日期
+            beg = start_date.replace('-', '') if start_date else '19000101'
+            if len(beg) == 8 and '-' not in beg:
+                pass  # 已经是 YYYYMMDD 格式
+            elif len(beg) == 10:
+                beg = beg.replace('-', '')
+            
+            end = end_date.replace('-', '') if end_date else '20500101'
+            if len(end) == 8 and '-' not in end:
+                pass
+            elif len(end) == 10:
+                end = end.replace('-', '')
+            
+            cache_key = self._get_cache_key('kline', code=code, start=beg, end=end, klt=klt, fqt=fqt)
             cached = self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
-            # 获取 K 线数据
-            # period: 1 分钟=1, 5 分钟=5, 15 分钟=15, 30 分钟=30, 60 分钟=60, 日=101, 周=102, 月=103
-            period = 101  # 日线
+            # 构建参数
+            kwargs = {
+                'beg': beg,
+                'end': end,
+                'klt': klt,
+                'fqt': fqt,
+                'use_id_cache': True
+            }
             
-            # efinance 直接传股票代码即可，会自动识别市场
-            df = ef.stock.get_quote_history(
-                code.zfill(6),
-                period=period,
-                beg=start_date.replace('-', '') if start_date else '19000101',
-                end=end_date.replace('-', '') if end_date else '20500101'
-            )
+            # 处理市场类型
+            if market_type:
+                try:
+                    market_enum = getattr(MarketType, market_type, None)
+                    if market_enum:
+                        kwargs['market_type'] = market_enum
+                except Exception:
+                    logger.warning(f"无效的市场类型：{market_type}")
+            
+            # 获取 K 线数据
+            df = ef.stock.get_quote_history(code.zfill(6), **kwargs)
             
             if df.empty:
                 return []
@@ -275,35 +629,43 @@ class EFinanceAdapter(BaseDataAdapter):
             klines = []
             prev_close = None
             for row in df.itertuples(index=False):
-                # 获取日期字段（可能是 '时间'、'日期' 等）
+                # 获取日期字段
                 date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
                 
-                # 处理日期格式
                 if not date_raw or date_raw == '':
                     logger.warning(f"K 线数据日期为空：{code}")
                     continue
                 
                 # 统一格式为 YYYYMMDD
-                if len(date_raw) == 10 and '-' in date_raw:  # 2024-01-15
+                if len(date_raw) == 10 and '-' in date_raw:
                     date = date_raw.replace('-', '')
-                elif len(date_raw) == 8:  # 20240115
+                elif len(date_raw) == 8:
                     date = date_raw
                 else:
                     logger.warning(f"K 线数据日期格式异常：{date_raw}")
                     continue
                 
-                current_close = float(getattr(row, '收盘', 0) or 0)
+                # 安全转换浮点数
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                current_close = safe_float(getattr(row, '收盘', 0), 0.0)
                 klines.append(KLineData(
                     code=code,
                     date=date,
-                    open=float(getattr(row, '开盘', 0) or 0),
-                    high=float(getattr(row, '最高', 0) or 0),
-                    low=float(getattr(row, '最低', 0) or 0),
+                    open=safe_float(getattr(row, '开盘', 0), 0.0),
+                    high=safe_float(getattr(row, '最高', 0), 0.0),
+                    low=safe_float(getattr(row, '最低', 0), 0.0),
                     close=current_close,
-                    volume=float(getattr(row, '成交量', 0) or 0),
-                    amount=float(getattr(row, '成交额', 0) or 0),
-                    turnover_rate=float(getattr(row, '换手率', 0) or 0),
-                    pre_close=prev_close  # 上一日的收盘价
+                    volume=safe_float(getattr(row, '成交量', 0), 0.0),
+                    amount=safe_float(getattr(row, '成交额', 0), 0.0),
+                    turnover_rate=safe_float(getattr(row, '换手率', 0), 0.0),
+                    pre_close=prev_close
                 ))
                 prev_close = current_close
             
@@ -311,12 +673,143 @@ class EFinanceAdapter(BaseDataAdapter):
             klines.sort(key=lambda x: x.date)
             
             self._set_to_cache(cache_key, klines, 'kline')
-            logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条")
+            logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条 (klt={klt}, fqt={fqt})")
             return klines
             
         except Exception as e:
             logger.error(f"获取 K 线数据失败 {code}: {e}")
             return []
+    
+    async def get_multi_kline(
+        self,
+        stock_codes: List[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        klt: int = 101,
+        fqt: int = 1,
+        market_type: Optional[str] = None
+    ) -> Dict[str, List[KLineData]]:
+        """
+        批量获取多只股票的 K 线数据
+        
+        Args:
+            stock_codes: 股票代码列表，如 ['600519', '300750']
+            start_date: 开始日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            end_date: 结束日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            klt: 时间间隔，默认 101（日线）
+            fqt: 复权方式，默认 1（前复权）
+            market_type: 市场类型
+        
+        Returns:
+            字典，key 为股票代码，value 为 K 线数据列表
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> klines = await adapter.get_multi_kline(['600519', '300750'])
+            >>> for code, data in klines.items():
+            ...     print(f"{code}: {len(data)}条 K 线数据")
+        """
+        try:
+            if not EF_AVAILABLE:
+                return {}
+            
+            if not stock_codes:
+                return {}
+            
+            # 生成缓存 key
+            codes_key = '_'.join(sorted(stock_codes))
+            cache_key = self._get_cache_key('multi_kline', codes=codes_key, start=start_date, end=end_date, klt=klt, fqt=fqt)
+            cached = self._get_from_cache(cache_key, 'kline')
+            if cached:
+                return cached
+            
+            # 格式化日期
+            beg = start_date.replace('-', '') if start_date else '19000101'
+            if len(beg) == 10:
+                beg = beg.replace('-', '')
+            
+            end = end_date.replace('-', '') if end_date else '20500101'
+            if len(end) == 10:
+                end = end.replace('-', '')
+            
+            # 构建参数
+            kwargs = {
+                'beg': beg,
+                'end': end,
+                'klt': klt,
+                'fqt': fqt,
+                'use_id_cache': True
+            }
+            
+            # 处理市场类型
+            if market_type:
+                try:
+                    market_enum = getattr(MarketType, market_type, None)
+                    if market_enum:
+                        kwargs['market_type'] = market_enum
+                except Exception:
+                    logger.warning(f"无效的市场类型：{market_type}")
+            
+            # 批量获取 K 线数据
+            result_dict = ef.stock.get_quote_history(stock_codes, **kwargs)
+            
+            if not result_dict:
+                return {}
+            
+            all_klines = {}
+            for code, df in result_dict.items():
+                if df.empty:
+                    all_klines[code] = []
+                    continue
+                
+                klines = []
+                prev_close = None
+                for row in df.itertuples(index=False):
+                    date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
+                    
+                    if not date_raw or date_raw == '':
+                        continue
+                    
+                    if len(date_raw) == 10 and '-' in date_raw:
+                        date = date_raw.replace('-', '')
+                    elif len(date_raw) == 8:
+                        date = date_raw
+                    else:
+                        continue
+                    
+                    def safe_float(value, default=0.0):
+                        try:
+                            if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                                return default
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    current_close = safe_float(getattr(row, '收盘', 0), 0.0)
+                    klines.append(KLineData(
+                        code=code,
+                        date=date,
+                        open=safe_float(getattr(row, '开盘', 0), 0.0),
+                        high=safe_float(getattr(row, '最高', 0), 0.0),
+                        low=safe_float(getattr(row, '最低', 0), 0.0),
+                        close=current_close,
+                        volume=safe_float(getattr(row, '成交量', 0), 0.0),
+                        amount=safe_float(getattr(row, '成交额', 0), 0.0),
+                        turnover_rate=safe_float(getattr(row, '换手率', 0), 0.0),
+                        pre_close=prev_close
+                    ))
+                    prev_close = current_close
+                
+                klines.sort(key=lambda x: x.date)
+                all_klines[code] = klines
+            
+            self._set_to_cache(cache_key, all_klines, 'kline')
+            logger.info(f"批量获取 K 线数据成功：{len(all_klines)}只股票")
+            return all_klines
+            
+        except Exception as e:
+            logger.error(f"批量获取 K 线数据失败：{e}")
+            return {}
     
     @api_call_cache(ttl=1800)  # 缓存 30 分钟
     async def get_weekly_kline(
@@ -324,82 +817,37 @@ class EFinanceAdapter(BaseDataAdapter):
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = "qfq"
+        fqt: int = 1,
+        market_type: Optional[str] = None,
+        adjust: Optional[str] = None
     ) -> List[KLineData]:
-        """获取周 K 线数据（带重试机制）"""
-        try:
-            if not EF_AVAILABLE:
-                return []
-            
-            cache_key = self._get_cache_key('kline_weekly', code=code, start=start_date, end=end_date, adjust=adjust)
-            cached = self._get_from_cache(cache_key, 'kline')
-            if cached:
-                return cached
-            
-            # period: 周=102
-            period = 102
-            
-            # 重试机制：最多重试 3 次
-            df = None
-            for attempt in range(3):
-                try:
-                    df = ef.stock.get_quote_history(
-                        code.zfill(6),
-                        period=period,
-                        beg=start_date.replace('-', '') if start_date else '19000101',
-                        end=end_date.replace('-', '') if end_date else '20500101'
-                    )
-                    break  # 成功则跳出
-                except Exception as retry_error:
-                    if attempt < 2:
-                        logger.debug(f"获取周 K 线数据失败，重试 {attempt+1}/3: {retry_error}")
-                        await asyncio.sleep(0.5 * (attempt + 1))  # 递增延迟
-                    else:
-                        raise retry_error
-            
-            if df is None or df.empty:
-                return []
-            
-            klines = []
-            prev_close = None
-            for row in df.itertuples(index=False):
-                date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
-                
-                if not date_raw or date_raw == '':
-                    logger.warning(f"周 K 线数据日期为空：{code}")
-                    continue
-                
-                if len(date_raw) == 10 and '-' in date_raw:
-                    date = date_raw.replace('-', '')
-                elif len(date_raw) == 8:
-                    date = date_raw
-                else:
-                    logger.warning(f"周 K 线数据日期格式异常：{date_raw}")
-                    continue
-                
-                current_close = float(getattr(row, '收盘', 0) or 0)
-                klines.append(KLineData(
-                    code=code,
-                    date=date,
-                    open=float(getattr(row, '开盘', 0) or 0),
-                    high=float(getattr(row, '最高', 0) or 0),
-                    low=float(getattr(row, '最低', 0) or 0),
-                    close=current_close,
-                    volume=float(getattr(row, '成交量', 0) or 0),
-                    amount=float(getattr(row, '成交额', 0) or 0),
-                    turnover_rate=float(getattr(row, '换手率', 0) or 0),
-                    pre_close=prev_close  # 上一周的收盘价
-                ))
-                prev_close = current_close
-            
-            klines.sort(key=lambda x: x.date)
-            self._set_to_cache(cache_key, klines, 'kline')
-            logger.info(f"获取周 K 线数据成功 {code}: {len(klines)}条")
-            return klines
-            
-        except Exception as e:
-            logger.warning(f"获取周 K 线数据失败 {code}（网络不稳定）: {e}")
-            return []
+        """
+        获取周 K 线数据（带重试机制）
+        
+        Args:
+            code: 股票代码或名称
+            start_date: 开始日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            end_date: 结束日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            fqt: 复权方式，默认 1（前复权）
+                - 0: 不复权
+                - 1: 前复权
+                - 2: 后复权
+            market_type: 市场类型
+            adjust: 兼容旧参数
+        
+        Returns:
+            周 K 线数据列表
+        """
+        # 直接调用优化后的 get_kline 方法
+        return await self.get_kline(
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
+            klt=102,  # 周线
+            fqt=fqt,
+            market_type=market_type,
+            adjust=adjust
+        )
     
     @api_call_cache(ttl=1800)  # 缓存 30 分钟
     async def get_monthly_kline(
@@ -407,85 +855,73 @@ class EFinanceAdapter(BaseDataAdapter):
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = "qfq"
+        fqt: int = 1,
+        market_type: Optional[str] = None,
+        adjust: Optional[str] = None
     ) -> List[KLineData]:
-        """获取月 K 线数据（带重试机制）"""
-        try:
-            if not EF_AVAILABLE:
-                return []
-            
-            cache_key = self._get_cache_key('kline_monthly', code=code, start=start_date, end=end_date, adjust=adjust)
-            cached = self._get_from_cache(cache_key, 'kline')
-            if cached:
-                return cached
-            
-            # period: 月=103
-            period = 103
-            
-            # 重试机制：最多重试 3 次
-            df = None
-            for attempt in range(3):
-                try:
-                    df = ef.stock.get_quote_history(
-                        code.zfill(6),
-                        period=period,
-                        beg=start_date.replace('-', '') if start_date else '19000101',
-                        end=end_date.replace('-', '') if end_date else '20500101'
-                    )
-                    break  # 成功则跳出
-                except Exception as retry_error:
-                    if attempt < 2:
-                        logger.debug(f"获取月 K 线数据失败，重试 {attempt+1}/3: {retry_error}")
-                        await asyncio.sleep(0.5 * (attempt + 1))
-                    else:
-                        raise retry_error
-            
-            if df is None or df.empty:
-                return []
-            
-            klines = []
-            prev_close = None
-            for row in df.itertuples(index=False):
-                date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
-                
-                if not date_raw or date_raw == '':
-                    logger.warning(f"月 K 线数据日期为空：{code}")
-                    continue
-                
-                if len(date_raw) == 10 and '-' in date_raw:
-                    date = date_raw.replace('-', '')
-                elif len(date_raw) == 8:
-                    date = date_raw
-                else:
-                    logger.warning(f"月 K 线数据日期格式异常：{date_raw}")
-                    continue
-                
-                current_close = float(getattr(row, '收盘', 0) or 0)
-                klines.append(KLineData(
-                    code=code,
-                    date=date,
-                    open=float(getattr(row, '开盘', 0) or 0),
-                    high=float(getattr(row, '最高', 0) or 0),
-                    low=float(getattr(row, '最低', 0) or 0),
-                    close=current_close,
-                    volume=float(getattr(row, '成交量', 0) or 0),
-                    amount=float(getattr(row, '成交额', 0) or 0),
-                    turnover_rate=float(getattr(row, '换手率', 0) or 0),
-                    pre_close=prev_close  # 上一月的收盘价
-                ))
-                prev_close = current_close
-            
-            klines.sort(key=lambda x: x.date)
-            self._set_to_cache(cache_key, klines, 'kline')
-            logger.info(f"获取月 K 线数据成功 {code}: {len(klines)}条")
-            return klines
-            
-        except Exception as e:
-            logger.warning(f"获取月 K 线数据失败 {code}（网络不稳定）: {e}")
-            return []
+        """
+        获取月 K 线数据（带重试机制）
+        
+        Args:
+            code: 股票代码或名称
+            start_date: 开始日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            end_date: 结束日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            fqt: 复权方式，默认 1（前复权）
+                - 0: 不复权
+                - 1: 前复权
+                - 2: 后复权
+            market_type: 市场类型
+            adjust: 兼容旧参数
+        
+        Returns:
+            月 K 线数据列表
+        """
+        # 直接调用优化后的 get_kline 方法
+        return await self.get_kline(
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
+            klt=103,  # 月线
+            fqt=fqt,
+            market_type=market_type,
+            adjust=adjust
+        )
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
-        """获取实时行情"""
+        """
+        获取沪深市场股票最新行情快照
+        
+        Args:
+            code: 股票代码，如 '600519'
+            
+        Returns:
+            实时行情数据字典，包含以下字段：
+            - code: 股票代码
+            - name: 股票名称
+            - price: 最新价
+            - change: 涨跌额
+            - change_pct: 涨跌幅
+            - prev_close: 昨收价
+            - open: 今开价
+            - high: 最高价
+            - low: 最低价
+            - volume: 成交量（手）
+            - amount: 成交额（元）
+            - turnover_rate: 换手率（%）
+            - avg_price: 均价
+            - limit_up: 涨停价
+            - limit_down: 跌停价
+            - quote_time: 时间戳
+            - bid_prices: 买盘价格列表 [买 1，买 2，买 3，买 4，买 5]
+            - ask_prices: 卖盘价格列表 [卖 1，卖 2，卖 3，卖 4，卖 5]
+            - bid_volumes: 买盘数量列表 [买 1 量，买 2 量，买 3 量，买 4 量，买 5 量]
+            - ask_volumes: 卖盘数量列表 [卖 1 量，卖 2 量，卖 3 量，卖 4 量，卖 5 量]
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> quote = await adapter.get_realtime_quote('600519')
+            >>> print(f"贵州茅台最新价：{quote['price']}元，涨跌幅：{quote['change_pct']}%")
+        """
         try:
             if not EF_AVAILABLE:
                 return {}
@@ -501,29 +937,165 @@ class EFinanceAdapter(BaseDataAdapter):
             if series is None or len(series) == 0:
                 return {}
             
+            # 安全转换浮点数
+            def safe_float(value, default=0.0):
+                try:
+                    if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                        return default
+                    return float(value)
+                except (ValueError, TypeError):
+                    return default
+            
+            # 安全转换整数
+            def safe_int(value, default=0):
+                try:
+                    if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                        return default
+                    return int(float(value))
+                except (ValueError, TypeError):
+                    return default
+            
+            # 获取五档买卖盘数据
+            bid_prices = []
+            ask_prices = []
+            bid_volumes = []
+            ask_volumes = []
+            
+            for i in range(1, 6):
+                # 买盘数据
+                bid_price = series.get(f'买{i}价', None)
+                bid_vol = series.get(f'买{i}数量', None)
+                if bid_price is not None:
+                    bid_prices.append(safe_float(bid_price, 0.0))
+                    bid_volumes.append(safe_int(bid_vol, 0))
+                else:
+                    bid_prices.append(0.0)
+                    bid_volumes.append(0)
+                
+                # 卖盘数据
+                ask_price = series.get(f'卖{i}价', None)
+                ask_vol = series.get(f'卖{i}数量', None)
+                if ask_price is not None:
+                    ask_prices.append(safe_float(ask_price, 0.0))
+                    ask_volumes.append(safe_int(ask_vol, 0))
+                else:
+                    ask_prices.append(0.0)
+                    ask_volumes.append(0)
+            
             quote = {
                 'code': code,
-                'name': series.get('名称', ''),
-                'price': float(series.get('最新价', 0) or 0),
-                'change': float(series.get('涨跌额', 0) or 0),
-                'change_pct': float(series.get('涨跌幅', 0) or 0),
-                'high': float(series.get('最高', 0) or 0),
-                'low': float(series.get('最低', 0) or 0),
-                'open': float(series.get('今开', 0) or 0),
-                'prev_close': float(series.get('昨收', 0) or 0),
-                'volume': float(series.get('成交量', 0) or 0),
-                'amount': float(series.get('成交额', 0) or 0),
-                'turnover_rate': float(series.get('换手率', 0) or 0),
-                'quote_time': series.get('时间', '')
+                'name': series.get('名称', '') or '',
+                'price': safe_float(series.get('最新价', 0), 0.0),
+                'change': safe_float(series.get('涨跌额', 0), 0.0),
+                'change_pct': safe_float(series.get('涨跌幅', 0), 0.0),
+                'high': safe_float(series.get('最高', 0), 0.0),
+                'low': safe_float(series.get('最低', 0), 0.0),
+                'open': safe_float(series.get('今开', 0), 0.0),
+                'prev_close': safe_float(series.get('昨收', 0), 0.0),
+                'volume': safe_int(series.get('成交量', 0), 0),
+                'amount': safe_float(series.get('成交额', 0), 0.0),
+                'turnover_rate': safe_float(series.get('换手率', 0), 0.0),
+                'avg_price': safe_float(series.get('均价', 0), 0.0),
+                'limit_up': safe_float(series.get('涨停价', 0), 0.0),
+                'limit_down': safe_float(series.get('跌停价', 0), 0.0),
+                'quote_time': series.get('时间', '') or '',
+                'bid_prices': bid_prices,  # [买 1, 买 2, 买 3, 买 4, 买 5]
+                'ask_prices': ask_prices,  # [卖 1, 卖 2, 卖 3, 卖 4, 卖 5]
+                'bid_volumes': bid_volumes,  # [买 1 量，买 2 量，买 3 量，买 4 量，买 5 量]
+                'ask_volumes': ask_volumes,  # [卖 1 量，卖 2 量，卖 3 量，卖 4 量，卖 5 量]
+                'bid1_price': bid_prices[0] if bid_prices[0] > 0 else None,
+                'bid1_volume': bid_volumes[0] if bid_volumes[0] > 0 else None,
+                'ask1_price': ask_prices[0] if ask_prices[0] > 0 else None,
+                'ask1_volume': ask_volumes[0] if ask_volumes[0] > 0 else None
             }
             
             self._set_to_cache(cache_key, quote, 'quote')
-            logger.debug(f"获取实时行情成功 {code}: {quote['price']}")
+            logger.info(f"获取实时行情成功 {code}: {quote['price']}元 ({quote['change_pct']}%)")
             return quote
             
         except Exception as e:
             logger.error(f"获取实时行情失败 {code}: {e}")
             return {}
+    
+    async def get_latest_quote(self, stock_codes: List[str]) -> List[Dict[str, Any]]:
+        """
+        获取沪深市场多只股票的实时涨幅情况
+        
+        Args:
+            stock_codes: 股票代码列表，如 ['600519', '300750']
+            
+        Returns:
+            多只股票的实时行情数据列表
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> quotes = await adapter.get_latest_quote(['600519', '300750'])
+            >>> for quote in quotes:
+            ...     print(f"{quote['name']}: {quote['price']}元 ({quote['change_pct']}%)")
+        """
+        try:
+            if not EF_AVAILABLE:
+                return []
+            
+            if not stock_codes:
+                return []
+            
+            # 生成缓存 key
+            codes_key = '_'.join(sorted(stock_codes))
+            cache_key = self._get_cache_key('latest_quote', codes=codes_key)
+            cached = self._get_from_cache(cache_key, 'quote')
+            if cached:
+                return cached
+            
+            # 批量获取实时行情
+            df = ef.stock.get_latest_quote(stock_codes)
+            
+            if df.empty:
+                return []
+            
+            quotes = []
+            for row in df.itertuples(index=False):
+                # 安全转换数值
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                code = str(getattr(row, '代码', '')).zfill(6)
+                if not code:
+                    continue
+                
+                quotes.append({
+                    'code': code,
+                    'name': getattr(row, '名称', '') or '',
+                    'change_pct': safe_float(getattr(row, '涨跌幅', 0), 0.0),
+                    'price': safe_float(getattr(row, '最新价', 0), 0.0),
+                    'high': safe_float(getattr(row, '最高', 0), 0.0),
+                    'low': safe_float(getattr(row, '最低', 0), 0.0),
+                    'open': safe_float(getattr(row, '今开', 0), 0.0),
+                    'change': safe_float(getattr(row, '涨跌额', 0), 0.0),
+                    'turnover_rate': safe_float(getattr(row, '换手率', 0), 0.0),
+                    'volume_ratio': safe_float(getattr(row, '量比', 0), 0.0),
+                    'pe_ratio_dynamic': safe_float(getattr(row, '动态市盈率', 0), 0.0),
+                    'volume': safe_float(getattr(row, '成交量', 0), 0.0),
+                    'amount': safe_float(getattr(row, '成交额', 0), 0.0),
+                    'prev_close': safe_float(getattr(row, '昨日收盘', 0), 0.0),
+                    'total_market_cap': safe_float(getattr(row, '总市值', 0), 0.0),
+                    'float_market_cap': safe_float(getattr(row, '流通市值', 0), 0.0),
+                    'market_type': getattr(row, '市场类型', '') or '',
+                    'quote_id': getattr(row, '行情 ID', '') or ''
+                })
+            
+            self._set_to_cache(cache_key, quotes, 'quote')
+            logger.info(f"批量获取实时行情成功：{len(quotes)}只")
+            return quotes
+            
+        except Exception as e:
+            logger.error(f"批量获取实时行情失败：{e}")
+            return []
     
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
         """获取板块列表"""
@@ -619,26 +1191,46 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.error(f"获取筹码数据失败 {code}: {e}")
             return []
     
-    async def get_daily_billboard(self, trade_date: Optional[str] = None) -> List[BillboardEntry]:
-        """获取龙虎榜单数据
+    async def get_daily_billboard(
+        self, 
+        start_date: Optional[str] = None, 
+        end_date: Optional[str] = None
+    ) -> List[BillboardEntry]:
+        """
+        获取指定日期区间的龙虎榜详情数据
         
         Args:
-            trade_date: 交易日期，格式：YYYY-MM-DD，默认今日
+            start_date: 开始日期，格式：YYYY-MM-DD
+                - None: 最新一个榜单公开日（默认）
+                - "2021-08-27": 2021 年 8 月 27 日
+            
+            end_date: 结束日期，格式：YYYY-MM-DD
+                - None: 最新一个榜单公开日（默认）
+                - "2021-08-31": 2021 年 8 月 31 日
             
         Returns:
-            龙虎榜单数据列表
+            龙虎榜详情数据列表
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> # 获取最新龙虎榜
+            >>> latest = await adapter.get_daily_billboard()
+            >>> # 获取指定日期区间
+            >>> bills = await adapter.get_daily_billboard('2021-08-20', '2021-08-27')
         """
         try:
             if not EF_AVAILABLE:
                 return []
             
-            cache_key = self._get_cache_key('billboard', date=trade_date)
+            # 生成缓存 key
+            date_key = f"{start_date or 'latest'}_{end_date or 'latest'}"
+            cache_key = self._get_cache_key('billboard', date=date_key)
             cached = self._get_from_cache(cache_key, 'default')
             if cached:
                 return cached
             
-            # 获取龙虎榜数据
-            df = ef.stock.get_daily_billboard(trade_date)
+            # 获取龙虎榜数据（支持日期范围）
+            df = ef.stock.get_daily_billboard(start_date, end_date)
             
             if df.empty:
                 return []
@@ -649,21 +1241,40 @@ class EFinanceAdapter(BaseDataAdapter):
                 if not code:
                     continue
                 
+                # 安全转换浮点数
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                code_padded = code.zfill(6)
+                trade_date = str(getattr(row, '上榜日期', '') or '')
+                
                 entries.append(BillboardEntry(
-                    code=code.zfill(6),
-                    name=getattr(row, '股票名称', ''),
-                    close_price=float(getattr(row, '收盘价', 0) or 0),
-                    change_pct=float(getattr(row, '涨跌幅', 0) or 0),
-                    turnover_amount=float(getattr(row, '成交额', 0) or 0),
-                    net_amount=float(getattr(row, '净流入额', 0) or 0),
-                    buy_amount=float(getattr(row, '买入额', 0) or 0),
-                    sell_amount=float(getattr(row, '卖出额', 0) or 0),
-                    reason=getattr(row, '上榜原因', ''),
-                    trade_date=trade_date or ''
+                    code=code_padded,
+                    name=getattr(row, '股票名称', '') or '',
+                    close_price=safe_float(getattr(row, '收盘价', 0), 0.0),
+                    change_pct=safe_float(getattr(row, '涨跌幅', 0), 0.0),
+                    turnover_rate=safe_float(getattr(row, '换手率', 0), 0.0),
+                    turnover_amount=safe_float(getattr(row, '市场总成交额', 0), 0.0),
+                    net_amount=safe_float(getattr(row, '龙虎榜净买额', 0), 0.0),
+                    buy_amount=safe_float(getattr(row, '龙虎榜买入额', 0), 0.0),
+                    sell_amount=safe_float(getattr(row, '龙虎榜卖出额', 0), 0.0),
+                    total_amount=safe_float(getattr(row, '龙虎榜成交额', 0), 0.0),
+                    net_ratio=safe_float(getattr(row, '净买额占总成交比', 0), 0.0),
+                    amount_ratio=safe_float(getattr(row, '成交额占总成交比', 0), 0.0),
+                    float_market_cap=safe_float(getattr(row, '流通市值', 0), 0.0),
+                    reason=getattr(row, '上榜原因', '') or '',
+                    trade_date=trade_date,
+                    interpretation=getattr(row, '解读', '') or ''  # 如：卖一主卖，成功率 48.36%
                 ))
             
             self._set_to_cache(cache_key, entries, 'default')
-            logger.info(f"获取龙虎榜数据成功：{len(entries)}条")
+            date_range = f"{start_date} 至 {end_date}" if start_date and end_date else "最新"
+            logger.info(f"获取龙虎榜数据成功（{date_range}）：{len(entries)}条")
             return entries
             
         except Exception as e:
@@ -671,13 +1282,20 @@ class EFinanceAdapter(BaseDataAdapter):
             return []
     
     async def get_belong_board(self, code: str) -> List[BoardInfo]:
-        """获取股票所属板块
+        """
+        获取股票所属板块
         
         Args:
             code: 股票代码
             
         Returns:
-            所属板块列表
+            所属板块列表，包含行业板块、概念板块、地域板块、指数板块等
+        
+        Examples:
+            >>> adapter = EFinanceAdapter()
+            >>> boards = await adapter.get_belong_board('600519')
+            >>> for board in boards:
+            ...     print(f"{board.name} - {board.board_type} - {board.change_pct}%")
         """
         try:
             if not EF_AVAILABLE:
@@ -696,22 +1314,28 @@ class EFinanceAdapter(BaseDataAdapter):
             
             boards = []
             for row in df.itertuples(index=False):
-                board_type = getattr(row, '板块类型', '')
-                if board_type == '1':
+                # 获取板块类型
+                board_type_raw = getattr(row, '板块类型', '')
+                if board_type_raw == '1':
                     board_type_name = '行业板块'
-                elif board_type == '2':
+                elif board_type_raw == '2':
                     board_type_name = '概念板块'
-                elif board_type == '3':
+                elif board_type_raw == '3':
                     board_type_name = '地域板块'
                 else:
                     board_type_name = '其他'
                 
+                board_code = str(getattr(row, '板块代码', '')).zfill(6)
+                
                 boards.append(BoardInfo(
-                    code=str(getattr(row, '板块代码', '')).zfill(6),
+                    code=board_code,
                     name=getattr(row, '板块名称', ''),
                     board_type=board_type_name,
+                    board_code=board_code,
                     close_price=float(getattr(row, '板块价格', 0) or 0),
-                    change_pct=float(getattr(row, '板块涨跌幅', 0) or 0)
+                    change_pct=float(getattr(row, '板块涨幅', 0) or 0),
+                    stock_name=getattr(row, '股票名称', ''),
+                    stock_code=str(getattr(row, '股票代码', '')).zfill(6)
                 ))
             
             self._set_to_cache(cache_key, boards, 'stock_info')
@@ -722,21 +1346,22 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.error(f"获取股票所属板块失败 {code}: {e}")
             return []
     
-    async def get_members(self, index_code: str) -> List[IndexComponent]:
-        """获取指数成分股
+    async def get_members(self, index_code: str) -> List[IndexMember]:
+        """
+        获取指数成分股信息
         
         Args:
-            index_code: 指数代码
+            index_code: 指数名称或指数代码，如 '000300' 或 '沪深 300'
             
         Returns:
-            成分股列表
+            指数成分股列表
         """
         try:
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('members', code=index_code)
-            cached = self._get_from_cache(cache_key, 'sector')
+            cached = self._get_from_cache(cache_key, 'stock_list')
             if cached:
                 return cached
             
@@ -746,22 +1371,32 @@ class EFinanceAdapter(BaseDataAdapter):
             if df.empty:
                 return []
             
-            components = []
+            members = []
             for row in df.itertuples(index=False):
-                code = str(getattr(row, '股票代码', ''))
-                if not code:
+                # 安全转换浮点数
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                stock_code = str(getattr(row, '股票代码', '')).zfill(6)
+                if not stock_code:
                     continue
                 
-                components.append(IndexComponent(
-                    code=code.zfill(6),
-                    name=getattr(row, '股票名称', ''),
-                    weight=float(getattr(row, '权重', 0) or 0),
-                    industry=getattr(row, '行业', '')
+                members.append(IndexMember(
+                    index_code=str(getattr(row, '指数代码', '')).zfill(6),
+                    index_name=getattr(row, '指数名称', '') or '',
+                    stock_code=stock_code,
+                    stock_name=getattr(row, '股票名称', '') or '',
+                    weight=safe_float(getattr(row, '股票权重', None), None)
                 ))
             
-            self._set_to_cache(cache_key, components, 'sector')
-            logger.info(f"获取指数 {index_code} 成分股成功：{len(components)}只")
-            return components
+            self._set_to_cache(cache_key, members, 'stock_list')
+            logger.info(f"获取指数 {index_code} 成分股成功：{len(members)}只")
+            return members
             
         except Exception as e:
             logger.error(f"获取指数成分股失败 {index_code}: {e}")
@@ -958,6 +1593,117 @@ class EFinanceAdapter(BaseDataAdapter):
             
         except Exception as e:
             logger.error(f"获取前十大股东信息失败 {code}: {e}")
+            return []
+    
+    async def get_all_company_performance(self, date: Optional[str] = None) -> List[CompanyPerformance]:
+        """
+        获取沪深市场股票某一季度的表现情况
+        
+        Args:
+            date: 报告发布日期，可选
+                - None: 最新季报
+                - '2021-06-30': 2021 年 Q2 季度报
+                - '2021-03-31': 2021 年 Q1 季度报
+        
+        Returns:
+            公司业绩表现数据列表
+        """
+        try:
+            if not EF_AVAILABLE:
+                return []
+            
+            cache_key = self._get_cache_key('performance', date=date or 'latest')
+            cached = self._get_from_cache(cache_key, 'kline')
+            if cached:
+                return cached
+            
+            # 获取业绩表现数据
+            df = ef.stock.get_all_company_performance(date)
+            
+            if df.empty:
+                return []
+            
+            performances = []
+            for row in df.itertuples(index=False):
+                # 安全转换数值
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                code = str(getattr(row, '股票代码', '')).zfill(6)
+                if not code:
+                    continue
+                
+                # 处理公告日期
+                report_date_raw = getattr(row, '公告日期', '')
+                if report_date_raw:
+                    if isinstance(report_date_raw, str):
+                        report_date = report_date_raw.split(' ')[0].replace('-', '')
+                    else:
+                        report_date = str(report_date_raw)[:10].replace('-', '')
+                else:
+                    report_date = ''
+                
+                performances.append(CompanyPerformance(
+                    code=code,
+                    name=getattr(row, '股票简称', ''),
+                    report_date=report_date,
+                    revenue=safe_float(getattr(row, '营业收入', 0)),
+                    revenue_growth=safe_float(getattr(row, '营业收入同比增长', 0)),
+                    revenue_qoq=safe_float(getattr(row, '营业收入季度环比', 0)),
+                    net_profit=safe_float(getattr(row, '净利润', 0)),
+                    net_profit_growth=safe_float(getattr(row, '净利润同比增长', 0)),
+                    net_profit_qoq=safe_float(getattr(row, '净利润季度环比', 0)),
+                    eps=safe_float(getattr(row, '每股收益', 0)),
+                    bps=safe_float(getattr(row, '每股净资产', 0)),
+                    roe=safe_float(getattr(row, '净资产收益率', 0)),
+                    gross_margin=safe_float(getattr(row, '销售毛利率', 0)),
+                    cash_flow_per_share=safe_float(getattr(row, '每股经营现金流量', 0))
+                ))
+            
+            self._set_to_cache(cache_key, performances, 'kline')
+            logger.info(f"获取公司业绩表现成功：{len(performances)}条，报告期：{date or '最新'}")
+            return performances
+            
+        except Exception as e:
+            logger.error(f"获取公司业绩表现失败：{e}")
+            return []
+    
+    async def get_all_report_dates(self) -> List[str]:
+        """
+        获取所有可选的报告发布日期
+        
+        Returns:
+            报告日期列表，格式：YYYY-MM-DD
+        """
+        try:
+            if not EF_AVAILABLE:
+                return []
+            
+            cache_key = self._get_cache_key('report_dates')
+            cached = self._get_from_cache(cache_key, 'stock_list')
+            if cached:
+                return cached
+            
+            # 获取所有报告日期
+            dates = ef.stock.get_all_report_dates()
+            
+            if not dates:
+                return []
+            
+            # 转换为字符串列表
+            date_list = [str(d) for d in dates]
+            
+            self._set_to_cache(cache_key, date_list, 'stock_list')
+            logger.info(f"获取报告日期列表成功：{len(date_list)}个")
+            return date_list
+            
+        except Exception as e:
+            logger.error(f"获取报告日期列表失败：{e}")
             return []
     
     async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:

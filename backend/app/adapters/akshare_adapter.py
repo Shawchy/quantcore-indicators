@@ -16,9 +16,12 @@ from .base import (
     BillboardEntry,
     BoardInfo,
     ShareholderInfo,
-    IndexComponent,
+    IndexMember,
     CapitalFlowItem,
-    MarketQuote
+    MarketQuote,
+    CompanyPerformance,
+    DealDetail,
+    HistoryBill
 )
 from app.utils.data_validator import validator
 from app.utils.tushare_cache_stats import api_call_cache
@@ -1760,7 +1763,7 @@ class AkShareAdapter(BaseDataAdapter):
         logger.warning(f"AkShare 暂不支持获取股票所属板块 {code}")
         return []
     
-    async def get_members(self, index_code: str) -> List[IndexComponent]:
+    async def get_members(self, index_code: str) -> List[IndexMember]:
         """获取指数成分股（暂不支持）"""
         logger.warning(f"AkShare 暂不支持获取指数成分股 {index_code}")
         return []
@@ -1890,3 +1893,39 @@ class AkShareAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"获取市场实时行情失败：{e}")
             return []
+    
+    async def get_all_company_performance(self, date: Optional[str] = None) -> List[CompanyPerformance]:
+        """获取沪深市场股票某一季度的表现情况"""
+        # Akshare 不支持此接口，返回空列表
+        logger.warning("Akshare 不支持获取全市场业绩表现")
+        return []
+    
+    async def get_all_report_dates(self) -> List[str]:
+        """获取所有可选的报告发布日期"""
+        # Akshare 不支持此接口，返回空列表
+        logger.warning("Akshare 不支持获取报告日期列表")
+        return []
+    
+    async def get_stocks_base_info(self, stock_codes: List[str]) -> List[StockBasicInfo]:
+        """批量获取多只股票的基本信息"""
+        # Akshare 不支持批量获取，返回空列表
+        logger.warning("Akshare 不支持批量获取股票信息")
+        return []
+    
+    async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[DealDetail]:
+        """获取股票最新交易日成交明细"""
+        # Akshare 不支持此接口，返回空列表
+        logger.warning("Akshare 不支持获取成交明细")
+        return []
+    
+    async def get_history_bill(self, stock_code: str) -> List[HistoryBill]:
+        """获取单只股票历史单子流入流出数据"""
+        # Akshare 不支持此接口，返回空列表
+        logger.warning("Akshare 不支持获取历史资金流向")
+        return []
+    
+    async def get_latest_quote(self, stock_codes: List[str]) -> List[Dict[str, Any]]:
+        """获取沪深市场多只股票的实时涨幅情况"""
+        # Akshare 不支持批量获取实时行情，返回空列表
+        logger.warning("Akshare 不支持批量获取实时行情")
+        return []

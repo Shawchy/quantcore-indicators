@@ -38,6 +38,7 @@ class KLineData:
     volume: float
     amount: Optional[float] = None
     turnover_rate: Optional[float] = None
+    pre_close: Optional[float] = None
 
 
 @dataclass
@@ -65,12 +66,18 @@ class BillboardEntry:
     name: str
     close_price: Optional[float] = None
     change_pct: Optional[float] = None
-    turnover_amount: Optional[float] = None
-    net_amount: Optional[float] = None
-    buy_amount: Optional[float] = None
-    sell_amount: Optional[float] = None
-    reason: Optional[str] = None
+    turnover_rate: Optional[float] = None  # 换手率
+    turnover_amount: Optional[float] = None  # 市场总成交额
+    net_amount: Optional[float] = None  # 龙虎榜净买额
+    buy_amount: Optional[float] = None  # 龙虎榜买入额
+    sell_amount: Optional[float] = None  # 龙虎榜卖出额
+    total_amount: Optional[float] = None  # 龙虎榜成交额
+    net_ratio: Optional[float] = None  # 净买额占总成交比
+    amount_ratio: Optional[float] = None  # 成交额占总成交比
+    float_market_cap: Optional[float] = None  # 流通市值
+    reason: Optional[str] = None  # 上榜原因
     trade_date: str = ""
+    interpretation: Optional[str] = None  # 解读（如：卖一主卖，成功率 48.36%）
 
 
 @dataclass
@@ -78,8 +85,11 @@ class BoardInfo:
     code: str
     name: str
     board_type: str
+    board_code: str  # 板块代码（BK 开头）
     close_price: Optional[float] = None
     change_pct: Optional[float] = None
+    stock_name: Optional[str] = None  # 股票名称
+    stock_code: Optional[str] = None  # 股票代码
 
 
 @dataclass
@@ -137,6 +147,67 @@ class MarketQuote:
     total_market_cap: Optional[float] = None
     float_market_cap: Optional[float] = None
     market_type: Optional[str] = None
+
+
+@dataclass
+class CompanyPerformance:
+    """公司业绩表现数据"""
+    code: str
+    name: str
+    report_date: str
+    revenue: float  # 营业收入
+    revenue_growth: float  # 营业收入同比增长
+    revenue_qoq: float  # 营业收入季度环比
+    net_profit: float  # 净利润
+    net_profit_growth: float  # 净利润同比增长
+    net_profit_qoq: float  # 净利润季度环比
+    eps: float  # 每股收益
+    bps: float  # 每股净资产
+    roe: float  # 净资产收益率
+    gross_margin: float  # 销售毛利率
+    cash_flow_per_share: float  # 每股经营现金流量
+
+
+@dataclass
+class DealDetail:
+    """股票成交明细数据"""
+    stock_name: str  # 股票名称
+    stock_code: str  # 股票代码
+    prev_close: float  # 昨收价
+    trade_time: str  # 成交时间（HH:MM:SS）
+    price: float  # 成交价
+    volume: int  # 成交量（手）
+    order_count: int  # 成交单数
+
+
+@dataclass
+class HistoryBill:
+    """股票历史单子流入流出数据"""
+    stock_name: str  # 股票名称
+    stock_code: str  # 股票代码
+    date: str  # 日期
+    main_net_amount: float  # 主力净流入
+    small_net_amount: float  # 小单净流入
+    medium_net_amount: float  # 中单净流入
+    big_net_amount: float  # 大单净流入
+    super_net_amount: float  # 超大单净流入
+    main_net_ratio: float  # 主力净流入占比
+    small_net_ratio: float  # 小单流入净占比
+    medium_net_ratio: float  # 中单流入净占比
+    big_net_ratio: float  # 大单流入净占比
+    super_net_ratio: float  # 超大单流入净占比
+    close_price: float  # 收盘价
+    change_pct: float  # 涨跌幅
+
+
+@dataclass
+class IndexMember:
+    """指数成分股数据"""
+    index_code: str  # 指数代码
+    index_name: str  # 指数名称
+    stock_code: str  # 股票代码
+    stock_name: str  # 股票名称
+    weight: Optional[float] = None  # 股票权重 (%)
 
 
 class BaseDataAdapter(ABC):
@@ -225,7 +296,8 @@ class BaseDataAdapter(ABC):
         pass
     
     @abstractmethod
-    async def get_members(self, index_code: str) -> List[IndexComponent]:
+    async def get_members(self, index_code: str) -> List[IndexMember]:
+        """获取指数成分股信息"""
         pass
     
     @abstractmethod
@@ -247,6 +319,36 @@ class BaseDataAdapter(ABC):
     
     @abstractmethod
     async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:
+        pass
+    
+    @abstractmethod
+    async def get_all_company_performance(self, date: Optional[str] = None) -> List[CompanyPerformance]:
+        """获取沪深市场股票某一季度的表现情况"""
+        pass
+    
+    @abstractmethod
+    async def get_all_report_dates(self) -> List[str]:
+        """获取所有可选的报告发布日期"""
+        pass
+    
+    @abstractmethod
+    async def get_stocks_base_info(self, stock_codes: List[str]) -> List[StockBasicInfo]:
+        """批量获取多只股票的基本信息"""
+        pass
+    
+    @abstractmethod
+    async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[DealDetail]:
+        """获取股票最新交易日成交明细"""
+        pass
+    
+    @abstractmethod
+    async def get_history_bill(self, stock_code: str) -> List[HistoryBill]:
+        """获取单只股票历史单子流入流出数据"""
+        pass
+    
+    @abstractmethod
+    async def get_latest_quote(self, stock_codes: List[str]) -> List[Dict[str, Any]]:
+        """获取沪深市场多只股票的实时涨幅情况"""
         pass
     
     def normalize_code(self, code: str) -> str:

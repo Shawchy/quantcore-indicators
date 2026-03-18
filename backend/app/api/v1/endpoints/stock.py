@@ -16,33 +16,75 @@ async def get_stock_basic(code: str, current_user: OptionalCurrentUser):
     return ResponseModel(data=data)
 
 
+@router.get("/list", response_model=ResponseModel[list[StockBasic]])
+async def get_stock_list(
+    source: str = Query("auto", description="指定数据源：auto/efinance/tushare/akshare"),
+    source_priority: str = Query("", description="临时优先级列表（逗号分隔），如：efinance,tushare"),
+    source_exclude: str = Query("", description="排除的数据源（逗号分隔）"),
+    fallback: bool = Query(True, description="是否允许故障转移"),
+):
+    """
+    获取股票列表（支持多数据源优先级控制）
+    
+    Args:
+        source: 指定数据源（auto=自动选择）
+        source_priority: 临时优先级列表（逗号分隔）
+        source_exclude: 排除的数据源
+        fallback: 是否允许故障转移
+    
+    Examples:
+        - 默认自动：/api/v1/stock/list
+        - 指定优先级：/api/v1/stock/list?source_priority=efinance,tushare
+        - 排除数据源：/api/v1/stock/list?source_exclude=tushare
+        - 强制使用：/api/v1/stock/list?source=efinance&fallback=false
+    """
+    from app.adapters.factory import data_source_manager
+    
+    stocks = await data_source_manager.get_stock_list(
+        source_type=None if source == "auto" else source,
+        source_priority=source_priority if source_priority else None,
+        source_exclude=source_exclude if source_exclude else None,
+        fallback=fallback
+    )
+    
+    return ResponseModel(data=stocks)
+
+
 @router.get("/{identifier}/kline", response_model=ResponseModel[dict])
 async def get_kline(
-    identifier: str,  # 支持股票代码或股票名称
+    identifier: str,
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
     adjust: str = Query("qfq", description="复权类型：qfq 前复权，hfq 后复权，none 不复权"),
+    period: str = Query("daily", description="K 线周期：1m/5m/15m/30m/60m/daily/weekly/monthly"),
     priority_load: bool = Query(True, description="是否启用优先加载模式"),
+    source: str = Query("auto", description="指定数据源：auto/efinance/tushare/akshare"),
+    source_priority: str = Query("", description="临时优先级列表（逗号分隔）"),
+    source_exclude: str = Query("", description="排除的数据源（逗号分隔）"),
+    fallback: bool = Query(True, description="是否允许故障转移"),
     current_user: OptionalCurrentUser = None
 ):
     """
-    获取股票历史日 K 线数据（支持股票代码和股票名称两种模式）
+    获取股票历史 K 线数据（支持多数据源优先级控制）
     
     Args:
-        identifier: 股票代码（如：600519）或股票名称（如：贵州茅台、微软）
+        identifier: 股票代码或股票名称
         start_date: 开始日期 YYYY-MM-DD
         end_date: 结束日期 YYYY-MM-DD
         adjust: 复权类型
+        period: K 线周期
         priority_load: 是否启用优先加载模式
+        source: 指定数据源
+        source_priority: 临时优先级列表
+        source_exclude: 排除的数据源
+        fallback: 是否允许故障转移
     
-    Returns:
-        K 线数据，包含股票基本信息和历史 K 线
-        
     Examples:
-        - 通过股票代码获取：/api/v1/stock/600519/kline
-        - 通过股票名称获取：/api/v1/stock/贵州茅台/kline
-        - 通过美股名称获取：/api/v1/stock/微软/kline
+        - 默认自动：/api/v1/stock/600519/kline
+        - 指定数据源：/api/v1/stock/600519/kline?source=efinance
+        - 优先 akshare：/api/v1/stock/600519/kline?source_priority=akshare,efinance
     """
+    from app.adapters.factory import data_source_manager
     from app.services.stock_service import stock_service
     
     # 判断是代码还是名称

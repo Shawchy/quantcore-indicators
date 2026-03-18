@@ -15,7 +15,8 @@ from .base import (
     ShareholderInfo,
     IndexComponent,
     CapitalFlowItem,
-    MarketQuote
+    MarketQuote,
+    FinancialPerformance
 )
 
 
@@ -139,7 +140,103 @@ class BaostockAdapter(BaseDataAdapter):
                 ))
             return klines
         except Exception as e:
-            logger.error(f"获取K线数据失败 {code}: {e}")
+            logger.error(f"获取 K 线数据失败 {code}: {e}")
+            return []
+    
+    async def get_weekly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        try:
+            bs_code = self._get_bs_code(code)
+            
+            adjust_map = {
+                "qfq": "2",
+                "hfq": "1",
+                "": "3"
+            }
+            adjust_flag = adjust_map.get(adjust, "2")
+            
+            start = start_date.replace("-", "") if start_date else "19900101"
+            end = end_date.replace("-", "") if end_date else "20991231"
+            
+            rs = bs.query_history_k_data_plus(
+                bs_code,
+                "date,code,open,high,low,close,volume,amount,turn",
+                start_date=start,
+                end_date=end,
+                frequency="w",
+                adjustflag=adjust_flag
+            )
+            
+            klines = []
+            while (rs.error_code == "0") & rs.next():
+                row = rs.get_row_data()
+                klines.append(KLineData(
+                    code=code,
+                    date=self.format_date(row[0]),
+                    open=float(row[2]) if row[2] else 0,
+                    high=float(row[3]) if row[3] else 0,
+                    low=float(row[4]) if row[4] else 0,
+                    close=float(row[5]) if row[5] else 0,
+                    volume=float(row[6]) if row[6] else 0,
+                    amount=float(row[7]) if row[7] else None,
+                    turnover_rate=float(row[8]) if len(row) > 8 and row[8] else None
+                ))
+            return klines
+        except Exception as e:
+            logger.error(f"获取周 K 线数据失败 {code}: {e}")
+            return []
+    
+    async def get_monthly_kline(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq"
+    ) -> List[KLineData]:
+        try:
+            bs_code = self._get_bs_code(code)
+            
+            adjust_map = {
+                "qfq": "2",
+                "hfq": "1",
+                "": "3"
+            }
+            adjust_flag = adjust_map.get(adjust, "2")
+            
+            start = start_date.replace("-", "") if start_date else "19900101"
+            end = end_date.replace("-", "") if end_date else "20991231"
+            
+            rs = bs.query_history_k_data_plus(
+                bs_code,
+                "date,code,open,high,low,close,volume,amount,turn",
+                start_date=start,
+                end_date=end,
+                frequency="m",
+                adjustflag=adjust_flag
+            )
+            
+            klines = []
+            while (rs.error_code == "0") & rs.next():
+                row = rs.get_row_data()
+                klines.append(KLineData(
+                    code=code,
+                    date=self.format_date(row[0]),
+                    open=float(row[2]) if row[2] else 0,
+                    high=float(row[3]) if row[3] else 0,
+                    low=float(row[4]) if row[4] else 0,
+                    close=float(row[5]) if row[5] else 0,
+                    volume=float(row[6]) if row[6] else 0,
+                    amount=float(row[7]) if row[7] else None,
+                    turnover_rate=float(row[8]) if len(row) > 8 and row[8] else None
+                ))
+            return klines
+        except Exception as e:
+            logger.error(f"获取月 K 线数据失败 {code}: {e}")
             return []
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
@@ -222,4 +319,20 @@ class BaostockAdapter(BaseDataAdapter):
     async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:
         """获取市场实时行情（暂不支持）"""
         logger.warning(f"Baostock 暂不支持获取市场实时行情")
+        return []
+    
+    async def get_financial_performance(
+        self,
+        code: str,
+        report_date: Optional[str] = None,
+        report_type: str = "quarterly"
+    ) -> List[FinancialPerformance]:
+        """获取财务业绩数据（暂不支持）
+        
+        Args:
+            code: 股票代码
+            report_date: 报告日期
+            report_type: 报告类型
+        """
+        logger.warning(f"Baostock 暂不支持获取财务业绩数据 {code}")
         return []

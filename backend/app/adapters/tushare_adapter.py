@@ -15,7 +15,8 @@ from .base import (
     ShareholderInfo,
     IndexComponent,
     CapitalFlowItem,
-    MarketQuote
+    MarketQuote,
+    FinancialPerformance
 )
 from app.config import settings
 from app.utils.tushare_points_manager import get_points_manager
@@ -1030,4 +1031,31 @@ class TushareAdapter(BaseDataAdapter):
             return []
         except Exception as e:
             logger.error(f"获取市场实时行情失败：{e}")
+            return []
+    
+    async def get_financial_performance(
+        self,
+        code: str,
+        report_date: Optional[str] = None,
+        report_type: str = "quarterly"
+    ) -> List[FinancialPerformance]:
+        """获取财务业绩数据
+        
+        Args:
+            code: 股票代码
+            report_date: 报告日期，格式 'YYYY-MM-DD'
+            report_type: 报告类型
+        
+        Returns:
+            财务业绩数据列表
+        """
+        try:
+            if not self._is_initialized or not self._pro:
+                return []
+            
+            # Tushare 有财务数据，但需要高积分，这里暂不实现
+            logger.warning(f"Tushare 财务数据需要高积分，暂不实现，使用其他数据源")
+            return []
+        except Exception as e:
+            logger.error(f"获取财务业绩数据失败 {code}: {e}")
             return []

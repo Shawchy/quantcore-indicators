@@ -23,12 +23,14 @@ import {
   FiTrendingUp,
   FiBarChart,
   FiSliders,
-  FiList
+  FiList,
+  FiDollarSign,
 } from 'react-icons/fi'
 
 const menuItems = [
   { name: '首页概览', icon: FiHome, path: '/' },
   { name: '自选股', icon: FiStar, path: '/watchlist' },
+  { name: '基金中心', icon: FiDollarSign, path: '/fund' },
   { name: '市场排行', icon: FiTrendingUp, path: '/market' },
   { name: '市场板块', icon: FiGrid, path: '/market-quotes' },
   { name: '龙虎榜', icon: FiList, path: '/billboard' },

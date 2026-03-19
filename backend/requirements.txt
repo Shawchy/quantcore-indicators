@@ -14,7 +14,8 @@ numpy>=1.26.0
 akshare>=1.15.0
 baostock>=0.8.9
 yfinance>=0.2.50
-tushare>=1.4.25 
+tushare>=1.4.25
+efinance>=0.6.0
 
 # 技术指标
 pandas-ta>=0.3.14b

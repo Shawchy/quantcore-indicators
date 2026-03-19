@@ -16,9 +16,13 @@ from .base import (
     IndexMember,
     CapitalFlowItem,
     MarketQuote,
+<<<<<<< HEAD
     CompanyPerformance,
     DealDetail,
     HistoryBill
+=======
+    FinancialPerformance
+>>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
 )
 from app.config import settings
 from app.utils.tushare_points_manager import get_points_manager
@@ -1035,6 +1039,7 @@ class TushareAdapter(BaseDataAdapter):
             logger.error(f"获取市场实时行情失败：{e}")
             return []
     
+<<<<<<< HEAD
     async def get_all_company_performance(self, date: Optional[str] = None) -> List[CompanyPerformance]:
         """获取沪深市场股票某一季度的表现情况"""
         # Tushare 不支持此接口，返回空列表
@@ -1070,3 +1075,31 @@ class TushareAdapter(BaseDataAdapter):
         # Tushare 不支持批量获取实时行情，返回空列表
         logger.warning("Tushare 不支持批量获取实时行情")
         return []
+=======
+    async def get_financial_performance(
+        self,
+        code: str,
+        report_date: Optional[str] = None,
+        report_type: str = "quarterly"
+    ) -> List[FinancialPerformance]:
+        """获取财务业绩数据
+        
+        Args:
+            code: 股票代码
+            report_date: 报告日期，格式 'YYYY-MM-DD'
+            report_type: 报告类型
+        
+        Returns:
+            财务业绩数据列表
+        """
+        try:
+            if not self._is_initialized or not self._pro:
+                return []
+            
+            # Tushare 有财务数据，但需要高积分，这里暂不实现
+            logger.warning(f"Tushare 财务数据需要高积分，暂不实现，使用其他数据源")
+            return []
+        except Exception as e:
+            logger.error(f"获取财务业绩数据失败 {code}: {e}")
+            return []
+>>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import pandas as pd
 
@@ -53,9 +53,10 @@ class SectorInfo:
 
 @dataclass
 class ChipData:
+    """股东人数（筹码）数据"""
     code: str
     date: str
-    shareholder_count: Optional[float] = None
+    shareholder_count: Optional[int] = None
     avg_shares_per_holder: Optional[float] = None
     top10_holders_ratio: Optional[float] = None
 
@@ -94,18 +95,22 @@ class BoardInfo:
 
 @dataclass
 class ShareholderInfo:
+    """股东信息"""
     code: str
-    shareholder_name: str
-    shareholder_type: Optional[str] = None
-    hold_amount: Optional[float] = None
-    hold_ratio: Optional[float] = None
-    change_amount: Optional[float] = None
-    change_ratio: Optional[float] = None
-    report_date: str = ""
+    report_date: str  # 报告期/更新日期
+    holder_code: str  # 股东代码
+    holder_name: str  # 股东名称
+    hold_amount: Optional[float] = None  # 持股数（股）
+    hold_ratio: Optional[float] = None  # 持股比例（%）
+    change: Optional[str] = None  # 增减描述（不变/新进/数值）
+    change_rate: Optional[float] = None  # 变动率（%）
 
 
 @dataclass
 class IndexComponent:
+    """指数成分股"""
+    index_code: str
+    index_name: str
     code: str
     name: str
     weight: Optional[float] = None
@@ -150,6 +155,7 @@ class MarketQuote:
 
 
 @dataclass
+<<<<<<< HEAD
 class CompanyPerformance:
     """公司业绩表现数据"""
     code: str
@@ -208,6 +214,37 @@ class IndexMember:
     stock_code: str  # 股票代码
     stock_name: str  # 股票名称
     weight: Optional[float] = None  # 股票权重 (%)
+=======
+class FinancialPerformance:
+    """财务业绩数据（季度）"""
+    code: str
+    name: str
+    report_date: str  # 公告日期
+    revenue: Optional[float] = None  # 营业收入
+    revenue_growth: Optional[float] = None  # 营业收入同比增长
+    revenue_qoq: Optional[float] = None  # 营业收入季度环比
+    net_profit: Optional[float] = None  # 净利润
+    net_profit_growth: Optional[float] = None  # 净利润同比增长
+    net_profit_qoq: Optional[float] = None  # 净利润季度环比
+    eps: Optional[float] = None  # 每股收益
+    bvps: Optional[float] = None  # 每股净资产
+    roe: Optional[float] = None  # 净资产收益率
+    gross_margin: Optional[float] = None  # 销售毛利率
+    cfps: Optional[float] = None  # 每股经营现金流量
+
+
+@dataclass
+class FundInfo:
+    """基金基本信息"""
+    code: str                    # 基金代码
+    name: str                    # 基金简称
+    establish_date: Optional[str] = None  # 成立日期
+    change_pct: Optional[float] = None    # 涨跌幅（%）
+    net_asset_value: Optional[float] = None  # 最新净值
+    fund_company: Optional[str] = None       # 基金公司
+    nav_update_date: Optional[str] = None    # 净值更新日期
+    description: Optional[str] = None         # 简介
+>>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
 
 
 class BaseDataAdapter(ABC):
@@ -242,8 +279,26 @@ class BaseDataAdapter(ABC):
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = "qfq"
+        adjust: str = "qfq",
+        period: str = "daily"
     ) -> List[KLineData]:
+        """获取 K 线数据（支持多种周期）
+        
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权方式（qfq/hfq/no）
+            period: K 线周期，可选：
+                - '1m': 1 分钟
+                - '5m': 5 分钟
+                - '15m': 15 分钟
+                - '30m': 30 分钟
+                - '60m': 60 分钟
+                - 'daily': 日线
+                - 'weekly': 周线
+                - 'monthly': 月线
+        """
         pass
     
     @abstractmethod
@@ -296,8 +351,24 @@ class BaseDataAdapter(ABC):
         pass
     
     @abstractmethod
+<<<<<<< HEAD
     async def get_members(self, index_code: str) -> List[IndexMember]:
         """获取指数成分股信息"""
+=======
+    async def get_members(self, index_code: str) -> List[IndexComponent]:
+        """获取指数成分股
+        
+        Args:
+            index_code: 指数代码或指数名称
+        
+        Returns:
+            指数成分股列表
+        """
+        pass
+    
+    @abstractmethod
+    async def get_members(self, index_code: str) -> List[IndexComponent]:
+>>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
         pass
     
     @abstractmethod
@@ -322,6 +393,7 @@ class BaseDataAdapter(ABC):
         pass
     
     @abstractmethod
+<<<<<<< HEAD
     async def get_all_company_performance(self, date: Optional[str] = None) -> List[CompanyPerformance]:
         """获取沪深市场股票某一季度的表现情况"""
         pass
@@ -349,6 +421,27 @@ class BaseDataAdapter(ABC):
     @abstractmethod
     async def get_latest_quote(self, stock_codes: List[str]) -> List[Dict[str, Any]]:
         """获取沪深市场多只股票的实时涨幅情况"""
+=======
+    async def get_financial_performance(
+        self,
+        code: str,
+        report_date: Optional[str] = None,
+        report_type: str = "quarterly"
+    ) -> List[FinancialPerformance]:
+        """获取财务业绩数据
+        
+        Args:
+            code: 股票代码
+            report_date: 报告日期，格式 'YYYY-MM-DD'
+                - None: 获取最新季报
+                - '2024-03-31': 获取 2024 年一季报
+                - '2023-12-31': 获取 2023 年年报
+            report_type: 报告类型
+        
+        Returns:
+            财务业绩数据列表
+        """
+>>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
         pass
     
     def normalize_code(self, code: str) -> str:

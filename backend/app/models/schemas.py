@@ -107,13 +107,13 @@ class BoardInfo(BaseModel):
 class ShareholderInfo(BaseModel):
     """股东信息"""
     code: str
-    shareholder_name: str
-    shareholder_type: Optional[str] = None
-    hold_amount: Optional[float] = None
-    hold_ratio: Optional[float] = None
-    change_amount: Optional[float] = None
-    change_ratio: Optional[float] = None
-    report_date: str
+    report_date: str  # 报告期/更新日期
+    holder_code: str  # 股东代码
+    holder_name: str  # 股东名称
+    hold_amount: Optional[float] = None  # 持股数（股）
+    hold_ratio: Optional[float] = None  # 持股比例（%）
+    change: Optional[str] = None  # 增减描述（不变/新进/数值）
+    change_rate: Optional[float] = None  # 变动率（%）
 
 
 class IndexComponent(BaseModel):
@@ -158,3 +158,33 @@ class MarketQuote(BaseModel):
     total_market_cap: Optional[float] = None
     float_market_cap: Optional[float] = None
     market_type: Optional[str] = None
+
+
+class FinancialPerformance(BaseModel):
+    """财务业绩数据（季度）"""
+    code: str
+    name: str
+    report_date: str
+    revenue: Optional[float] = None
+    revenue_growth: Optional[float] = None
+    revenue_qoq: Optional[float] = None
+    net_profit: Optional[float] = None
+    net_profit_growth: Optional[float] = None
+    net_profit_qoq: Optional[float] = None
+    eps: Optional[float] = None
+    bvps: Optional[float] = None
+    roe: Optional[float] = None
+    gross_margin: Optional[float] = None
+    cfps: Optional[float] = None
+
+
+class FundInfo(BaseModel):
+    """基金基本信息"""
+    code: str                    # 基金代码
+    name: str                    # 基金简称
+    establish_date: Optional[str] = None  # 成立日期
+    change_pct: Optional[float] = None    # 涨跌幅（%）
+    net_asset_value: Optional[float] = None  # 最新净值
+    fund_company: Optional[str] = None       # 基金公司
+    nav_update_date: Optional[str] = None    # 净值更新日期
+    description: Optional[str] = None         # 简介

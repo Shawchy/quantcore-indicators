@@ -21,6 +21,13 @@ from .akshare_adapter import AkShareAdapter
 from .baostock_adapter import BaostockAdapter
 from .yfinance_adapter import YFinanceAdapter
 from .efinance_adapter import EFinanceAdapter
+from .tickflow_adapter import TickFlowAdapter
+from .unified_adapter import (
+    EFinanceUnifiedAdapter,
+    AkShareUnifiedAdapter,
+    BaostockUnifiedAdapter,
+    TickFlowUnifiedAdapter
+)
 
 try:
     from .tushare_adapter import TushareAdapter
@@ -45,11 +52,12 @@ class DataSourceFactory:
         priority_list = getattr(settings, 'DATA_SOURCE_PRIORITY', ['tushare', 'efinance', 'akshare', 'baostock'])
         
         adapters_config = {
-            DataSourceType.TUSHARE: (TushareAdapter, TushareAdapter is not None and bool(settings.TUSHARE_TOKEN)),
+            DataSourceType.TUSHARE: (TushareAdapter, False),  # Tushare 默认不主动初始化（需要 Token）
             DataSourceType.EFINANCE: (EFinanceAdapter, True),
             DataSourceType.AKSHARE: (AkShareAdapter, True),
             DataSourceType.BAOSTOCK: (BaostockAdapter, True),
             DataSourceType.YFINANCE: (YFinanceAdapter, False),
+            DataSourceType.TICKFLOW: (TickFlowAdapter, True),  # TickFlow 始终可用（免费服务）
         }
         
         # 按优先级顺序初始化
@@ -124,6 +132,43 @@ class DataSourceFactory:
     @classmethod
     def get_available_sources(cls) -> list[str]:
         return [s.value for s in cls._adapters.keys()]
+    
+    @classmethod
+    def get_unified_adapter(cls, source_type: Optional[str] = None) -> 'UnifiedDataAdapter':
+        """
+        获取统一数据适配器（支持新特性）
+        
+        Args:
+            source_type: 数据源类型
+            
+        Returns:
+            统一数据适配器实例
+        """
+        if not cls._initialized:
+            raise RuntimeError("数据源工厂未初始化，请先调用 initialize()")
+        
+        source = source_type or settings.DEFAULT_DATA_SOURCE
+        
+        # 映射到对应的统一适配器
+        unified_adapters = {
+            DataSourceType.EFINANCE: EFinanceUnifiedAdapter,
+            DataSourceType.AKSHARE: AkShareUnifiedAdapter,
+            DataSourceType.BAOSTOCK: BaostockUnifiedAdapter,
+            DataSourceType.TICKFLOW: TickFlowUnifiedAdapter,
+        }
+        
+        try:
+            source_enum = DataSourceType(source)
+            if source_enum in unified_adapters:
+                adapter = unified_adapters[source_enum]()
+                logger.info(f"使用统一适配器：{source_enum.value}")
+                return adapter
+            else:
+                logger.warning(f"数据源 {source} 不支持统一适配器，使用普通适配器")
+                return cls.get_adapter(source_type)
+        except ValueError:
+            logger.warning(f"未知的数据源类型：{source}，使用默认适配器")
+            return cls.get_adapter(None)
     
     @classmethod
     async def close_all(cls) -> None:

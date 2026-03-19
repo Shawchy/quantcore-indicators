@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     CACHE_TTL: int = 300
     MAX_CACHE_SIZE: int = 1000
     
-    DEFAULT_DATA_SOURCE: str = "tushare"  # 优先使用 Tushare
+    DEFAULT_DATA_SOURCE: str = "efinance"  # 默认使用 EFinance（完全免费）
     
     BACKTEST_INITIAL_CAPITAL: float = 1000000.0
     BACKTEST_COMMISSION: float = 0.0003
@@ -43,8 +43,38 @@ class Settings(BaseSettings):
     TUSHARE_TOKEN: Optional[str] = None  # 从环境变量读取
     TUSHARE_POINTS: int = 120  # Tushare 积分，默认 120 分（注册 + 完善信息）
     
+    TICKFLOW_API_KEY: Optional[str] = None  # TickFlow API Key（可选，不填则使用免费服务）
+    
     # 数据源优先级（从高到低）
-    DATA_SOURCE_PRIORITY: list[str] = ["tushare", "efinance", "akshare", "baostock"]
+    DATA_SOURCE_PRIORITY: list[str] = ["efinance", "akshare", "baostock", "tickflow", "tushare"]
+    
+    # 数据存储配置
+    STORAGE_CONFIG: dict = {
+        "hot_threshold_days": 90,  # 热数据阈值（天）
+        "parquet_base_dir": "./data/parquet",
+        "sqlite_db": "./data/sqlite/quant.db",
+        "cache_ttl": {
+            "realtime": 60,  # 实时行情缓存 TTL（秒）
+            "kline": 300,  # K 线缓存 TTL（秒）
+            "indicators": 300,  # 指标缓存 TTL（秒）
+            "sector": 300,  # 板块缓存 TTL（秒）
+            "chip": 600,  # 筹码缓存 TTL（秒）
+            "backtest": 3600,  # 回测缓存 TTL（秒）
+        }
+    }
+    
+    # 技术指标配置
+    INDICATORS_CONFIG: dict = {
+        "prefer_talib": True,  # 优先使用 TA-Lib（如果可用）
+        "use_pandas_ta": True,  # 使用 pandas-ta
+    }
+    
+    # 数据源配置
+    DATA_SOURCE_CONFIG: dict = {
+        "health_check_interval": 300,  # 健康检查间隔（秒）
+        "consistency_tolerance": 0.01,  # 数据一致性容差（1%）
+        "priority": ["efinance", "akshare", "baostock", "tickflow", "tushare"],
+    }
     
     # Tushare 积分权限配置
     TUSHARE_PERMISSION_CONFIG: dict = {

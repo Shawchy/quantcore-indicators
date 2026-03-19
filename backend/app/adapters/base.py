@@ -12,6 +12,7 @@ class DataSourceType(str, Enum):
     YFINANCE = "yfinance"
     TUSHARE = "tushare"
     EFINANCE = "efinance"
+    TICKFLOW = "tickflow"
 
 
 @dataclass
@@ -155,66 +156,6 @@ class MarketQuote:
 
 
 @dataclass
-<<<<<<< HEAD
-class CompanyPerformance:
-    """公司业绩表现数据"""
-    code: str
-    name: str
-    report_date: str
-    revenue: float  # 营业收入
-    revenue_growth: float  # 营业收入同比增长
-    revenue_qoq: float  # 营业收入季度环比
-    net_profit: float  # 净利润
-    net_profit_growth: float  # 净利润同比增长
-    net_profit_qoq: float  # 净利润季度环比
-    eps: float  # 每股收益
-    bps: float  # 每股净资产
-    roe: float  # 净资产收益率
-    gross_margin: float  # 销售毛利率
-    cash_flow_per_share: float  # 每股经营现金流量
-
-
-@dataclass
-class DealDetail:
-    """股票成交明细数据"""
-    stock_name: str  # 股票名称
-    stock_code: str  # 股票代码
-    prev_close: float  # 昨收价
-    trade_time: str  # 成交时间（HH:MM:SS）
-    price: float  # 成交价
-    volume: int  # 成交量（手）
-    order_count: int  # 成交单数
-
-
-@dataclass
-class HistoryBill:
-    """股票历史单子流入流出数据"""
-    stock_name: str  # 股票名称
-    stock_code: str  # 股票代码
-    date: str  # 日期
-    main_net_amount: float  # 主力净流入
-    small_net_amount: float  # 小单净流入
-    medium_net_amount: float  # 中单净流入
-    big_net_amount: float  # 大单净流入
-    super_net_amount: float  # 超大单净流入
-    main_net_ratio: float  # 主力净流入占比
-    small_net_ratio: float  # 小单流入净占比
-    medium_net_ratio: float  # 中单流入净占比
-    big_net_ratio: float  # 大单流入净占比
-    super_net_ratio: float  # 超大单流入净占比
-    close_price: float  # 收盘价
-    change_pct: float  # 涨跌幅
-
-
-@dataclass
-class IndexMember:
-    """指数成分股数据"""
-    index_code: str  # 指数代码
-    index_name: str  # 指数名称
-    stock_code: str  # 股票代码
-    stock_name: str  # 股票名称
-    weight: Optional[float] = None  # 股票权重 (%)
-=======
 class FinancialPerformance:
     """财务业绩数据（季度）"""
     code: str
@@ -244,7 +185,6 @@ class FundInfo:
     fund_company: Optional[str] = None       # 基金公司
     nav_update_date: Optional[str] = None    # 净值更新日期
     description: Optional[str] = None         # 简介
->>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
 
 
 class BaseDataAdapter(ABC):
@@ -351,10 +291,6 @@ class BaseDataAdapter(ABC):
         pass
     
     @abstractmethod
-<<<<<<< HEAD
-    async def get_members(self, index_code: str) -> List[IndexMember]:
-        """获取指数成分股信息"""
-=======
     async def get_members(self, index_code: str) -> List[IndexComponent]:
         """获取指数成分股
         
@@ -364,11 +300,6 @@ class BaseDataAdapter(ABC):
         Returns:
             指数成分股列表
         """
-        pass
-    
-    @abstractmethod
-    async def get_members(self, index_code: str) -> List[IndexComponent]:
->>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
         pass
     
     @abstractmethod
@@ -393,35 +324,6 @@ class BaseDataAdapter(ABC):
         pass
     
     @abstractmethod
-<<<<<<< HEAD
-    async def get_all_company_performance(self, date: Optional[str] = None) -> List[CompanyPerformance]:
-        """获取沪深市场股票某一季度的表现情况"""
-        pass
-    
-    @abstractmethod
-    async def get_all_report_dates(self) -> List[str]:
-        """获取所有可选的报告发布日期"""
-        pass
-    
-    @abstractmethod
-    async def get_stocks_base_info(self, stock_codes: List[str]) -> List[StockBasicInfo]:
-        """批量获取多只股票的基本信息"""
-        pass
-    
-    @abstractmethod
-    async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[DealDetail]:
-        """获取股票最新交易日成交明细"""
-        pass
-    
-    @abstractmethod
-    async def get_history_bill(self, stock_code: str) -> List[HistoryBill]:
-        """获取单只股票历史单子流入流出数据"""
-        pass
-    
-    @abstractmethod
-    async def get_latest_quote(self, stock_codes: List[str]) -> List[Dict[str, Any]]:
-        """获取沪深市场多只股票的实时涨幅情况"""
-=======
     async def get_financial_performance(
         self,
         code: str,
@@ -441,7 +343,6 @@ class BaseDataAdapter(ABC):
         Returns:
             财务业绩数据列表
         """
->>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
         pass
     
     def normalize_code(self, code: str) -> str:

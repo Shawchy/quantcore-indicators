@@ -18,16 +18,9 @@ from .base import (
     BillboardEntry,
     BoardInfo,
     ShareholderInfo,
-    IndexMember,
+    IndexComponent,
     CapitalFlowItem,
-    MarketQuote,
-<<<<<<< HEAD
-    CompanyPerformance,
-    DealDetail,
-    HistoryBill
-=======
-    FinancialPerformance
->>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467
+    MarketQuote
 )
 from app.utils.data_validator import validator
 from app.utils.tushare_cache_stats import api_call_cache
@@ -1995,7 +1988,7 @@ class AkShareAdapter(BaseDataAdapter):
         logger.warning(f"AkShare 暂不支持获取股票所属板块 {code}")
         return []
     
-    async def get_members(self, index_code: str) -> List[IndexMember]:
+    async def get_members(self, index_code: str) -> List[IndexComponent]:
         """获取指数成分股（暂不支持）"""
         logger.warning(f"AkShare 暂不支持获取指数成分股 {index_code}")
         return []
@@ -2126,8 +2119,7 @@ class AkShareAdapter(BaseDataAdapter):
             logger.error(f"获取市场实时行情失败：{e}")
             return []
     
-<<<<<<< HEAD
-    async def get_all_company_performance(self, date: Optional[str] = None) -> List[CompanyPerformance]:
+    async def get_all_company_performance(self, date: Optional[str] = None) -> List[Dict[str, Any]]:
         """获取沪深市场股票某一季度的表现情况"""
         # Akshare 不支持此接口，返回空列表
         logger.warning("Akshare 不支持获取全市场业绩表现")
@@ -2145,13 +2137,13 @@ class AkShareAdapter(BaseDataAdapter):
         logger.warning("Akshare 不支持批量获取股票信息")
         return []
     
-    async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[DealDetail]:
+    async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[Dict[str, Any]]:
         """获取股票最新交易日成交明细"""
         # Akshare 不支持此接口，返回空列表
         logger.warning("Akshare 不支持获取成交明细")
         return []
     
-    async def get_history_bill(self, stock_code: str) -> List[HistoryBill]:
+    async def get_history_bill(self, stock_code: str) -> List[Dict[str, Any]]:
         """获取单只股票历史单子流入流出数据"""
         # Akshare 不支持此接口，返回空列表
         logger.warning("Akshare 不支持获取历史资金流向")
@@ -2162,28 +2154,3 @@ class AkShareAdapter(BaseDataAdapter):
         # Akshare 不支持批量获取实时行情，返回空列表
         logger.warning("Akshare 不支持批量获取实时行情")
         return []
-=======
-    async def get_financial_performance(
-        self,
-        code: str,
-        report_date: Optional[str] = None,
-        report_type: str = "quarterly"
-    ) -> List[FinancialPerformance]:
-        """获取财务业绩数据
-        
-        Args:
-            code: 股票代码
-            report_date: 报告日期，格式 'YYYY-MM-DD'
-            report_type: 报告类型
-        
-        Returns:
-            财务业绩数据列表
-        """
-        try:
-            # AkShare 有财务数据接口，但这里暂不实现，使用 efinance
-            logger.warning(f"AkShare 财务数据暂不实现，使用 efinance 数据源")
-            return []
-        except Exception as e:
-            logger.error(f"获取财务业绩数据失败 {code}: {e}")
-            return []
->>>>>>> 7aaa7cbe85a09d6bf88368f14e12d60640ec9467

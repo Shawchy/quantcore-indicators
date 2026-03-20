@@ -2,6 +2,34 @@
 
 个人股票量化分析系统 - 支持技术分析、板块分析、筹码选股、策略回测
 
+## 📚 文档
+
+**完整开发者文档**: [backend/DEVELOPER_GUIDE.md](backend/DEVELOPER_GUIDE.md)
+
+### 快速链接
+
+- [快速开始](backend/DEVELOPER_GUIDE.md#快速开始)
+- [系统架构](backend/DEVELOPER_GUIDE.md#系统架构)
+- [数据源管理](backend/DEVELOPER_GUIDE.md#数据源管理)
+- [API 参考](backend/DEVELOPER_GUIDE.md#api-参考)
+- [部署指南](backend/DEVELOPER_GUIDE.md#部署指南)
+- [开发指南](backend/DEVELOPER_GUIDE.md#开发指南)
+- [常见问题](backend/DEVELOPER_GUIDE.md#常见问题)
+
+## 📊 代码质量
+
+**详细检查报告**: [代码检查报告.md](代码检查报告.md)
+
+### 综合评分：⭐⭐⭐⭐☆ 8.2/10
+
+| 维度 | 评分 | 说明 |
+|------|------|------|
+| **架构设计** | ⭐⭐⭐⭐⭐ 9.5/10 | 清晰的分层架构，模块化设计优秀 |
+| **代码规范** | ⭐⭐⭐⭐☆ 8.5/10 | 整体规范，遵循最佳实践 |
+| **类型安全** | ⭐⭐⭐⭐⭐ 9.0/10 | TypeScript 全覆盖，Python 类型注解完善 |
+| **错误处理** | ⭐⭐⭐⭐☆ 8.5/10 | 异常处理体系完整，日志记录详细 |
+| **性能优化** | ⭐⭐⭐⭐☆ 8.5/10 | 异步 IO、缓存、按需加载等优化到位 |
+
 ## 项目结构
 
 ```

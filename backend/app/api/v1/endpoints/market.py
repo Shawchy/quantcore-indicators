@@ -16,9 +16,6 @@ from app.services.data_persistence import data_persistence
 
 router = APIRouter()
 
-if settings.TUSHARE_TOKEN:
-    ts.set_token(settings.TUSHARE_TOKEN)
-
 # 超时时间配置
 MARKET_RANKING_TIMEOUT = 15  # 市场排行超时 15 秒（数据量大）
 MARKET_OVERVIEW_TIMEOUT = 10  # 市场概览超时 10 秒

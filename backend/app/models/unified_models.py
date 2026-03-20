@@ -15,7 +15,6 @@ class DataSourceType(str, Enum):
     AKSHARE = "akshare"
     BAOSTOCK = "baostock"
     TICKFLOW = "tickflow"
-    TUSHARE = "tushare"
 
 
 class AdjustType(str, Enum):

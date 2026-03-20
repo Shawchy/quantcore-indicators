@@ -4,13 +4,16 @@ from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime
 import pandas as pd
+import asyncio
+from functools import partial
+from loguru import logger
 
 
 class DataSourceType(str, Enum):
+    """数据源类型枚举"""
     AKSHARE = "akshare"
     BAOSTOCK = "baostock"
     YFINANCE = "yfinance"
-    TUSHARE = "tushare"
     EFINANCE = "efinance"
     TICKFLOW = "tickflow"
 
@@ -205,6 +208,41 @@ class BaseDataAdapter(ABC):
     async def close(self) -> None:
         pass
     
+    # ========== 上下文管理器支持 ==========
+    
+    async def __aenter__(self) -> 'BaseDataAdapter':
+        """异步上下文管理器入口"""
+        await self.initialize()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """异步上下文管理器出口"""
+        await self.close()
+    
+    def __enter__(self) -> 'BaseDataAdapter':
+        """同步上下文管理器入口"""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        if loop.is_running():
+            import nest_asyncio
+            nest_asyncio.apply()
+        
+        loop.run_until_complete(self.initialize())
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """同步上下文管理器出口"""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.close())
+    
     @abstractmethod
     async def get_stock_list(self, market: Optional[str] = None) -> List[StockBasicInfo]:
         pass
@@ -375,3 +413,158 @@ class BaseDataAdapter(ABC):
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date").reset_index(drop=True)
         return df
+    
+    # ========== 批量接口基础方法（默认实现，子类可覆盖） ==========
+    
+    async def get_kline_batch(
+        self,
+        codes: List[str],
+        start_date: str,
+        end_date: str,
+        adjust: str = "qfq",
+        batch_size: int = 10,
+        max_concurrent: int = 3
+    ) -> Dict[str, List[KLineData]]:
+        """批量获取 K 线数据（默认实现，子类可覆盖）
+        
+        Args:
+            codes: 股票代码列表
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权方式
+            batch_size: 每批次处理的股票数量
+            max_concurrent: 最大并发数
+            
+        Returns:
+            K 线数据字典 {code: [KLineData]}
+        """
+        from asyncio import Semaphore
+        
+        semaphore = Semaphore(max_concurrent)
+        
+        async def fetch_with_semaphore(code: str) -> tuple[str, List[KLineData]]:
+            async with semaphore:
+                try:
+                    klines = await self.get_kline(code, start_date, end_date, adjust)
+                    return (code, klines)
+                except Exception as e:
+                    logger.error(f"批量获取 K 线失败 {code}: {e}")
+                    return (code, [])
+        
+        # 分批处理
+        all_results = {}
+        for i in range(0, len(codes), batch_size):
+            batch = codes[i:i + batch_size]
+            tasks = [fetch_with_semaphore(code) for code in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in results:
+                if isinstance(result, Exception):
+                    continue
+                code, klines = result
+                if klines:
+                    all_results[code] = klines
+            
+            # 批次间延迟，避免触发限流
+            if i + batch_size < len(codes):
+                await asyncio.sleep(1.0)
+        
+        return all_results
+    
+    async def get_stock_info_batch(
+        self,
+        codes: List[str],
+        batch_size: int = 20,
+        max_concurrent: int = 5
+    ) -> Dict[str, StockBasicInfo]:
+        """批量获取股票基本信息（默认实现，子类可覆盖）
+        
+        Args:
+            codes: 股票代码列表
+            batch_size: 每批次处理的股票数量
+            max_concurrent: 最大并发数
+            
+        Returns:
+            股票信息字典 {code: StockBasicInfo}
+        """
+        from asyncio import Semaphore
+        
+        semaphore = Semaphore(max_concurrent)
+        
+        async def fetch_with_semaphore(code: str) -> tuple[str, Optional[StockBasicInfo]]:
+            async with semaphore:
+                try:
+                    info = await self.get_stock_info(code)
+                    return (code, info)
+                except Exception as e:
+                    logger.error(f"批量获取股票信息失败 {code}: {e}")
+                    return (code, None)
+        
+        # 分批处理
+        all_results = {}
+        for i in range(0, len(codes), batch_size):
+            batch = codes[i:i + batch_size]
+            tasks = [fetch_with_semaphore(code) for code in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in results:
+                if isinstance(result, Exception):
+                    continue
+                code, info = result
+                if info:
+                    all_results[code] = info
+            
+            # 批次间延迟
+            if i + batch_size < len(codes):
+                await asyncio.sleep(0.5)
+        
+        return all_results
+    
+    async def get_realtime_quote_batch(
+        self,
+        codes: List[str],
+        batch_size: int = 50,
+        max_concurrent: int = 5
+    ) -> Dict[str, Dict[str, Any]]:
+        """批量获取实时行情（默认实现，子类可覆盖）
+        
+        Args:
+            codes: 股票代码列表
+            batch_size: 每批次处理的股票数量
+            max_concurrent: 最大并发数
+            
+        Returns:
+            实时行情字典 {code: {}}
+        """
+        from asyncio import Semaphore
+        
+        semaphore = Semaphore(max_concurrent)
+        
+        async def fetch_with_semaphore(code: str) -> tuple[str, Dict[str, Any]]:
+            async with semaphore:
+                try:
+                    quote = await self.get_realtime_quote(code)
+                    return (code, quote)
+                except Exception as e:
+                    logger.error(f"批量获取实时行情失败 {code}: {e}")
+                    return (code, {})
+        
+        # 分批处理
+        all_results = {}
+        for i in range(0, len(codes), batch_size):
+            batch = codes[i:i + batch_size]
+            tasks = [fetch_with_semaphore(code) for code in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in results:
+                if isinstance(result, Exception):
+                    continue
+                code, quote = result
+                if quote:
+                    all_results[code] = quote
+            
+            # 批次间延迟
+            if i + batch_size < len(codes):
+                await asyncio.sleep(0.5)
+        
+        return all_results

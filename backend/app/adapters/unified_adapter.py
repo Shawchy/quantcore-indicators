@@ -65,7 +65,25 @@ class UnifiedDataAdapter(BaseDataAdapter, ABC):
         from app.utils.data_source_health import DataSourceHealthChecker
         self.health_checker = DataSourceHealthChecker()
         
+        # 降级策略配置
+        self._fallback_chain = []
+        self._setup_fallback_chain()
+        
         logger.info(f"统一适配器初始化完成：{self.source_type.value}")
+        logger.info(f"降级链路：{' -> '.join([s.value for s in self._fallback_chain])}")
+    
+    def _setup_fallback_chain(self):
+        """设置数据源降级链路
+        
+        优先级：TickFlow > AkShare > EFinance > BaoStock > YFinance
+        """
+        self._fallback_chain = [
+            DataSourceType.TICKFLOW,
+            DataSourceType.AKSHARE,
+            DataSourceType.EFINANCE,
+            DataSourceType.BAOSTOCK,
+            DataSourceType.YFINANCE
+        ]
     
     @property
     @abstractmethod
@@ -261,6 +279,87 @@ class UnifiedDataAdapter(BaseDataAdapter, ABC):
         """
         result = await self.health_checker.check_all_sources()
         return result.get(self.source_type.value, {})
+    
+    async def get_kline_with_fallback(
+        self,
+        code: str,
+        start_date: str,
+        end_date: str,
+        adjust: str = "qfq",
+        exclude_sources: Optional[List[DataSourceType]] = None
+    ) -> tuple[Optional['UnifiedDataAdapter'], List[UnifiedKLine]]:
+        """带降级策略的 K 线获取
+        
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+            exclude_sources: 要排除的数据源列表
+            
+        Returns:
+            (使用的适配器，K 线数据列表)
+        """
+        exclude_set = set(exclude_sources) if exclude_sources else set()
+        
+        for source_type in self._fallback_chain:
+            if source_type in exclude_set:
+                logger.debug(f"跳过数据源：{source_type.value}")
+                continue
+            
+            try:
+                # 获取对应适配器
+                adapter = self._get_adapter_for_source(source_type)
+                if not adapter:
+                    logger.warning(f"无法获取数据源适配器：{source_type.value}")
+                    continue
+                
+                logger.info(f"尝试从 {source_type.value} 获取数据...")
+                
+                # 获取数据
+                klines = await adapter.get_unified_kline(
+                    code, start_date, end_date,
+                    adjust_type=adjust,
+                    save_to_storage=False
+                )
+                
+                if klines:
+                    logger.info(f"成功从 {source_type.value} 获取 {len(klines)} 条数据")
+                    return (adapter, klines)
+                else:
+                    logger.debug(f"{source_type.value} 返回空数据")
+                    
+            except Exception as e:
+                logger.error(f"从 {source_type.value} 获取数据失败：{e}")
+                continue
+        
+        logger.error(f"所有数据源都无法获取 K 线数据 {code}")
+        return (None, [])
+    
+    def _get_adapter_for_source(self, source_type: DataSourceType) -> Optional['UnifiedDataAdapter']:
+        """根据数据源类型获取对应的适配器实例
+        
+        Args:
+            source_type: 数据源类型
+            
+        Returns:
+            适配器实例或 None
+        """
+        # 这里需要根据实际项目结构调整
+        # 示例实现：
+        adapter_map = {
+            DataSourceType.TICKFLOW: TickFlowAdapter,
+            DataSourceType.AKSHARE: AkShareAdapter,
+            DataSourceType.EFINANCE: EFinanceAdapter,
+            DataSourceType.BAOSTOCK: BaostockAdapter,
+            # Tushare 和 YFinance 需要根据实际情况添加
+        }
+        
+        adapter_class = adapter_map.get(source_type)
+        if adapter_class:
+            return adapter_class()
+        
+        return None
     
     @abstractmethod
     async def _fetch_raw_kline(

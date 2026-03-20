@@ -32,8 +32,8 @@ export interface PerformanceStats {
 
 /** 数据源配置选项 */
 export interface DataSourceConfig {
-  sourcePriority?: string  // 优先级列表，如："efinance,tushare"
-  sourceExclude?: string   // 排除的数据源，如："tushare"
+  sourcePriority?: string  // 优先级列表，如："efinance,akshare"
+  sourceExclude?: string   // 排除的数据源，如："yfinance"
   fallback?: boolean       // 是否允许故障转移
 }
 

@@ -29,11 +29,6 @@ from .unified_adapter import (
     TickFlowUnifiedAdapter
 )
 
-try:
-    from .tushare_adapter import TushareAdapter
-except ImportError:
-    TushareAdapter = None
-
 from app.config import settings
 
 
@@ -49,15 +44,14 @@ class DataSourceFactory:
         default = default_source or settings.DEFAULT_DATA_SOURCE
         
         # 按照优先级初始化数据源
-        priority_list = getattr(settings, 'DATA_SOURCE_PRIORITY', ['tushare', 'efinance', 'akshare', 'baostock'])
+        priority_list = getattr(settings, 'DATA_SOURCE_PRIORITY', ['efinance', 'akshare', 'baostock', 'tickflow'])
         
         adapters_config = {
-            DataSourceType.TUSHARE: (TushareAdapter, False),  # Tushare 默认不主动初始化（需要 Token）
             DataSourceType.EFINANCE: (EFinanceAdapter, True),
             DataSourceType.AKSHARE: (AkShareAdapter, True),
             DataSourceType.BAOSTOCK: (BaostockAdapter, True),
             DataSourceType.YFINANCE: (YFinanceAdapter, False),
-            DataSourceType.TICKFLOW: (TickFlowAdapter, True),  # TickFlow 始终可用（免费服务）
+            DataSourceType.TICKFLOW: (TickFlowAdapter, True),
         }
         
         # 按优先级顺序初始化

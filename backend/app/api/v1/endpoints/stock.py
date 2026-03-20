@@ -18,8 +18,8 @@ async def get_stock_basic(code: str, current_user: OptionalCurrentUser):
 
 @router.get("/list", response_model=ResponseModel[list[StockBasic]])
 async def get_stock_list(
-    source: str = Query("auto", description="指定数据源：auto/efinance/tushare/akshare"),
-    source_priority: str = Query("", description="临时优先级列表（逗号分隔），如：efinance,tushare"),
+    source: str = Query("auto", description="指定数据源：auto/efinance/akshare/baostock"),
+    source_priority: str = Query("", description="临时优先级列表（逗号分隔），如：efinance,akshare"),
     source_exclude: str = Query("", description="排除的数据源（逗号分隔）"),
     fallback: bool = Query(True, description="是否允许故障转移"),
 ):
@@ -34,8 +34,8 @@ async def get_stock_list(
     
     Examples:
         - 默认自动：/api/v1/stock/list
-        - 指定优先级：/api/v1/stock/list?source_priority=efinance,tushare
-        - 排除数据源：/api/v1/stock/list?source_exclude=tushare
+        - 指定优先级：/api/v1/stock/list?source_priority=efinance,akshare
+        - 排除数据源：/api/v1/stock/list?source_exclude=yfinance
         - 强制使用：/api/v1/stock/list?source=efinance&fallback=false
     """
     from app.adapters.factory import data_source_manager
@@ -84,8 +84,6 @@ async def get_kline(
         - 指定数据源：/api/v1/stock/600519/kline?source=efinance
         - 优先 akshare：/api/v1/stock/600519/kline?source_priority=akshare,efinance
     """
-    from app.adapters.factory import data_source_manager
-    from app.services.stock_service import stock_service
     
     # 判断是代码还是名称
     # 股票代码通常是 6 位数字（A 股）或字母（美股/港股）

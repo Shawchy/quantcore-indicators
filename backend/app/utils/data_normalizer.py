@@ -81,8 +81,6 @@ class DataNormalizer:
                 return DataNormalizer._normalize_baostock_kline(raw_data, adjust_type)
             elif source == DataSourceType.TICKFLOW:
                 return DataNormalizer._normalize_tickflow_kline(raw_data, adjust_type)
-            elif source == DataSourceType.TUSHARE:
-                return DataNormalizer._normalize_tushare_kline(raw_data, adjust_type)
             else:
                 logger.error(f"不支持的数据源：{source}")
                 return None
@@ -242,33 +240,6 @@ class DataNormalizer:
         return True
     
     @staticmethod
-    def _normalize_tushare_kline(
-        data: Dict[str, Any],
-        adjust_type: AdjustType
-    ) -> UnifiedKLine:
-        """转换 Tushare K 线数据"""
-        code = str(data.get('ts_code', ''))
-        # Tushare 格式是 600000.SH，需要转换
-        if '.' in code:
-            code = code.split('.')[0]
-        
-        return UnifiedKLine(
-            code=code.zfill(6),
-            date=str(data.get('trade_date', '')),
-            open=float(data.get('open', 0)),
-            high=float(data.get('high', 0)),
-            low=float(data.get('low', 0)),
-            close=float(data.get('close', 0)),
-            pre_close=float(data.get('pre_close', 0)) if data.get('pre_close') else None,
-            volume=float(data.get('vol', 0)),
-            amount=float(data.get('amount', 0)) if data.get('amount') else None,
-            turnover_rate=float(data.get('turnover_rate', 0)) if data.get('turnover_rate') else None,
-            adjust_type=adjust_type,
-            source=DataSourceType.TUSHARE,
-            quality_score=1.0
-        )
-    
-    @staticmethod
     def normalize_stock_info(
         raw_data: Dict[str, Any],
         source: DataSourceType
@@ -290,8 +261,6 @@ class DataNormalizer:
                 return DataNormalizer._normalize_akshare_stock_info(raw_data)
             elif source == DataSourceType.TICKFLOW:
                 return DataNormalizer._normalize_tickflow_stock_info(raw_data)
-            elif source == DataSourceType.TUSHARE:
-                return DataNormalizer._normalize_tushare_stock_info(raw_data)
             else:
                 logger.error(f"不支持的数据源：{source}")
                 return None
@@ -365,31 +334,6 @@ class DataNormalizer:
             pb_ratio=None,
             dividend_yield=None,
             source=DataSourceType.TICKFLOW,
-            quality_score=1.0
-        )
-    
-    @staticmethod
-    def _normalize_tushare_stock_info(data: Dict[str, Any]) -> UnifiedStockInfo:
-        """转换 Tushare 股票信息"""
-        code = str(data.get('ts_code', ''))
-        if '.' in code:
-            code = code.split('.')[0]
-        
-        return UnifiedStockInfo(
-            code=code.zfill(6),
-            name=str(data.get('name', '')),
-            market=DataNormalizer.normalize_market(code),
-            industry=str(data.get('industry', '') or ''),
-            area=str(data.get('area', '') or ''),
-            list_date=str(data.get('list_date', '') or ''),
-            total_shares=float(data.get('total_share', 0)),
-            float_shares=float(data.get('float_share', 0)),
-            total_market_cap=float(data.get('total_market_cap', 0)),
-            float_market_cap=float(data.get('circ_market_cap', 0)),
-            pe_ratio=float(data.get('pe', 0)) if data.get('pe') else None,
-            pb_ratio=float(data.get('pb', 0)) if data.get('pb') else None,
-            dividend_yield=float(data.get('dividend_yield', 0)) if data.get('dividend_yield') else None,
-            source=DataSourceType.TUSHARE,
             quality_score=1.0
         )
     

@@ -32,7 +32,6 @@ class DataType(str, Enum):
 
 class DataSource(str, Enum):
     """数据源"""
-    TUSHARE = "tushare"
     AKSHARE = "akshare"
     BAOSTOCK = "baostock"
     YFINANCE = "yfinance"

@@ -22,11 +22,10 @@ class CrossSourceValidator:
         
         # 数据源优先级（数字越小优先级越高）
         self.priority = {
-            DataSourceType.TUSHARE: 1,
-            DataSourceType.EFINANCE: 2,
-            DataSourceType.AKSHARE: 3,
-            DataSourceType.BAOSTOCK: 4,
-            DataSourceType.TICKFLOW: 5
+            DataSourceType.EFINANCE: 1,
+            DataSourceType.AKSHARE: 2,
+            DataSourceType.BAOSTOCK: 3,
+            DataSourceType.TICKFLOW: 4
         }
     
     def validate_multi_source(

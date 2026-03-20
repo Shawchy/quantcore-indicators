@@ -15,9 +15,6 @@ import tushare as ts
 
 router = APIRouter()
 
-if settings.TUSHARE_TOKEN:
-    ts.set_token(settings.TUSHARE_TOKEN)
-
 
 # 超时时间（秒）
 REALTIME_TIMEOUT = 5  # 实时数据超时 5 秒

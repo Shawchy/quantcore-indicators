@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.adapters.akshare_adapter import AkShareAdapter
 from app.adapters.base import StockIndustryCategoryCNINFO, StockIndustryChangeCNINFO
+from app.models.schemas import SWIndexFirst, SWIndexSecond, SWIndexThird, SWIndexThirdCons
 from app.dependencies import get_akshare_adapter
 from app.schemas.response import ResponseModel
 from app.utils.auth import get_current_user
@@ -105,5 +106,137 @@ async def get_industry_change(
         return {
             "code": 500,
             "message": f"获取行业归属变动数据失败：{str(e)}",
+            "data": []
+        }
+
+
+# ========== 申万行业信息 ==========
+
+@router.get("/sw-index-first", response_model=ResponseModel[List[SWIndexFirst]])
+async def get_sw_index_first(
+    adapter: AkShareAdapter = Depends(get_akshare_adapter),
+    current_user: User = Depends(get_current_user)
+):
+    """获取申万一级行业信息
+    
+    返回申万一级行业的估值指标（7 个字段）：
+    - 行业信息：行业代码、行业名称
+    - 估值指标：成份个数、静态市盈率、TTM 市盈率、市净率、静态股息率
+    
+    适用于：
+    - 行业估值分析
+    - 行业横向对比
+    - 投资策略制定
+    """
+    try:
+        data = await adapter.get_sw_index_first_info()
+        return {
+            "code": 200,
+            "message": "success",
+            "data": data
+        }
+    except Exception as e:
+        return {
+            "code": 500,
+            "message": f"获取申万一级行业信息失败：{str(e)}",
+            "data": []
+        }
+
+
+@router.get("/sw-index-second", response_model=ResponseModel[List[SWIndexSecond]])
+async def get_sw_index_second(
+    adapter: AkShareAdapter = Depends(get_akshare_adapter),
+    current_user: User = Depends(get_current_user)
+):
+    """获取申万二级行业信息
+    
+    返回申万二级行业的估值指标（8 个字段）：
+    - 行业信息：行业代码、行业名称、上级行业
+    - 估值指标：成份个数、静态市盈率、TTM 市盈率、市净率、静态股息率
+    
+    适用于：
+    - 行业细分领域分析
+    - 产业链研究
+    - 行业轮动策略
+    """
+    try:
+        data = await adapter.get_sw_index_second_info()
+        return {
+            "code": 200,
+            "message": "success",
+            "data": data
+        }
+    except Exception as e:
+        return {
+            "code": 500,
+            "message": f"获取申万二级行业信息失败：{str(e)}",
+            "data": []
+        }
+
+
+@router.get("/sw-index-third", response_model=ResponseModel[List[SWIndexThird]])
+async def get_sw_index_third(
+    adapter: AkShareAdapter = Depends(get_akshare_adapter),
+    current_user: User = Depends(get_current_user)
+):
+    """获取申万三级行业信息
+    
+    返回申万三级行业的估值指标（8 个字段）：
+    - 行业信息：行业代码、行业名称、上级行业
+    - 估值指标：成份个数、静态市盈率、TTM 市盈率、市净率、静态股息率
+    
+    适用于：
+    - 最细分行业分析
+    - 精准投资定位
+    - 行业深度研究
+    """
+    try:
+        data = await adapter.get_sw_index_third_info()
+        return {
+            "code": 200,
+            "message": "success",
+            "data": data
+        }
+    except Exception as e:
+        return {
+            "code": 500,
+            "message": f"获取申万三级行业信息失败：{str(e)}",
+            "data": []
+        }
+
+
+@router.get("/sw-index-third-cons/{symbol}", response_model=ResponseModel[List[SWIndexThirdCons]])
+async def get_sw_index_third_cons(
+    symbol: str,
+    adapter: AkShareAdapter = Depends(get_akshare_adapter),
+    current_user: User = Depends(get_current_user)
+):
+    """获取申万三级行业成份数据
+    
+    返回指定申万三级行业的所有成份股数据（18 个字段）：
+    - 基本信息：序号、股票代码、股票简称、纳入时间
+    - 行业分类：申万 1 级、申万 2 级、申万 3 级
+    - 估值指标：价格、市盈率、市盈率 TTM、市净率、股息率、市值（亿元）
+    - 业绩增长：归母净利润同比增长 (09-30/06-30)、营业收入同比增长 (09-30/06-30)
+    
+    Args:
+        symbol: 行业代码（如 "850111.SI"），可通过 /sw-index-third 接口获取
+        
+    适用于：
+    - 行业成份股分析
+    - 产业链上下游研究
+    - 行业 ETF 成分股追踪
+    """
+    try:
+        data = await adapter.get_sw_index_third_cons(symbol=symbol)
+        return {
+            "code": 200,
+            "message": "success",
+            "data": data
+        }
+    except Exception as e:
+        return {
+            "code": 500,
+            "message": f"获取申万三级行业成份失败：{str(e)}",
             "data": []
         }

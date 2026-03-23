@@ -892,6 +892,1859 @@
             logger.error(f"AkShare 获取港股历史行情失败：symbol={symbol}, error={e}")
             return []
     
+    # ========== 申万一级行业信息 ==========
+    
+    async def get_sw_index_first_info(self) -> List[SWIndexFirst]:
+        """获取申万一级行业信息
+        
+        Returns:
+            SWIndexFirst 列表，包含申万一级行业信息（7 个字段）：
+            - 行业信息：industry_code, industry_name
+            - 估值指标：component_count, static_pe, pe_ttm, pb, static_dividend_yield
+        """
+        try:
+            cache_key = "sw_index_first_info"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存（行业数据相对稳定）
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.sw_index_first_info()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = SWIndexFirst(
+                    industry_code=str(row.get('行业代码', '')) if not pd.isna(row.get('行业代码')) else '',
+                    industry_name=str(row.get('行业名称', '')) if not pd.isna(row.get('行业名称')) else '',
+                    component_count=int(row.get('成份个数', 0)) if not pd.isna(row.get('成份个数')) else None,
+                    static_pe=float(row.get('静态市盈率', 0)) if not pd.isna(row.get('静态市盈率')) else None,
+                    pe_ttm=float(row.get('TTM(滚动) 市盈率', 0)) if not pd.isna(row.get('TTM(滚动) 市盈率')) else None,
+                    pb=float(row.get('市净率', 0)) if not pd.isna(row.get('市净率')) else None,
+                    static_dividend_yield=float(row.get('静态股息率', 0)) if not pd.isna(row.get('静态股息率')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取申万一级行业信息，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取申万一级行业信息失败：error={e}")
+            return []
+    
+    # ========== 申万二级行业信息 ==========
+    
+    async def get_sw_index_second_info(self) -> List[SWIndexSecond]:
+        """获取申万二级行业信息
+        
+        Returns:
+            SWIndexSecond 列表，包含申万二级行业信息（8 个字段）：
+            - 行业信息：industry_code, industry_name, parent_industry
+            - 估值指标：component_count, static_pe, pe_ttm, pb, static_dividend_yield
+        """
+        try:
+            cache_key = "sw_index_second_info"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.sw_index_second_info()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = SWIndexSecond(
+                    industry_code=str(row.get('行业代码', '')) if not pd.isna(row.get('行业代码')) else '',
+                    industry_name=str(row.get('行业名称', '')) if not pd.isna(row.get('行业名称')) else '',
+                    parent_industry=str(row.get('上级行业', '')) if not pd.isna(row.get('上级行业')) else '',
+                    component_count=int(row.get('成份个数', 0)) if not pd.isna(row.get('成份个数')) else None,
+                    static_pe=float(row.get('静态市盈率', 0)) if not pd.isna(row.get('静态市盈率')) else None,
+                    pe_ttm=float(row.get('TTM(滚动) 市盈率', 0)) if not pd.isna(row.get('TTM(滚动) 市盈率')) else None,
+                    pb=float(row.get('市净率', 0)) if not pd.isna(row.get('市净率')) else None,
+                    static_dividend_yield=float(row.get('静态股息率', 0)) if not pd.isna(row.get('静态股息率')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取申万二级行业信息，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取申万二级行业信息失败：error={e}")
+            return []
+    
+    # ========== 申万三级行业信息 ==========
+    
+    async def get_sw_index_third_info(self) -> List[SWIndexThird]:
+        """获取申万三级行业信息
+        
+        Returns:
+            SWIndexThird 列表，包含申万三级行业信息（8 个字段）：
+            - 行业信息：industry_code, industry_name, parent_industry
+            - 估值指标：component_count, static_pe, pe_ttm, pb, static_dividend_yield
+        """
+        try:
+            cache_key = "sw_index_third_info"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.sw_index_third_info()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = SWIndexThird(
+                    industry_code=str(row.get('行业代码', '')) if not pd.isna(row.get('行业代码')) else '',
+                    industry_name=str(row.get('行业名称', '')) if not pd.isna(row.get('行业名称')) else '',
+                    parent_industry=str(row.get('上级行业', '')) if not pd.isna(row.get('上级行业')) else '',
+                    component_count=int(row.get('成份个数', 0)) if not pd.isna(row.get('成份个数')) else None,
+                    static_pe=float(row.get('静态市盈率', 0)) if not pd.isna(row.get('静态市盈率')) else None,
+                    pe_ttm=float(row.get('TTM(滚动) 市盈率', 0)) if not pd.isna(row.get('TTM(滚动) 市盈率')) else None,
+                    pb=float(row.get('市净率', 0)) if not pd.isna(row.get('市净率')) else None,
+                    static_dividend_yield=float(row.get('静态股息率', 0)) if not pd.isna(row.get('静态股息率')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取申万三级行业信息，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取申万三级行业信息失败：error={e}")
+            return []
+    
+    # ========== 申万三级行业成份 ==========
+    
+    async def get_sw_index_third_cons(
+        self,
+        symbol: str
+    ) -> List[SWIndexThirdCons]:
+        """获取申万三级行业成份数据
+        
+        Args:
+            symbol: 行业代码（如 "850111.SI"），可通过 ak.sw_index_third_info() 获取所有行业代码
+        
+        Returns:
+            SWIndexThirdCons 列表，包含该行业所有成份股数据（18 个字段）：
+            - 基本信息：serial_number, stock_code, stock_name, include_date
+            - 行业分类：sw_level1, sw_level2, sw_level3
+            - 估值指标：price, pe, pe_ttm, pb, dividend_yield, market_cap
+            - 业绩增长：net_profit_yoy_0930, net_profit_yoy_0630, revenue_yoy_0930, revenue_yoy_0630
+        """
+        try:
+            # 构建缓存 key
+            cache_key = f"sw_index_third_cons_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.sw_index_third_cons(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = SWIndexThirdCons(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    stock_code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    stock_name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    include_date=str(row.get('纳入时间', '')) if not pd.isna(row.get('纳入时间')) else '',
+                    sw_level1=str(row.get('申万 1 级', '')) if not pd.isna(row.get('申万 1 级')) else '',
+                    sw_level2=str(row.get('申万 2 级', '')) if not pd.isna(row.get('申万 2 级')) else '',
+                    sw_level3=str(row.get('申万 3 级', '')) if not pd.isna(row.get('申万 3 级')) else '',
+                    price=float(row.get('价格', 0)) if not pd.isna(row.get('价格')) else None,
+                    pe=float(row.get('市盈率', 0)) if not pd.isna(row.get('市盈率')) else None,
+                    pe_ttm=float(row.get('市盈率 ttm', 0)) if not pd.isna(row.get('市盈率 ttm')) else None,
+                    pb=float(row.get('市净率', 0)) if not pd.isna(row.get('市净率')) else None,
+                    dividend_yield=float(row.get('股息率', 0)) if not pd.isna(row.get('股息率')) else None,
+                    market_cap=float(row.get('市值', 0)) if not pd.isna(row.get('市值')) else None,
+                    net_profit_yoy_0930=float(row.get('归母净利润同比增长 (09-30)', 0)) if not pd.isna(row.get('归母净利润同比增长 (09-30)')) else None,
+                    net_profit_yoy_0630=float(row.get('归母净利润同比增长 (06-30)', 0)) if not pd.isna(row.get('归母净利润同比增长 (06-30)')) else None,
+                    revenue_yoy_0930=float(row.get('营业收入同比增长 (09-30)', 0)) if not pd.isna(row.get('营业收入同比增长 (09-30)')) else None,
+                    revenue_yoy_0630=float(row.get('营业收入同比增长 (06-30)', 0)) if not pd.isna(row.get('营业收入同比增长 (06-30)')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取申万三级行业成份（{symbol}），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取申万三级行业成份失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 个股人气榜 - 热门关键词 ==========
+    
+    async def get_stock_hot_keyword_em(self, symbol: str) -> List[HotKeyword]:
+        """获取东方财富 - 个股人气榜 - 热门关键词
+        
+        Args:
+            symbol: 股票代码，格式为 "SZ000665" 或 "SH600000"
+        
+        Returns:
+            HotKeyword 列表，包含该股票的热门关键词数据（概念名称、概念代码、热度等）
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_hot_keyword_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_hot_keyword_em(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = HotKeyword(
+                    time=str(row.get('时间', '')) if not pd.isna(row.get('时间')) else '',
+                    stock_code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    concept_name=str(row.get('概念名称', '')) if not pd.isna(row.get('概念名称')) else '',
+                    concept_code=str(row.get('概念代码', '')) if not pd.isna(row.get('概念代码')) else '',
+                    heat=int(row.get('热度', 0)) if not pd.isna(row.get('热度')) else 0,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 热门关键词，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取热门关键词失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 盘口异动 ==========
+    
+    async def get_stock_changes_em(self, symbol: str = "大笔买入") -> List[StockChanges]:
+        """获取东方财富 - 盘口异动数据
+        
+        Args:
+            symbol: 异动类型，choice of {
+                '火箭发射', '快速反弹', '大笔买入', '封涨停板', '打开跌停板', '有大买盘',
+                '竞价上涨', '高开 5 日线', '向上缺口', '60 日新高', '60 日大幅上涨',
+                '加速下跌', '高台跳水', '大笔卖出', '封跌停板', '打开涨停板', '有大卖盘',
+                '竞价下跌', '低开 5 日线', '向下缺口', '60 日新低', '60 日大幅下跌'
+            }
+        
+        Returns:
+            StockChanges 列表，包含指定异动类型的盘口异动数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_changes_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=60):  # 1 分钟缓存（实时数据）
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_changes_em(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockChanges(
+                    time=str(row.get('时间', '')) if not pd.isna(row.get('时间')) else '',
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('名称', '')) if not pd.isna(row.get('名称')) else '',
+                    board=str(row.get('板块', '')) if not pd.isna(row.get('板块')) else '',
+                    related_info=str(row.get('相关信息', '')) if not pd.isna(row.get('相关信息')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取盘口异动数据（{symbol}），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取盘口异动失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 板块异动详情 ==========
+    
+    async def get_stock_board_change_em(self) -> List[StockBoardChange]:
+        """获取东方财富 - 当日板块异动详情
+        
+        Returns:
+            StockBoardChange 列表，包含当日板块异动数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_board_change"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_board_change_em()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                # 解析最频繁个股信息
+                frequent_info = str(row.get('板块异动最频繁个股及所属类型 - 股票代码', ''))
+                if not pd.isna(frequent_info) and frequent_info:
+                    frequent_parts = frequent_info.split('(') if '(' in frequent_info else [frequent_info, '']
+                    frequent_stock_code = frequent_parts[0] if frequent_parts else ''
+                    frequent_type = frequent_parts[1].rstrip(')') if len(frequent_parts) > 1 else ''
+                else:
+                    frequent_stock_code = ''
+                    frequent_type = ''
+                
+                # 解析异动类型列表（转换为 JSON 字符串）
+                change_types_list = row.get('板块具体异动类型列表及出现次数', [])
+                if not pd.isna(change_types_list):
+                    import json
+                    change_types = json.dumps(change_types_list) if isinstance(change_types_list, list) else str(change_types_list)
+                else:
+                    change_types = ''
+                
+                item = StockBoardChange(
+                    board_name=str(row.get('板块名称', '')) if not pd.isna(row.get('板块名称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    main_net_inflow=float(row.get('主力净流入', 0)) if not pd.isna(row.get('主力净流入')) else None,
+                    total_changes=int(row.get('板块异动总次数', 0)) if not pd.isna(row.get('板块异动总次数')) else None,
+                    frequent_stock_code=frequent_stock_code,
+                    frequent_stock_name=str(row.get('板块异动最频繁个股及所属类型 - 股票名称', '')) if not pd.isna(row.get('板块异动最频繁个股及所属类型 - 股票名称')) else '',
+                    frequent_type=frequent_type,
+                    change_types=change_types,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取板块异动详情，共 {len(result)} 个板块")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取板块异动详情失败：error={e}")
+            return []
+    
+    # ========== 东方财富 - 涨停股池 ==========
+    
+    async def get_stock_zt_pool_em(self, date: str) -> List[StockZtPool]:
+        """获取东方财富 - 涨停股池
+        
+        Args:
+            date: 日期，格式 'YYYYMMDD'
+        
+        Returns:
+            StockZtPool 列表，包含指定日期的涨停股池数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_zt_pool_{date}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_zt_pool_em(date=date)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockZtPool(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('名称', '')) if not pd.isna(row.get('名称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    turnover_amount=int(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    float_market_cap=float(row.get('流通市值', 0)) if not pd.isna(row.get('流通市值')) else None,
+                    total_market_cap=float(row.get('总市值', 0)) if not pd.isna(row.get('总市值')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                    seal_capital=int(row.get('封板资金', 0)) if not pd.isna(row.get('封板资金')) else None,
+                    first_seal_time=str(row.get('首次封板时间', '')) if not pd.isna(row.get('首次封板时间')) else '',
+                    last_seal_time=str(row.get('最后封板时间', '')) if not pd.isna(row.get('最后封板时间')) else '',
+                    open_count=int(row.get('炸板次数', 0)) if not pd.isna(row.get('炸板次数')) else None,
+                    zt_statistics=str(row.get('涨停统计', '')) if not pd.isna(row.get('涨停统计')) else '',
+                    continuous_count=int(row.get('连板数', 0)) if not pd.isna(row.get('连板数')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {date} 涨停股池数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取涨停股池失败：date={date}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 昨日涨停股池 ==========
+    
+    async def get_stock_zt_pool_previous_em(self, date: str) -> List[StockZtPoolPrevious]:
+        """获取东方财富 - 昨日涨停股池
+        
+        Args:
+            date: 日期，格式 'YYYYMMDD'
+        
+        Returns:
+            StockZtPoolPrevious 列表，包含指定日期的昨日涨停股池数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_zt_pool_previous_{date}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_zt_pool_previous_em(date=date)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockZtPoolPrevious(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('名称', '')) if not pd.isna(row.get('名称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    limit_up_price=float(row.get('涨停价', 0)) if not pd.isna(row.get('涨停价')) else None,
+                    turnover_amount=int(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    float_market_cap=float(row.get('流通市值', 0)) if not pd.isna(row.get('流通市值')) else None,
+                    total_market_cap=float(row.get('总市值', 0)) if not pd.isna(row.get('总市值')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                    speed=float(row.get('涨速', 0)) if not pd.isna(row.get('涨速')) else None,
+                    amplitude=float(row.get('振幅', 0)) if not pd.isna(row.get('振幅')) else None,
+                    yesterday_seal_time=str(row.get('昨日封板时间', '')) if not pd.isna(row.get('昨日封板时间')) else '',
+                    yesterday_continuous_count=int(row.get('昨日连板数', 0)) if not pd.isna(row.get('昨日连板数')) else None,
+                    zt_statistics=str(row.get('涨停统计', '')) if not pd.isna(row.get('涨停统计')) else '',
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {date} 昨日涨停股池数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取昨日涨停股池失败：date={date}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 强势股池 ==========
+    
+    async def get_stock_zt_pool_strong_em(self, date: str) -> List[StockZtPoolStrong]:
+        """获取东方财富 - 强势股池
+        
+        Args:
+            date: 日期，格式 'YYYYMMDD'
+        
+        Returns:
+            StockZtPoolStrong 列表，包含指定日期的强势股池数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_zt_pool_strong_{date}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_zt_pool_strong_em(date=date)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockZtPoolStrong(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('名称', '')) if not pd.isna(row.get('名称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    limit_up_price=float(row.get('涨停价', 0)) if not pd.isna(row.get('涨停价')) else None,
+                    turnover_amount=int(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    float_market_cap=float(row.get('流通市值', 0)) if not pd.isna(row.get('流通市值')) else None,
+                    total_market_cap=float(row.get('总市值', 0)) if not pd.isna(row.get('总市值')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                    speed=float(row.get('涨速', 0)) if not pd.isna(row.get('涨速')) else None,
+                    is_new_high=str(row.get('是否新高', '')) if not pd.isna(row.get('是否新高')) else '',
+                    volume_ratio=float(row.get('量比', 0)) if not pd.isna(row.get('量比')) else None,
+                    zt_statistics=str(row.get('涨停统计', '')) if not pd.isna(row.get('涨停统计')) else '',
+                    reason=str(row.get('入选理由', '')) if not pd.isna(row.get('入选理由')) else '',
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {date} 强势股池数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取强势股池失败：date={date}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 炸板股池 ==========
+    
+    async def get_stock_zt_pool_zbgc_em(self, date: str) -> List[StockZtPoolZbgc]:
+        """获取东方财富 - 炸板股池
+        
+        Args:
+            date: 日期，格式 'YYYYMMDD'
+        
+        Returns:
+            StockZtPoolZbgc 列表，包含指定日期的炸板股池数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_zt_pool_zbgc_{date}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_zt_pool_zbgc_em(date=date)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockZtPoolZbgc(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('名称', '')) if not pd.isna(row.get('名称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    limit_up_price=float(row.get('涨停价', 0)) if not pd.isna(row.get('涨停价')) else None,
+                    turnover_amount=int(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    float_market_cap=float(row.get('流通市值', 0)) if not pd.isna(row.get('流通市值')) else None,
+                    total_market_cap=float(row.get('总市值', 0)) if not pd.isna(row.get('总市值')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                    speed=int(row.get('涨速', 0)) if not pd.isna(row.get('涨速')) else None,
+                    first_seal_time=str(row.get('首次封板时间', '')) if not pd.isna(row.get('首次封板时间')) else '',
+                    open_count=int(row.get('炸板次数', 0)) if not pd.isna(row.get('炸板次数')) else None,
+                    zt_statistics=str(row.get('涨停统计', '')) if not pd.isna(row.get('涨停统计')) else '',
+                    amplitude=float(row.get('振幅', 0)) if not pd.isna(row.get('振幅')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {date} 炸板股池数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取炸板股池失败：date={date}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 跌停股池 ==========
+    
+    async def get_stock_zt_pool_dtgc_em(self, date: str) -> List[StockZtPoolDtgc]:
+        """获取东方财富 - 跌停股池
+        
+        Args:
+            date: 日期，格式 'YYYYMMDD'
+        
+        Returns:
+            StockZtPoolDtgc 列表，包含指定日期的跌停股池数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_zt_pool_dtgc_{date}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_zt_pool_dtgc_em(date=date)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockZtPoolDtgc(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('名称', '')) if not pd.isna(row.get('名称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    turnover_amount=int(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    float_market_cap=float(row.get('流通市值', 0)) if not pd.isna(row.get('流通市值')) else None,
+                    total_market_cap=float(row.get('总市值', 0)) if not pd.isna(row.get('总市值')) else None,
+                    pe_ratio_dynamic=float(row.get('动态市盈率', 0)) if not pd.isna(row.get('动态市盈率')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                    seal_capital=int(row.get('封单资金', 0)) if not pd.isna(row.get('封单资金')) else None,
+                    last_seal_time=str(row.get('最后封板时间', '')) if not pd.isna(row.get('最后封板时间')) else '',
+                    on_board_amount=int(row.get('板上成交额', 0)) if not pd.isna(row.get('板上成交额')) else None,
+                    continuous_limit_down=int(row.get('连续跌停', 0)) if not pd.isna(row.get('连续跌停')) else None,
+                    open_count=int(row.get('开板次数', 0)) if not pd.isna(row.get('开板次数')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {date} 跌停股池数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取跌停股池失败：date={date}, error={e}")
+            return []
+    
+    # ========== 乐咕乐股 - 赚钱效应分析 ==========
+    
+    async def get_stock_market_activity_legu(self) -> List[MarketActivity]:
+        """获取乐咕乐股网 - 赚钱效应分析数据
+        
+        Returns:
+            MarketActivity 列表，包含当前赚钱效应分析数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_market_activity_legu"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_market_activity_legu()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = MarketActivity(
+                    item=str(row.get('item', '')) if not pd.isna(row.get('item')) else '',
+                    value=str(row.get('value', '')) if not pd.isna(row.get('value')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取赚钱效应分析数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取赚钱效应分析失败：error={e}")
+            return []
+    
+    # ========== 东方财富 - 财经早餐 ==========
+    
+    async def get_stock_info_cjzc_em(self) -> List[FinancialNews]:
+        """获取东方财富 - 财经早餐
+        
+        Returns:
+            FinancialNews 列表，包含财经早餐数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_info_cjzc_em"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_info_cjzc_em()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = FinancialNews(
+                    title=str(row.get('标题', '')) if not pd.isna(row.get('标题')) else '',
+                    summary=str(row.get('摘要', '')) if not pd.isna(row.get('摘要')) else '',
+                    publish_time=str(row.get('发布时间', '')) if not pd.isna(row.get('发布时间')) else '',
+                    link=str(row.get('链接', '')) if not pd.isna(row.get('链接')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取财经早餐数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取财经早餐失败：error={e}")
+            return []
+    
+    # ========== 东方财富 - 全球财经快讯 ==========
+    
+    async def get_stock_info_global_em(self) -> List[GlobalNews]:
+        """获取东方财富 - 全球财经快讯
+        
+        Returns:
+            GlobalNews 列表，包含全球财经快讯数据（最近 200 条）
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_info_global_em"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_info_global_em()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = GlobalNews(
+                    title=str(row.get('标题', '')) if not pd.isna(row.get('标题')) else '',
+                    summary=str(row.get('摘要', '')) if not pd.isna(row.get('摘要')) else '',
+                    publish_time=str(row.get('发布时间', '')) if not pd.isna(row.get('发布时间')) else '',
+                    link=str(row.get('链接', '')) if not pd.isna(row.get('链接')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取全球财经快讯数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取全球财经快讯失败：error={e}")
+            return []
+    
+    # ========== 新浪财经 - 全球财经快讯 ==========
+    
+    async def get_stock_info_global_sina(self) -> List[GlobalNewsSina]:
+        """获取新浪财经 - 全球财经快讯
+        
+        Returns:
+            GlobalNewsSina 列表，包含新浪财经快讯数据（最近 20 条）
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_info_global_sina"
+            if self._is_cache_valid(cache_key, ttl=60):  # 1 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_info_global_sina()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = GlobalNewsSina(
+                    time=str(row.get('时间', '')) if not pd.isna(row.get('时间')) else '',
+                    content=str(row.get('内容', '')) if not pd.isna(row.get('内容')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取新浪财经快讯数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取新浪财经快讯失败：error={e}")
+            return []
+    
+    # ========== 富途牛牛 - 快讯 ==========
+    
+    async def get_stock_info_global_futu(self) -> List[GlobalNewsFutu]:
+        """获取富途牛牛 - 快讯
+        
+        Returns:
+            GlobalNewsFutu 列表，包含富途牛牛快讯数据（最近 50 条）
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_info_global_futu"
+            if self._is_cache_valid(cache_key, ttl=60):  # 1 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_info_global_futu()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = GlobalNewsFutu(
+                    title=str(row.get('标题', '')) if not pd.isna(row.get('标题')) else '',
+                    content=str(row.get('内容', '')) if not pd.isna(row.get('内容')) else '',
+                    publish_time=str(row.get('发布时间', '')) if not pd.isna(row.get('发布时间')) else '',
+                    link=str(row.get('链接', '')) if not pd.isna(row.get('链接')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取富途牛牛快讯数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取富途牛牛快讯失败：error={e}")
+            return []
+    
+    # ========== 同花顺 - 创新高股票 ==========
+    
+    async def get_stock_rank_cxg_ths(self, symbol: str = "创月新高") -> List[StockRankCxg]:
+        """获取同花顺 - 创新高股票数据
+        
+        Args:
+            symbol: 创新高类型，choice of {
+                "创月新高", "半年新高", "一年新高", "历史新高"
+            }
+        
+        Returns:
+            StockRankCxg 列表，包含创新高股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_rank_cxg_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_cxg_ths(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankCxg(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    previous_high=float(row.get('前期高点', 0)) if not pd.isna(row.get('前期高点')) else None,
+                    previous_high_date=str(row.get('前期高点日期', '')) if not pd.isna(row.get('前期高点日期')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取创新高股票失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 同花顺 - 创新低股票 ==========
+    
+    async def get_stock_rank_cxd_ths(self, symbol: str = "创月新低") -> List[StockRankCxd]:
+        """获取同花顺 - 创新低股票数据
+        
+        Args:
+            symbol: 创新低类型，choice of {
+                "创月新低", "半年新低", "一年新低", "历史新低"
+            }
+        
+        Returns:
+            StockRankCxd 列表，包含创新低股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_rank_cxd_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_cxd_ths(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankCxd(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    previous_low=float(row.get('前期低点', 0)) if not pd.isna(row.get('前期低点')) else None,
+                    previous_low_date=str(row.get('前期低点日期', '')) if not pd.isna(row.get('前期低点日期')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取创新低股票失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 同花顺 - 连续上涨股票 ==========
+    
+    async def get_stock_rank_lxsz_ths(self) -> List[StockRankLxsz]:
+        """获取同花顺 - 连续上涨股票数据
+        
+        Returns:
+            StockRankLxsz 列表，包含连续上涨股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_rank_lxsz"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_lxsz_ths()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankLxsz(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    close_price=float(row.get('收盘价', 0)) if not pd.isna(row.get('收盘价')) else None,
+                    high_price=float(row.get('最高价', 0)) if not pd.isna(row.get('最高价')) else None,
+                    low_price=float(row.get('最低价', 0)) if not pd.isna(row.get('最低价')) else None,
+                    continuous_days=int(row.get('连涨天数', 0)) if not pd.isna(row.get('连涨天数')) else None,
+                    continuous_change_pct=float(row.get('连续涨跌幅', 0)) if not pd.isna(row.get('连续涨跌幅')) else None,
+                    total_turnover_rate=float(row.get('累计换手率', 0)) if not pd.isna(row.get('累计换手率')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取连续上涨股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取连续上涨股票失败：error={e}")
+            return []
+    
+    # ========== 同花顺 - 连续下跌股票 ==========
+    
+    async def get_stock_rank_lxxd_ths(self) -> List[StockRankLxxd]:
+        """获取同花顺 - 连续下跌股票数据
+        
+        Returns:
+            StockRankLxxd 列表，包含连续下跌股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_rank_lxxd"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_lxxd_ths()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankLxxd(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    close_price=float(row.get('收盘价', 0)) if not pd.isna(row.get('收盘价')) else None,
+                    high_price=float(row.get('最高价', 0)) if not pd.isna(row.get('最高价')) else None,
+                    low_price=float(row.get('最低价', 0)) if not pd.isna(row.get('最低价')) else None,
+                    continuous_days=int(row.get('连涨天数', 0)) if not pd.isna(row.get('连涨天数')) else None,
+                    continuous_change_pct=float(row.get('连续涨跌幅', 0)) if not pd.isna(row.get('连续涨跌幅')) else None,
+                    total_turnover_rate=float(row.get('累计换手率', 0)) if not pd.isna(row.get('累计换手率')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取连续下跌股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取连续下跌股票失败：error={e}")
+            return []
+    
+    # ========== 同花顺 - 持续放量股票 ==========
+    
+    async def get_stock_rank_cxfl_ths(self) -> List[StockRankCxfl]:
+        """获取同花顺 - 持续放量股票数据
+        
+        Returns:
+            StockRankCxfl 列表，包含持续放量股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_rank_cxfl"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_cxfl_ths()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankCxfl(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    volume=str(row.get('成交量', '')) if not pd.isna(row.get('成交量')) else '',
+                    base_volume=str(row.get('基准日成交量', '')) if not pd.isna(row.get('基准日成交量')) else '',
+                    continuous_days=int(row.get('放量天数', 0)) if not pd.isna(row.get('放量天数')) else None,
+                    stage_change_pct=float(row.get('阶段涨跌幅', 0)) if not pd.isna(row.get('阶段涨跌幅')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取持续放量股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取持续放量股票失败：error={e}")
+            return []
+    
+    # ========== 同花顺 - 持续缩量股票 ==========
+    
+    async def get_stock_rank_cxsl_ths(self) -> List[StockRankCxsl]:
+        """获取同花顺 - 持续缩量股票数据
+        
+        Returns:
+            StockRankCxsl 列表，包含持续缩量股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_rank_cxsl"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_cxsl_ths()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankCxsl(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    volume=str(row.get('成交量', '')) if not pd.isna(row.get('成交量')) else '',
+                    base_volume=str(row.get('基准日成交量', '')) if not pd.isna(row.get('基准日成交量')) else '',
+                    continuous_days=int(row.get('缩量天数', 0)) if not pd.isna(row.get('缩量天数')) else None,
+                    stage_change_pct=float(row.get('阶段涨跌幅', 0)) if not pd.isna(row.get('阶段涨跌幅')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取持续缩量股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取持续缩量股票失败：error={e}")
+            return []
+    
+    # ========== 同花顺 - 向上突破股票 ==========
+    
+    async def get_stock_rank_xstp_ths(self, symbol: str = "500 日均线") -> List[StockRankXstp]:
+        """获取同花顺 - 向上突破股票数据
+        
+        Args:
+            symbol: 均线类型，choice of {
+                "5日均线", "10日均线", "20日均线", "30日均线",
+                "60日均线", "90日均线", "250日均线", "500日均线"
+            }
+        
+        Returns:
+            StockRankXstp 列表，包含向上突破股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_rank_xstp_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_xstp_ths(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankXstp(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    turnover_amount=str(row.get('成交额', '')) if not pd.isna(row.get('成交额')) else '',
+                    volume=str(row.get('成交量', '')) if not pd.isna(row.get('成交量')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 向上突破股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取向上突破股票失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 同花顺 - 向下突破股票 ==========
+    
+    async def get_stock_rank_xxtp_ths(self, symbol: str = "500 日均线") -> List[StockRankXxtp]:
+        """获取同花顺 - 向下突破股票数据
+        
+        Args:
+            symbol: 均线类型，choice of {
+                "5日均线", "10日均线", "20日均线", "30日均线",
+                "60日均线", "90日均线", "250日均线", "500 日均线"
+            }
+        
+        Returns:
+            StockRankXxtp 列表，包含向下突破股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_rank_xxtp_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_xxtp_ths(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankXxtp(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    turnover_amount=str(row.get('成交额', '')) if not pd.isna(row.get('成交额')) else '',
+                    volume=str(row.get('成交量', '')) if not pd.isna(row.get('成交量')) else '',
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 向下突破股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取向下突破股票失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 同花顺 - 量价齐升股票 ==========
+    
+    async def get_stock_rank_ljqs_ths(self) -> List[StockRankLjqs]:
+        """获取同花顺 - 量价齐升股票数据
+        
+        Returns:
+            StockRankLjqs 列表，包含量价齐升股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_rank_ljqs"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_ljqs_ths()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankLjqs(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    continuous_days=int(row.get('量价齐升天数', 0)) if not pd.isna(row.get('量价齐升天数')) else None,
+                    stage_change_pct=float(row.get('阶段涨幅', 0)) if not pd.isna(row.get('阶段涨幅')) else None,
+                    total_turnover_rate=float(row.get('累计换手率', 0)) if not pd.isna(row.get('累计换手率')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取量价齐升股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取量价齐升股票失败：error={e}")
+            return []
+    
+    # ========== 同花顺 - 量价齐跌股票 ==========
+    
+    async def get_stock_rank_ljqd_ths(self) -> List[StockRankLjqd]:
+        """获取同花顺 - 量价齐跌股票数据
+        
+        Returns:
+            StockRankLjqd 列表，包含量价齐跌股票数据
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_rank_ljqd"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_rank_ljqd_ths()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockRankLjqd(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    continuous_days=int(row.get('量价齐跌天数', 0)) if not pd.isna(row.get('量价齐跌天数')) else None,
+                    stage_change_pct=float(row.get('阶段涨幅', 0)) if not pd.isna(row.get('阶段涨幅')) else None,
+                    total_turnover_rate=float(row.get('累计换手率', 0)) if not pd.isna(row.get('累计换手率')) else None,
+                    industry=str(row.get('所属行业', '')) if not pd.isna(row.get('所属行业')) else '',
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取量价齐跌股票数据，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取量价齐跌股票失败：error={e}")
+            return []
+    
+    # ========== 雪球 - 关注排行榜 ==========
+    
+    async def get_stock_hot_follow_xq(self, symbol: str = "最热门") -> List[StockHotFollow]:
+        """获取雪球 - 关注排行榜
+        
+        Args:
+            symbol: 排行榜类型，choice of {"本周新增", "最热门"}
+        
+        Returns:
+            StockHotFollow 列表，包含关注排行榜数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_hot_follow_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_hot_follow_xq(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockHotFollow(
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    follow=float(row.get('关注', 0)) if not pd.isna(row.get('关注')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取雪球关注排行榜（{symbol}），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取雪球关注排行榜失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 雪球 - 讨论排行榜 ==========
+    
+    async def get_stock_hot_tweet_xq(self, symbol: str = "最热门") -> List[StockHotTweet]:
+        """获取雪球 - 讨论排行榜
+        
+        Args:
+            symbol: 排行榜类型，choice of {"本周新增", "最热门"}
+        
+        Returns:
+            StockHotTweet 列表，包含讨论排行榜数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_hot_tweet_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_hot_tweet_xq(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockHotTweet(
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    follow=float(row.get('关注', 0)) if not pd.isna(row.get('关注')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取雪球讨论排行榜（{symbol}），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取雪球讨论排行榜失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 雪球 - 交易排行榜 ==========
+    
+    async def get_stock_hot_deal_xq(self, symbol: str = "最热门") -> List[StockHotDeal]:
+        """获取雪球 - 交易排行榜
+        
+        Args:
+            symbol: 排行榜类型，choice of {"本周新增", "最热门"}
+        
+        Returns:
+            StockHotDeal 列表，包含交易排行榜数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_hot_deal_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=300):  # 5 分钟缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_hot_deal_xq(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockHotDeal(
+                    code=str(row.get('股票代码', '')) if not pd.isna(row.get('股票代码')) else '',
+                    name=str(row.get('股票简称', '')) if not pd.isna(row.get('股票简称')) else '',
+                    follow=float(row.get('关注', 0)) if not pd.isna(row.get('关注')) else None,
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取雪球交易排行榜（{symbol}），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取雪球交易排行榜失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 东方财富 - 人气榜-A 股 ==========
+    
+    async def get_stock_hot_rank_em(self) -> List[StockHotRankEm]:
+        """获取东方财富 - 人气榜-A 股
+        
+        Returns:
+            StockHotRankEm 列表，包含人气榜数据（前 100 名）
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_hot_rank_em"
+            if self._is_cache_valid(cache_key, ttl=60):  # 1 分钟缓存（实时数据）
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_hot_rank_em()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockHotRankEm(
+                    current_rank=int(row.get('当前排名', 0)) if not pd.isna(row.get('当前排名')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('股票名称', '')) if not pd.isna(row.get('股票名称')) else '',
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    change=float(row.get('涨跌额', 0)) if not pd.isna(row.get('涨跌额')) else None,
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取东方财富人气榜，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取东方财富人气榜失败：error={e}")
+            return []
+    
+    # ========== 东方财富 - 飙升榜-A 股 ==========
+    
+    async def get_stock_hot_up_em(self) -> List[StockHotUpEm]:
+        """获取东方财富 - 飙升榜-A 股
+        
+        Returns:
+            StockHotUpEm 列表，包含飙升榜数据（前 100 名）
+        """
+        try:
+            # 缓存检查
+            cache_key = "stock_hot_up_em"
+            if self._is_cache_valid(cache_key, ttl=60):  # 1 分钟缓存（实时数据）
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_hot_up_em()
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockHotUpEm(
+                    rank_change=int(row.get('排名较昨日变动', 0)) if not pd.isna(row.get('排名较昨日变动')) else 0,
+                    current_rank=int(row.get('当前排名', 0)) if not pd.isna(row.get('当前排名')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('股票名称', '')) if not pd.isna(row.get('股票名称')) else '',
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    change=float(row.get('涨跌额', 0)) if not pd.isna(row.get('涨跌额')) else None,
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取东方财富飙升榜，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取东方财富飙升榜失败：error={e}")
+            return []
+    
+    # ========== 东方财富 - A 股股票指数实时行情 ==========
+    
+    async def get_stock_zh_index_spot_em(self, symbol: str = "沪深重要指数") -> List[StockIndexSpot]:
+        """获取东方财富 - A 股股票指数实时行情
+        
+        Args:
+            symbol: 指数系列，choice of {
+                "沪深重要指数", "上证系列指数", "深证系列指数",
+                "指数成份", "中证系列指数"
+            }
+        
+        Returns:
+            StockIndexSpot 列表，包含实时行情数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_zh_index_spot_{symbol}"
+            if self._is_cache_valid(cache_key, ttl=60):  # 1 分钟缓存（实时数据）
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_zh_index_spot_em(symbol=symbol)
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockIndexSpot(
+                    serial_number=int(row.get('序号', 0)) if not pd.isna(row.get('序号')) else 0,
+                    code=str(row.get('代码', '')) if not pd.isna(row.get('代码')) else '',
+                    name=str(row.get('名称', '')) if not pd.isna(row.get('名称')) else '',
+                    latest_price=float(row.get('最新价', 0)) if not pd.isna(row.get('最新价')) else None,
+                    change=float(row.get('涨跌额', 0)) if not pd.isna(row.get('涨跌额')) else None,
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    volume=float(row.get('成交量', 0)) if not pd.isna(row.get('成交量')) else None,
+                    amount=float(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    amplitude=float(row.get('振幅', 0)) if not pd.isna(row.get('振幅')) else None,
+                    high=float(row.get('最高', 0)) if not pd.isna(row.get('最高')) else None,
+                    low=float(row.get('最低', 0)) if not pd.isna(row.get('最低')) else None,
+                    open=float(row.get('今开', 0)) if not pd.isna(row.get('今开')) else None,
+                    pre_close=float(row.get('昨收', 0)) if not pd.isna(row.get('昨收')) else None,
+                    volume_ratio=float(row.get('量比', 0)) if not pd.isna(row.get('量比')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 实时行情，共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取指数实时行情失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 东方财富 - A 股股票指数历史行情（日频） ==========
+    
+    async def get_stock_zh_index_daily_em(
+        self,
+        symbol: str = "sz399812",
+        start_date: str = "19900101",
+        end_date: str = "20500101"
+    ) -> List[StockIndexDaily]:
+        """获取东方财富 - A 股股票指数历史行情（日频）
+        
+        Args:
+            symbol: 指数代码，支持 sz/sz/bj/csi 前缀
+            start_date: 开始日期，格式 YYYYMMDD
+            end_date: 结束日期，格式 YYYYMMDD
+        
+        Returns:
+            StockIndexDaily 列表，包含历史行情数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"stock_zh_index_daily_{symbol}_{start_date}_{end_date}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.stock_zh_index_daily_em(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockIndexDaily(
+                    date=str(row.get('date', '')) if not pd.isna(row.get('date')) else '',
+                    open=float(row.get('open', 0)) if not pd.isna(row.get('open')) else None,
+                    close=float(row.get('close', 0)) if not pd.isna(row.get('close')) else None,
+                    high=float(row.get('high', 0)) if not pd.isna(row.get('high')) else None,
+                    low=float(row.get('low', 0)) if not pd.isna(row.get('low')) else None,
+                    volume=int(row.get('volume', 0)) if not pd.isna(row.get('volume')) else None,
+                    amount=float(row.get('amount', 0)) if not pd.isna(row.get('amount')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 历史行情（{start_date}-{end_date}），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取指数历史行情失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 东方财富 - A 股股票指数历史行情（通用） ==========
+    
+    async def get_index_zh_a_hist(
+        self,
+        symbol: str = "000016",
+        period: str = "daily",
+        start_date: str = "19700101",
+        end_date: str = "22220101"
+    ) -> List[StockIndexHist]:
+        """获取东方财富 - A 股股票指数历史行情（通用）
+        
+        Args:
+            symbol: 指数代码
+            period: 周期，choice of {'daily', 'weekly', 'monthly'}
+            start_date: 开始日期，格式 YYYYMMDD
+            end_date: 结束日期，格式 YYYYMMDD
+        
+        Returns:
+            StockIndexHist 列表，包含历史行情数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"index_zh_a_hist_{symbol}_{period}_{start_date}_{end_date}"
+            if self._is_cache_valid(cache_key, ttl=3600):  # 1 小时缓存
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.index_zh_a_hist(
+                symbol=symbol,
+                period=period,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockIndexHist(
+                    date=str(row.get('日期', '')) if not pd.isna(row.get('日期')) else '',
+                    open=float(row.get('开盘', 0)) if not pd.isna(row.get('开盘')) else None,
+                    close=float(row.get('收盘', 0)) if not pd.isna(row.get('收盘')) else None,
+                    high=float(row.get('最高', 0)) if not pd.isna(row.get('最高')) else None,
+                    low=float(row.get('最低', 0)) if not pd.isna(row.get('最低')) else None,
+                    volume=int(row.get('成交量', 0)) if not pd.isna(row.get('成交量')) else None,
+                    amount=float(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    amplitude=float(row.get('振幅', 0)) if not pd.isna(row.get('振幅')) else None,
+                    change_pct=float(row.get('涨跌幅', 0)) if not pd.isna(row.get('涨跌幅')) else None,
+                    change=float(row.get('涨跌额', 0)) if not pd.isna(row.get('涨跌额')) else None,
+                    turnover_rate=float(row.get('换手率', 0)) if not pd.isna(row.get('换手率')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 历史行情（{period}），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取指数通用历史行情失败：symbol={symbol}, error={e}")
+            return []
+    
+    # ========== 东方财富 - A 股股票指数分时行情 ==========
+    
+    async def get_index_zh_a_hist_min_em(
+        self,
+        symbol: str = "000001",
+        period: str = "1",
+        start_date: str = "1979-09-01 09:32:00",
+        end_date: str = "2222-01-01 09:32:00"
+    ) -> List[StockIndexHistMin]:
+        """获取东方财富 - A 股股票指数分时行情
+        
+        Args:
+            symbol: 指数代码
+            period: 周期，choice of {'1', '5', '15', '30', '60'}
+            start_date: 开始日期时间
+            end_date: 结束日期时间
+        
+        Returns:
+            StockIndexHistMin 列表，包含分时行情数据
+        """
+        try:
+            # 缓存检查
+            cache_key = f"index_zh_a_hist_min_{symbol}_{period}_{start_date}_{end_date}"
+            if self._is_cache_valid(cache_key, ttl=60):  # 1 分钟缓存（实时数据）
+                return self._cache[cache_key]
+            
+            await self._rate_limit()
+            
+            # 调用 AkShare API
+            data = ak.index_zh_a_hist_min_em(
+                symbol=symbol,
+                period=period,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            if data is None or len(data) == 0:
+                return []
+            
+            # 解析数据
+            result = []
+            for _, row in data.iterrows():
+                item = StockIndexHistMin(
+                    time=str(row.get('时间', '')) if not pd.isna(row.get('时间')) else '',
+                    open=float(row.get('开盘', 0)) if not pd.isna(row.get('开盘')) else None,
+                    close=float(row.get('收盘', 0)) if not pd.isna(row.get('收盘')) else None,
+                    high=float(row.get('最高', 0)) if not pd.isna(row.get('最高')) else None,
+                    low=float(row.get('最低', 0)) if not pd.isna(row.get('最低')) else None,
+                    volume=int(row.get('成交量', 0)) if not pd.isna(row.get('成交量')) else None,
+                    amount=float(row.get('成交额', 0)) if not pd.isna(row.get('成交额')) else None,
+                    avg_price=float(row.get('均价', 0)) if not pd.isna(row.get('均价')) else None,
+                )
+                result.append(item)
+            
+            # 缓存结果
+            self._set_cache(cache_key, result)
+            
+            logger.info(f"成功获取 {symbol} 分时行情（{period}分钟），共 {len(result)} 条")
+            return result
+            
+        except Exception as e:
+            logger.error(f"AkShare 获取指数分时行情失败：symbol={symbol}, error={e}")
+            return []
+    
     # ========== 东方财富 - 大盘资金流 ==========
     
     async def get_stock_market_fund_flow(self) -> List[StockMarketFundFlow]:

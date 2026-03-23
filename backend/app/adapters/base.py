@@ -16,6 +16,7 @@ class DataSourceType(str, Enum):
     YFINANCE = "yfinance"
     EFINANCE = "efinance"
     TICKFLOW = "tickflow"
+    EASTMONEY = "eastmoney"  # 东方财富
 
 
 @dataclass

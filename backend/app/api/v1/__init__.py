@@ -3,7 +3,7 @@ from app.api.v1.endpoints import (
     stock, sector, chip, screener, strategy, backtest, watchlist, auth, market, realtime, moneyflow, 
     data_source_control, loading_progress, billboard, capital_flow, board, index, shareholder, market_quotes,
     data_source, fund, stock_info, market_sentiment, lhb, financial, restricted, changes, chip_distribution,
-    market_overview, area_summary, sector_deal, stock_spot, cy_spot, kc_spot, sina_spot, stock_hist, stock_minute, stock_intraday, stock_pre_min, stock_comparison, stock_us_hist, stock_hk_hist, stock_yjbb, stock_industry, stock_financial_report, stock_ggcg, stock_fund_flow, stock_big_deal, stock_individual_fund_flow, stock_market_fund_flow, stock_sector_fund_flow_rank, stock_main_fund_flow, stock_sector_fund_flow_summary, stock_fund_flow_hist, stock_report_fund_hold, stock_lhb, stock_institute_recommend
+    market_overview, area_summary, sector_deal, stock_spot, cy_spot, kc_spot, sina_spot, stock_hist, stock_minute, stock_intraday, stock_pre_min, stock_comparison, stock_us_hist, stock_hk_hist, stock_yjbb, stock_industry, stock_financial_report, stock_ggcg, stock_fund_flow, stock_big_deal, stock_individual_fund_flow, stock_market_fund_flow, stock_sector_fund_flow_rank, stock_main_fund_flow, stock_sector_fund_flow_summary, stock_fund_flow_hist, stock_report_fund_hold, stock_lhb, stock_institute_recommend, eastmoney
 )
 
 api_router = APIRouter()
@@ -68,3 +68,4 @@ api_router.include_router(stock_fund_flow_hist.router, prefix="/stock-fund-flow-
 api_router.include_router(stock_report_fund_hold.router, prefix="/stock-report-fund-hold", tags=["东方财富基金持股"])
 api_router.include_router(stock_lhb.router, prefix="/stock-lhb", tags=["东方财富龙虎榜"])
 api_router.include_router(stock_institute_recommend.router, prefix="/stock-institute-recommend", tags=["机构推荐"])
+api_router.include_router(eastmoney.router, prefix="/eastmoney", tags=["东方财富盘口异动"])

@@ -17,6 +17,22 @@ import DailyMarket from './pages/DailyMarket'
 import Settings from './pages/Settings'
 import Billboard from './pages/Billboard'
 import MarketQuotes from './pages/MarketQuotes'
+// 东方财富模块
+import EastMoneyChangesPage from './pages/EastMoneyChangesPage'
+import EastMoneyZtBoardPage from './pages/EastMoneyZtBoardPage'
+import EastMoneyStockCommentPage from './pages/EastMoneyStockCommentPage'
+import EastMoneyResearchNoticePage from './pages/EastMoneyResearchNoticePage'
+import EastMoneyFinancialPage from './pages/EastMoneyFinancialPage'
+import SinaFinancialIndicatorPage from './pages/SinaFinancialIndicatorPage'
+import StockListPage from './pages/StockListPage'
+import IndustryClassificationPage from './pages/IndustryClassificationPage'
+import StockHolderPage from './pages/StockHolderPage'
+import StockPriceTargetPage from './pages/StockPriceTargetPage'
+import LeguleGuMarketIndicatorsPage from './pages/LeguleGuMarketIndicatorsPage'
+import AShareValuationPage from './pages/AShareValuationPage'
+import MarketStatisticsPage from './pages/MarketStatisticsPage'
+import BlockTradePage from './pages/BlockTradePage'
+import MarginTradingPage from './pages/MarginTradingPage'
 // 基金模块
 import FundHome from './pages/fund'
 import FundRanking from './pages/fund/Ranking'
@@ -81,6 +97,22 @@ function App() {
             <Route path="billboard" element={<Billboard />} />
             <Route path="market-quotes" element={<MarketQuotes />} />
             <Route path="settings" element={<Settings />} />
+            {/* 东方财富模块路由 */}
+            <Route path="eastmoney/changes" element={<EastMoneyChangesPage />} />
+            <Route path="eastmoney/zt-board" element={<EastMoneyZtBoardPage />} />
+            <Route path="eastmoney/stock-comment" element={<EastMoneyStockCommentPage />} />
+            <Route path="eastmoney/research-notice" element={<EastMoneyResearchNoticePage />} />
+            <Route path="eastmoney/financial" element={<EastMoneyFinancialPage />} />
+            <Route path="eastmoney/sina-financial-indicator" element={<SinaFinancialIndicatorPage />} />
+            <Route path="eastmoney/stock-list" element={<StockListPage />} />
+            <Route path="eastmoney/industry-classification" element={<IndustryClassificationPage />} />
+            <Route path="eastmoney/stock-holder" element={<StockHolderPage />} />
+            <Route path="eastmoney/stock-price-target" element={<StockPriceTargetPage />} />
+            <Route path="eastmoney/legulegu-market-indicators" element={<LeguleGuMarketIndicatorsPage />} />
+            <Route path="eastmoney/a-share-valuation" element={<AShareValuationPage />} />
+            <Route path="eastmoney/market-statistics" element={<MarketStatisticsPage />} />
+            <Route path="eastmoney/block-trade" element={<BlockTradePage />} />
+            <Route path="eastmoney/margin-trading" element={<MarginTradingPage />} />
             {/* 基金模块路由 */}
             <Route path="fund" element={<FundHome />} />
             <Route path="fund/ranking" element={<FundRanking />} />

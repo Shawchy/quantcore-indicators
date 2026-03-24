@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.adapters import data_source_manager, KLineData
 from app.services.data_processor import DataProcessor
-from app.services.indicators import IndicatorCalculator
+from app.services.indicators_manager import IndicatorsManager, get_indicators_manager
 from app.storage import (
     StockInfo, KLine, TechnicalIndicatorDB, RealtimeQuote,
     get_session, cache_manager, parquet_store
@@ -18,9 +18,17 @@ from app.services.data_loader import data_loader, LoadPriority, LoadProgress
 
 
 class StockService:
-    def __init__(self):
+    def __init__(self, prefer_talib: bool = False):
+        """
+        初始化股票服务
+        
+        Args:
+            prefer_talib: 是否优先使用 TA-Lib（如果可用）
+        """
         self.processor = DataProcessor()
-        self.indicator_calc = IndicatorCalculator()
+        # 使用现代化的指标管理器，支持 pandas-ta 和 TA-Lib 双库
+        self.indicator_manager = get_indicators_manager(prefer_talib=prefer_talib)
+        logger.info(f"StockService 初始化完成，指标库：{'TA-Lib' if self.indicator_manager.prefer_talib else 'pandas-ta'}")
     
     async def get_stock_basic(self, code: str) -> Dict[str, Any]:
         """
@@ -273,7 +281,8 @@ class StockService:
         if "date" in df.columns:
             df["date"] = pd.to_datetime(df["date"])
         
-        df = self.indicator_calc.calculate_all(df)
+        # 使用现代化的指标管理器计算所有指标
+        df = self.indicator_manager.calculate_all_indicators(df, price_column="close")
         
         indicator_cols = ["date", "ma5", "ma10", "ma20", "ma60", 
                          "rsi6", "rsi12", "rsi24", 

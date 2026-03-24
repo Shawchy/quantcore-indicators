@@ -23,6 +23,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { screenerApi, sectorApi, marketIndexApi } from '../services/api'
+import { useWebSocket } from '../hooks/useWebSocket'
 import { INDEX_CODES } from '../constants'
 import { getKlineOption } from '../utils/chartConfig'
 import { StatCard } from '../components/StatCard'
@@ -34,6 +35,19 @@ import { FiTrendingUp, FiActivity, FiPieChart, FiBarChart } from 'react-icons/fi
 const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState<string>('')
   const cardBg = useColorModeValue('white', 'gray.800')
+  
+  // WebSocket 连接 - 用于实时推送
+  const { isConnected } = useWebSocket({
+    autoConnect: true,
+    subscriptions: [
+      'market:quotes',      // 市场行情
+      'moneyflow:market',   // 资金流向
+    ],
+    onMessage: (event, data) => {
+      console.log('[Dashboard] 收到 WebSocket 消息:', event, data)
+      // 可以在这里处理 WebSocket 数据更新
+    },
+  })
 
   // 获取市场统计数据
   const { data: marketStats, isLoading: statsLoading } = useQuery({
@@ -51,9 +65,9 @@ const Dashboard = () => {
   const { data: realtimeData, isLoading: realtimeLoading } = useQuery({
     queryKey: ['indexRealtime'],
     queryFn: () => marketIndexApi.getRealtime(`${INDEX_CODES.SHANGHAI},${INDEX_CODES.SHENZHEN},${INDEX_CODES.GEM}`),
-    refetchInterval: 30000, // 优化：30 秒刷新一次（原 5 秒）
-    staleTime: 10000,       // 10 秒内使用缓存
-    gcTime: 60000,          // 缓存 1 分钟
+    refetchInterval: false, // 禁用轮询，使用 WebSocket 推送
+    staleTime: 5 * 60 * 1000,       // 5 分钟内使用缓存
+    gcTime: 10 * 60 * 1000,          // 缓存 10 分钟
   })
 
   // 获取上证指数 K 线数据
@@ -228,16 +242,23 @@ const Dashboard = () => {
           </CardBody>
         </Card>
 
-        {/* 实时行情 */}
+        {/* 实时行情 - 使用 WebSocket 推送 */}
         <Card bg={cardBg}>
           <CardHeader pb={2}>
             <Flex justify="space-between" align="center">
               <Heading size="sm" color="light.text">
                 大盘实时行情
               </Heading>
-              <Badge colorScheme="green" variant="subtle" fontSize="xs">
-                30 秒刷新
-              </Badge>
+              <HStack spacing={2}>
+                {isConnected && (
+                  <Badge colorScheme="green" variant="subtle" fontSize="xs">
+                    WebSocket 推送
+                  </Badge>
+                )}
+                <Badge colorScheme="blue" variant="subtle" fontSize="xs">
+                  实时更新
+                </Badge>
+              </HStack>
             </Flex>
           </CardHeader>
           <CardBody pt={2}>
@@ -246,40 +267,28 @@ const Dashboard = () => {
                 <Spinner color="brand.500" />
               </Flex>
             ) : (
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>指数名称</Th>
-                    <Th isNumeric>最新价</Th>
-                    <Th isNumeric>涨跌额</Th>
-                    <Th isNumeric>涨跌幅</Th>
-                    <Th isNumeric>成交量</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {realtimeData?.data?.map((item: any) => (
-                    <Tr key={item.code}>
-                      <Td fontWeight="medium">
-                        <HStack spacing={2}>
-                          <Badge colorScheme={item.code === '000001' ? 'blue' : item.code === '399001' ? 'purple' : 'orange'}>
-                            {item.name}
-                          </Badge>
-                        </HStack>
-                      </Td>
-                      <Td isNumeric fontWeight="bold" color={item.change >= 0 ? 'green.500' : 'red.500'}>
-                        {item.price.toFixed(2)}
-                      </Td>
-                      <Td isNumeric color={item.change >= 0 ? 'green.500' : 'red.500'}>
-                        {item.change >= 0 ? '+' : ''}{item.change?.toFixed(2)}
-                      </Td>
-                      <Td isNumeric color={item.change >= 0 ? 'green.500' : 'red.500'}>
-                        {item.change >= 0 ? '+' : ''}{item.change_pct?.toFixed(2)}%
-                      </Td>
-                      <Td isNumeric>{(item.volume / 10000).toFixed(0)} 万手</Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
+              <VStack spacing={4} align="stretch">
+                {realtimeData?.data?.map((item: any) => (
+                  <HStack key={item.code} justify="space-between" p={3} bg="gray.50" borderRadius="md">
+                    <VStack align="start" spacing={1}>
+                      <Text fontWeight="bold" fontSize="sm" color="light.text">
+                        {item.name}
+                      </Text>
+                      <Text fontSize="xs" color="light.textSecondary">
+                        {item.code}
+                      </Text>
+                    </VStack>
+                    <VStack align="end" spacing={1}>
+                      <Text fontSize="lg" fontWeight="bold" color={item.change >= 0 ? 'green.500' : 'red.500'}>
+                        {item.price?.toFixed(2)}
+                      </Text>
+                      <Text fontSize="xs" color={item.change >= 0 ? 'green.500' : 'red.500'}>
+                        {item.change >= 0 ? '+' : ''}{item.change?.toFixed(2)} ({item.change_pct?.toFixed(2)}%)
+                      </Text>
+                    </VStack>
+                  </HStack>
+                ))}
+              </VStack>
             )}
           </CardBody>
         </Card>

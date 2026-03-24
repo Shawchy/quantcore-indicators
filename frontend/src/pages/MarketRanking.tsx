@@ -10,6 +10,7 @@ import {
 import { RepeatIcon } from '@chakra-ui/icons'
 import { useQuery } from '@tanstack/react-query'
 import { marketApi } from '../services/api'
+import MarketQuotesWS from '../components/MarketQuotesWS'
 import type { MarketRankingData, MarketOverviewData } from '../types'
 import MarketSentimentCard from '../components/MarketSentimentCard'
 import StockRankingTable from '../components/StockRankingTable'
@@ -43,7 +44,7 @@ const MarketRankingPage: React.FC = () => {
     staleTime: 30000,  // 30 秒内使用缓存
     gcTime: 120000,    // 缓存 2 分钟
     refetchOnWindowFocus: false,
-    refetchInterval: 60000, // 60 秒自动刷新
+    refetchInterval: false, // 禁用轮询，使用 WebSocket
   })
 
   // 手动刷新
@@ -209,30 +210,41 @@ const MarketRankingPage: React.FC = () => {
         </GridItem>
       </Grid>
 
-      {/* 排行榜表格 */}
-      <Grid templateColumns="repeat(2, 1fr)" gap={4}>
-        <GridItem>
-          {rankingData && rankingData.rankings.gainers.length > 0 && (
-            <StockRankingTable
-              data={rankingData.rankings.gainers}
-              type="gainers"
-              showRank={true}
-              maxItems={topN}
-            />
-          )}
-        </GridItem>
-        
-        <GridItem>
-          {rankingData && rankingData.rankings.losers.length > 0 && (
-            <StockRankingTable
-              data={rankingData.rankings.losers}
-              type="losers"
-              showRank={true}
-              maxItems={topN}
-            />
-          )}
-        </GridItem>
-      </Grid>
+      {/* 市场排行榜 - 使用 WebSocket 实时推送 */}
+      <Box bg="white" p={4} borderRadius="lg" boxShadow="md" mb={4}>
+        <MarketQuotesWS
+          marketTypes={['沪深 A 股']}
+          limit={topN}
+          autoRefresh={true}
+        />
+      </Box>
+
+      {/* 原有的排行榜表格作为备用 */}
+      <Box bg="white" p={6} borderRadius="lg" boxShadow="md" display="none">
+        <Grid templateColumns="repeat(2, 1fr)" gap={4}>
+          <GridItem>
+            {rankingData && rankingData.rankings.gainers.length > 0 && (
+              <StockRankingTable
+                data={rankingData.rankings.gainers}
+                type="gainers"
+                showRank={true}
+                maxItems={topN}
+              />
+            )}
+          </GridItem>
+          
+          <GridItem>
+            {rankingData && rankingData.rankings.losers.length > 0 && (
+              <StockRankingTable
+                data={rankingData.rankings.losers}
+                type="losers"
+                showRank={true}
+                maxItems={topN}
+              />
+            )}
+          </GridItem>
+        </Grid>
+      </Box>
 
       {/* 成交额和换手率榜 */}
       <Grid templateColumns="repeat(2, 1fr)" gap={4} mt={4}>

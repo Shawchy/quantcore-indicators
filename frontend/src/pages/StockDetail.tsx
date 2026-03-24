@@ -38,10 +38,11 @@ import { FiArrowLeft } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
 import { stockApi, realtimeApi, boardApi, capitalFlowApi, shareholderApi } from '../services/api'
 import RealtimeQuotePanel from '../components/RealtimeQuote'
+import RealtimeQuoteWS from '../components/RealtimeQuoteWS'
 import TickDataTable from '../components/TickDataTable'
 import { KLineChart, IndicatorChart } from '../components/KLineChart'
 import type { RealtimeQuoteData, TickData, StockBasic, KLineData, TechnicalIndicator, RealtimeQuote } from '../types'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 const queryEnabled = (code: string | undefined, valid: boolean) => Boolean(code && valid)
 
@@ -50,6 +51,7 @@ const StockDetail = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
+  const [wsQuoteData, setWsQuoteData] = useState<RealtimeQuoteData | null>(null)
   
   // 判断是否来自自选股页面
   const isFromWatchlist = location.state?.from === 'watchlist'
@@ -94,13 +96,13 @@ const StockDetail = () => {
     refetchInterval: 30000,
   })
 
+  // 使用 WebSocket 实时推送替代 HTTP 轮询
   const { data: realtimeQuoteData, isLoading: quoteLoading, error: quoteError } = useQuery<RealtimeQuoteData>({
     queryKey: ['realtimeQuote', code],
     queryFn: () => realtimeApi.getQuote(code!) as unknown as Promise<RealtimeQuoteData>,
     enabled,
-    refetchInterval: 30000,  // 降低到 30 秒刷新一次
-    retry: 2,  // 失败重试 2 次
-    staleTime: 10000,  // 10 秒内认为是新鲜数据
+    refetchInterval: false,  // 禁用轮询，使用 WebSocket
+    staleTime: 5 * 60 * 1000,  // 5 分钟内有效
   })
 
   const { data: tickData, isLoading: tickLoading, error: tickError } = useQuery<TickData>({
@@ -562,26 +564,38 @@ const StockDetail = () => {
         </CardBody>
       </Card>
 
-      {/* 实时盘口 */}
+      {/* 实时盘口 - 使用 WebSocket 实时推送 */}
       <Card>
         <CardHeader pb={2}>
           <Flex justify="space-between" align="center">
             <Heading size="sm" color="light.text">
               实时盘口
             </Heading>
-            {realtimeQuoteData && (
-              <Badge fontSize="xs" colorScheme="blue">
-                更新：{realtimeQuoteData.update_time}
-              </Badge>
-            )}
+            <HStack spacing={2}>
+              {wsQuoteData && (
+                <Badge fontSize="xs" colorScheme="green">
+                  WebSocket 实时更新
+                </Badge>
+              )}
+              {realtimeQuoteData && (
+                <Badge fontSize="xs" colorScheme="blue">
+                  更新：{realtimeQuoteData.update_time}
+                </Badge>
+              )}
+            </HStack>
           </Flex>
         </CardHeader>
         <CardBody>
-          <RealtimeQuotePanel
-            data={realtimeQuoteData ?? null}
-            loading={quoteLoading}
-            error={null}
-          />
+          {/* 优先使用 WebSocket 数据，否则降级到 HTTP 数据 */}
+          {enabled && wsQuoteData ? (
+            <RealtimeQuoteWS code={code!} name={stock?.name} />
+          ) : (
+            <RealtimeQuotePanel
+              data={realtimeQuoteData ?? null}
+              loading={quoteLoading}
+              error={null}
+            />
+          )}
         </CardBody>
       </Card>
 

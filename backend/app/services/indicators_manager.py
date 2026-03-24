@@ -2,10 +2,13 @@
 技术指标管理器
 
 集成 pandas-ta 和 TA-Lib，提供统一的技术指标计算接口
+添加性能监控功能
 """
 from typing import Optional, Dict, Any, List
 import pandas as pd
+import time
 from loguru import logger
+from functools import wraps
 
 # 尝试导入 TA-Lib
 try:
@@ -26,20 +29,74 @@ except ImportError:
     logger.warning("pandas-ta 未安装，请运行：pip install pandas-ta")
 
 
+def performance_monitor(func):
+    """性能监控装饰器"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        elapsed_ms = (time.time() - start_time) * 1000
+        
+        # 记录性能日志（仅当超过阈值时）
+        if elapsed_ms > 100:  # 超过 100ms 才记录
+            logger.warning(
+                f"指标计算耗时较长：{func.__name__} - {elapsed_ms:.2f}ms"
+            )
+        else:
+            logger.debug(
+                f"指标计算完成：{func.__name__} - {elapsed_ms:.2f}ms"
+            )
+        
+        return result
+    return wrapper
+
+
 class IndicatorsManager:
     """技术指标管理器"""
     
-    def __init__(self, prefer_talib: bool = True):
+    def __init__(self, prefer_talib: bool = True, enable_performance_monitoring: bool = True):
         """
         Args:
             prefer_talib: 是否优先使用 TA-Lib（如果可用）
+            enable_performance_monitoring: 是否启用性能监控
         """
         self.prefer_talib = prefer_talib and TALIB_AVAILABLE
         self.use_pandas_ta = PANDAS_TA_AVAILABLE
+        self.enable_performance_monitoring = enable_performance_monitoring
+        
+        # 性能统计
+        self.performance_stats = {}
         
         if not self.use_pandas_ta and not self.prefer_talib:
             logger.error("pandas-ta 和 TA-Lib 都不可用，指标计算功能将受限")
     
+    def _update_stats(self, indicator_name: str, elapsed_ms: float):
+        """更新性能统计"""
+        if indicator_name not in self.performance_stats:
+            self.performance_stats[indicator_name] = {
+                'count': 0,
+                'total_ms': 0,
+                'min_ms': float('inf'),
+                'max_ms': 0,
+                'avg_ms': 0
+            }
+        
+        stats = self.performance_stats[indicator_name]
+        stats['count'] += 1
+        stats['total_ms'] += elapsed_ms
+        stats['min_ms'] = min(stats['min_ms'], elapsed_ms)
+        stats['max_ms'] = max(stats['max_ms'], elapsed_ms)
+        stats['avg_ms'] = stats['total_ms'] / stats['count']
+    
+    def get_performance_stats(self) -> Dict[str, Dict[str, Any]]:
+        """获取性能统计信息"""
+        return self.performance_stats.copy()
+    
+    def reset_performance_stats(self):
+        """重置性能统计"""
+        self.performance_stats = {}
+    
+    @performance_monitor
     def calculate_ma(
         self,
         df: pd.DataFrame,
@@ -57,6 +114,7 @@ class IndicatorsManager:
         Returns:
             添加了 MA 列的 DataFrame
         """
+        start_time = time.time()
         df = df.copy()
         
         if self.prefer_talib:
@@ -67,6 +125,11 @@ class IndicatorsManager:
             # 使用 pandas-ta
             for period in periods:
                 df[f'ma{period}'] = ta.sma(df[price_column], length=period)
+        
+        # 记录性能统计
+        if self.enable_performance_monitoring:
+            elapsed_ms = (time.time() - start_time) * 1000
+            self._update_stats('ma', elapsed_ms)
         
         return df
     

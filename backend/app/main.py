@@ -60,6 +60,11 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(periodic_performance_report())
     logger.info("性能监控已启动")
     
+    # 启动 WebSocket 推送服务
+    from app.websocket import start_pusher_service
+    await start_pusher_service()
+    logger.info("WebSocket 推送服务已启动")
+    
     Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)
     logger.info("数据目录初始化完成")
@@ -68,6 +73,10 @@ async def lifespan(app: FastAPI):
     
     # 关闭事件
     logger.info(f"{settings.APP_NAME} 关闭中...")
+    
+    # 停止 WebSocket 推送服务
+    from app.websocket import stop_pusher_service
+    await stop_pusher_service()
     
     # 按需加载模式无需停止数据加载器
     logger.info("数据加载器已停止（按需模式）")

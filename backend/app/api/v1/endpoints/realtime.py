@@ -11,7 +11,7 @@ from app.api.deps import OptionalCurrentUser
 from app.models.schemas import ResponseModel
 from app.storage.cache import cache_manager
 from app.config import settings
-import tushare as ts
+# import tushare as ts  # Tushare 已移除，使用其他数据源替代
 
 router = APIRouter()
 
@@ -54,13 +54,17 @@ async def get_realtime_quote(
         # 获取实时数据（添加超时控制）
         start_time = time.time()
         try:
+            # 使用 akshare 获取实时行情
+            import akshare as ak
             # 使用 asyncio.wait_for 添加超时控制
             df = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ts.realtime_quote(ts_code=code, src=src)
+                    None, lambda: ak.stock_zh_a_spot_em()
                 ),
                 timeout=REALTIME_TIMEOUT
             )
+            # 过滤出指定股票
+            df = df[df['代码'] == code]
         except asyncio.TimeoutError:
             raise HTTPException(
                 status_code=504,
@@ -174,10 +178,11 @@ async def get_realtime_tick_data(
         # 获取实时成交数据（添加超时控制）
         start_time = time.time()
         try:
-            # 使用 asyncio.wait_for 添加超时控制
+            # 使用 akshare 获取分笔成交
+            import akshare as ak
             df = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ts.realtime_tick(ts_code=code, src=src)
+                    None, lambda: ak.stock_zh_a_tick_tx(symbol=code)
                 ),
                 timeout=TICK_TIMEOUT
             )

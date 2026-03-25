@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 行业分类页面
  * 包含：申万行业分类变动历史、行业市盈率
  */
@@ -33,7 +33,7 @@ import {
   eastMoneyApi,
   type StockIndustryClfHistSW,
   type StockIndustryPERatio,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const IndustryClassificationPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);

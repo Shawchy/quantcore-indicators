@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 乐咕乐股市场指标页面
  * 包含：大盘拥挤度、股债利差、巴菲特指标
  */
@@ -38,7 +38,7 @@ import {
   type StockAConestionLG,
   type StockEBSLG,
   type StockBuffettIndexLG,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const LeguleGuMarketIndicatorsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0); // 0=大盘拥挤度，1=股债利差，2=巴菲特指标

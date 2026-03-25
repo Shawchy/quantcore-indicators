@@ -6,25 +6,26 @@
 import React from 'react';
 import {
   Card,
-  Typography,
-  Space,
-  Tag,
+  CardBody,
+  Heading,
+  Text,
+  HStack,
+  VStack,
+  Badge,
   Button,
-  Statistic,
-  Row,
-  Col,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatHelpText,
+  SimpleGrid,
   Divider,
   Tooltip,
-} from 'antd';
-import {
-  StarOutlined,
-  StarFilled,
-  RiseOutlined,
-  FallOutlined,
-} from '@ant-design/icons';
+  useColorModeValue,
+  Icon,
+} from '@chakra-ui/react';
+import { StarIcon } from '@chakra-ui/icons';
+import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
 import { FundInfo } from '@/services/fund';
-
-const { Text, Title } = Typography;
 
 interface FundCardProps {
   fund: FundInfo;
@@ -45,12 +46,14 @@ const FundCard: React.FC<FundCardProps> = ({
   onViewDetail,
   onAddToWatchlist,
 }) => {
+  const hoverBg = useColorModeValue('gray.50', 'gray.700');
+
   // 获取收益率颜色
   const getReturnColor = (value?: number) => {
-    if (value === undefined || value === null) return '#999';
-    if (value > 0) return '#ff4d4f';
-    if (value < 0) return '#52c41a';
-    return '#1890ff';
+    if (value === undefined || value === null) return 'gray.500';
+    if (value > 0) return 'red.500';
+    if (value < 0) return 'green.500';
+    return 'blue.500';
   };
 
   // 获取收益率文本
@@ -68,161 +71,142 @@ const FundCard: React.FC<FundCardProps> = ({
       'index': { color: 'orange', text: '指数型' },
       'mix': { color: 'purple', text: '混合型' },
     };
-    const config = fund.type ? typeMap[fund.type] : { color: 'default', text: '未知' };
-    return <Tag color={config.color}>{config.text}</Tag>;
+    const config = fund.type ? typeMap[fund.type] : { color: 'gray', text: '未知' };
+    return <Badge colorScheme={config.color as any}>{config.text}</Badge>;
   };
-
-  // 卡片内容
-  const cardContent = (
-    <Space direction="vertical" size="small" style={{ width: '100%' }}>
-      {/* 基金基本信息 */}
-      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-        <Space direction="vertical" size={0}>
-          <Title level={5} style={{ margin: 0 }}>
-            {showRank && fund.rank && (
-              <Tag color="gold" style={{ marginRight: 8 }}>
-                TOP {fund.rank}
-              </Tag>
-            )}
-            {fund.name}
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {fund.code}
-          </Text>
-        </Space>
-        <Space>
-          {getFundTypeTag()}
-          {showActions && (
-            <Button
-              type="text"
-              icon={isFavorite ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddToWatchlist?.(fund.code);
-              }}
-            />
-          )}
-        </Space>
-      </Space>
-
-      <Divider style={{ margin: '8px 0' }} />
-
-      {/* 净值和涨跌幅 */}
-      <Row gutter={16}>
-        <Col flex={1}>
-          <Statistic
-            title="最新净值"
-            value={fund.net_asset_value}
-            precision={4}
-            valueStyle={{ fontSize: compact ? 16 : 18 }}
-          />
-        </Col>
-        <Col flex={1}>
-          <Statistic
-            title="日涨跌"
-            value={fund.change_pct}
-            precision={2}
-            suffix="%"
-            valueStyle={{
-              fontSize: compact ? 16 : 18,
-              color: getReturnColor(fund.change_pct),
-            }}
-            prefix={fund.change_pct && fund.change_pct > 0 ? <RiseOutlined /> : fund.change_pct && fund.change_pct < 0 ? <FallOutlined /> : undefined}
-          />
-        </Col>
-      </Row>
-
-      {/* 阶段涨跌幅 - 非紧凑模式显示 */}
-      {!compact && fund.performance && (
-        <>
-          <Divider style={{ margin: '8px 0' }} />
-          <Row gutter={[8, 8]}>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>近 1 周</Text>
-                <div style={{ color: getReturnColor(fund.performance['1w']) }}>
-                  {getReturnText(fund.performance['1w'])}
-                </div>
-              </div>
-            </Col>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>近 1 月</Text>
-                <div style={{ color: getReturnColor(fund.performance['1m']) }}>
-                  {getReturnText(fund.performance['1m'])}
-                </div>
-              </div>
-            </Col>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>近 3 月</Text>
-                <div style={{ color: getReturnColor(fund.performance['3m']) }}>
-                  {getReturnText(fund.performance['3m'])}
-                </div>
-              </div>
-            </Col>
-          </Row>
-          <Row gutter={[8, 8]}>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>近 6 月</Text>
-                <div style={{ color: getReturnColor(fund.performance['6m']) }}>
-                  {getReturnText(fund.performance['6m'])}
-                </div>
-              </div>
-            </Col>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>近 1 年</Text>
-                <div style={{ color: getReturnColor(fund.performance['1y']), fontWeight: 'bold' }}>
-                  {getReturnText(fund.performance['1y'])}
-                </div>
-              </div>
-            </Col>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>规模</Text>
-                <div>{fund.fund_scale ? `${fund.fund_scale.toFixed(2)}亿` : '--'}</div>
-              </div>
-            </Col>
-          </Row>
-        </>
-      )}
-
-      {/* 基金公司 */}
-      {!compact && fund.fund_company && (
-        <>
-          <Divider style={{ margin: '8px 0' }} />
-          <div>
-            <Text type="secondary" style={{ fontSize: 12 }}>基金公司</Text>
-            <div>{fund.fund_company}</div>
-          </div>
-        </>
-      )}
-
-      {/* 操作按钮 */}
-      {showActions && (
-        <Button
-          type="primary"
-          block
-          onClick={() => onViewDetail?.(fund.code)}
-        >
-          查看详情
-        </Button>
-      )}
-    </Space>
-  );
 
   return (
     <Card
-      hoverable
+      _hover={{ bg: hoverBg }}
+      cursor="pointer"
       onClick={() => onViewDetail?.(fund.code)}
-      style={{
-        height: '100%',
-        cursor: 'pointer',
-      }}
+      height="100%"
     >
-      {cardContent}
+      <CardBody>
+        <VStack spacing={3} align="stretch">
+          {/* 基金基本信息 */}
+          <HStack justify="space-between">
+            <VStack align="start" spacing={0}>
+              <HStack>
+                {showRank && fund.rank && (
+                  <Badge colorScheme="yellow">TOP {fund.rank}</Badge>
+                )}
+                <Heading size="md">{fund.name}</Heading>
+              </HStack>
+              <Text fontSize="sm" color="gray.500">{fund.code}</Text>
+            </VStack>
+            <HStack>
+              {getFundTypeTag()}
+              {showActions && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddToWatchlist?.(fund.code);
+                  }}
+                >
+                  <Icon
+                    as={StarIcon}
+                    color={isFavorite ? 'yellow.500' : 'inherit'}
+                    fill={isFavorite ? 'yellow.500' : 'none'}
+                  />
+                </Button>
+              )}
+            </HStack>
+          </HStack>
+
+          <Divider />
+
+          {/* 净值和涨跌幅 */}
+          <SimpleGrid columns={2} spacing={4}>
+            <Stat>
+              <StatLabel fontSize="sm">最新净值</StatLabel>
+              <StatNumber fontSize={compact ? 'lg' : 'xl'}>
+                {fund.net_asset_value?.toFixed(4) || '--'}
+              </StatNumber>
+            </Stat>
+            <Stat>
+              <StatLabel fontSize="sm">日涨跌</StatLabel>
+              <StatNumber
+                fontSize={compact ? 'lg' : 'xl'}
+                color={getReturnColor(fund.change_pct)}
+              >
+                <HStack>
+                  {fund.change_pct && fund.change_pct > 0 && <FiTrendingUp />}
+                  {fund.change_pct && fund.change_pct < 0 && <FiTrendingDown />}
+                  <span>{getReturnText(fund.change_pct)}</span>
+                </HStack>
+              </StatNumber>
+            </Stat>
+          </SimpleGrid>
+
+          {/* 阶段涨跌幅 - 非紧凑模式显示 */}
+          {!compact && fund.performance && (
+            <>
+              <Divider />
+              <SimpleGrid columns={3} spacing={2}>
+                <VStack>
+                  <Text fontSize="xs" color="gray.500">近 1 周</Text>
+                  <Text fontSize="sm" color={getReturnColor(fund.performance['1w'])}>
+                    {getReturnText(fund.performance['1w'])}
+                  </Text>
+                </VStack>
+                <VStack>
+                  <Text fontSize="xs" color="gray.500">近 1 月</Text>
+                  <Text fontSize="sm" color={getReturnColor(fund.performance['1m'])}>
+                    {getReturnText(fund.performance['1m'])}
+                  </Text>
+                </VStack>
+                <VStack>
+                  <Text fontSize="xs" color="gray.500">近 3 月</Text>
+                  <Text fontSize="sm" color={getReturnColor(fund.performance['3m'])}>
+                    {getReturnText(fund.performance['3m'])}
+                  </Text>
+                </VStack>
+              </SimpleGrid>
+              <SimpleGrid columns={3} spacing={2}>
+                <VStack>
+                  <Text fontSize="xs" color="gray.500">近 6 月</Text>
+                  <Text fontSize="sm" color={getReturnColor(fund.performance['6m'])}>
+                    {getReturnText(fund.performance['6m'])}
+                  </Text>
+                </VStack>
+                <VStack>
+                  <Text fontSize="xs" color="gray.500">近 1 年</Text>
+                  <Text fontSize="sm" fontWeight="bold" color={getReturnColor(fund.performance['1y'])}>
+                    {getReturnText(fund.performance['1y'])}
+                  </Text>
+                </VStack>
+                <VStack>
+                  <Text fontSize="xs" color="gray.500">规模</Text>
+                  <Text fontSize="sm">
+                    {fund.fund_scale ? `${fund.fund_scale.toFixed(2)}亿` : '--'}
+                  </Text>
+                </VStack>
+              </SimpleGrid>
+            </>
+          )}
+
+          {/* 基金公司 */}
+          {!compact && fund.fund_company && (
+            <>
+              <Divider />
+              <VStack align="start" spacing={1}>
+                <Text fontSize="xs" color="gray.500">基金公司</Text>
+                <Text fontSize="sm">{fund.fund_company}</Text>
+              </VStack>
+            </>
+          )}
+
+          {/* 操作按钮 */}
+          {showActions && (
+            <Button colorScheme="blue" width="full" onClick={() => onViewDetail?.(fund.code)}>
+              查看详情
+            </Button>
+          )}
+        </VStack>
+      </CardBody>
     </Card>
   );
 };

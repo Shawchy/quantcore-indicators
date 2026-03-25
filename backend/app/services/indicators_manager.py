@@ -7,8 +7,15 @@
 from typing import Optional, Dict, Any, List
 import pandas as pd
 import time
+import warnings
 from loguru import logger
 from functools import wraps
+
+# 过滤 pandas_ta 的弃用警告
+import warnings
+warnings.filterwarnings('ignore', category=FutureWarning, module='pandas_ta')
+warnings.filterwarnings('ignore', category=UserWarning, message='.*copy_on_write.*')
+warnings.filterwarnings('ignore', category=Warning, message='.*Pandas4Warning.*')
 
 # 尝试导入 TA-Lib
 try:

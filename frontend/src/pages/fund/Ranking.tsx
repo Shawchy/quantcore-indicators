@@ -5,23 +5,30 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+  Box,
   Card,
-  Typography,
+  CardBody,
+  Heading,
+  Text,
   Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
   Select,
-  Space,
-  message,
-} from 'antd';
+  HStack,
+  VStack,
+  Badge,
+  useToast,
+} from '@chakra-ui/react';
 import { fundApi, FundInfo, FundPeriodChangeInfo } from '@/services/fund';
 import FundList from '@/components/fund/FundList';
-
-const { Title } = Typography;
-const { Option } = Select;
 
 type RankType = 'return' | 'scale' | 'rank';
 type PeriodType = '1w' | '1m' | '3m' | '6m' | '1y' | '3y' | '5y';
 
 const FundRanking: React.FC = () => {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [fundData, setFundData] = useState<FundInfo[]>([]);
   const [performanceData, setPerformanceData] = useState<Record<string, FundPeriodChangeInfo[]>>({});
@@ -79,14 +86,24 @@ const FundRanking: React.FC = () => {
       setFundData(filtered);
       setPerformanceData(perfDataMap);
 
-      message.success(`加载成功，共 ${filtered.length} 只基金`);
+      toast({
+        title: '加载成功',
+        description: `共 ${filtered.length} 只基金`,
+        status: 'success',
+        duration: 3000,
+      });
     } catch (error: any) {
       console.error('加载基金数据失败:', error);
-      message.error('加载基金数据失败');
+      toast({
+        title: '加载失败',
+        description: '加载基金数据失败',
+        status: 'error',
+        duration: 3000,
+      });
     } finally {
       setLoading(false);
     }
-  }, [fundType]);
+  }, [fundType, toast]);
 
   useEffect(() => {
     loadFundData();
@@ -155,8 +172,12 @@ const FundRanking: React.FC = () => {
 
   // 处理添加到自选
   const handleAddToWatchlist = (code: string) => {
-    message.success(`已将 ${code} 添加到自选`);
-    // TODO: 实际添加到自选列表
+    toast({
+      title: '添加成功',
+      description: `已将 ${code} 添加到自选`,
+      status: 'success',
+      duration: 2000,
+    });
   };
 
   // 处理查看详情
@@ -164,92 +185,100 @@ const FundRanking: React.FC = () => {
     window.location.href = `/fund/detail/${code}`;
   };
 
-  // Tab 配置
-  const rankTypeTabs = [
-    { key: 'return', label: '收益排行' },
-    { key: 'scale', label: '规模排行' },
-    { key: 'rank', label: '同类排行' },
-  ];
-
-  const periodTabs = [
-    { key: '1w', label: '近 1 周' },
-    { key: '1m', label: '近 1 月' },
-    { key: '3m', label: '近 3 月' },
-    { key: '6m', label: '近 6 月' },
-    { key: '1y', label: '近 1 年' },
-    { key: '3y', label: '近 3 年' },
-    { key: '5y', label: '近 5 年' },
-  ];
-
   return (
-    <div style={{ padding: 24 }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Box p={6}>
+      <VStack spacing={8} align="stretch">
         {/* 标题 */}
-        <div>
-          <Title level={2} style={{ margin: 0 }}>
+        <Box>
+          <Heading size="xl" mb={2}>
             基金排行榜
-          </Title>
-          <Text type="secondary">
+          </Heading>
+          <Text color="gray.500">
             按收益、规模、同类排名等维度查看基金排行
           </Text>
-        </div>
+        </Box>
 
         {/* 筛选条件 */}
         <Card>
-          <Space wrap>
-            <span>排行类型:</span>
-            <Tabs
-              activeKey={rankType}
-              onChange={(key) => setRankType(key as RankType)}
-              items={rankTypeTabs}
-              size="small"
-              style={{ margin: 0 }}
-            />
-          </Space>
+          <CardBody>
+            <VStack spacing={4} align="stretch">
+              {/* 排行类型 Tabs */}
+              <HStack>
+                <Text fontWeight="bold">排行类型:</Text>
+                <Tabs
+                  variant="enclosed"
+                  index={['return', 'scale', 'rank'].indexOf(rankType)}
+                  onChange={(index) => setRankType(['return', 'scale', 'rank'][index] as RankType)}
+                  size="sm"
+                >
+                  <TabList>
+                    <Tab>收益排行</Tab>
+                    <Tab>规模排行</Tab>
+                    <Tab>同类排行</Tab>
+                  </TabList>
+                </Tabs>
+              </HStack>
 
-          {rankType === 'return' || rankType === 'rank' ? (
-            <Space wrap style={{ marginTop: 16 }}>
-              <span>时间段:</span>
-              <Tabs
-                activeKey={period}
-                onChange={(key) => setPeriod(key as PeriodType)}
-                items={periodTabs}
-                size="small"
-                style={{ margin: 0 }}
-              />
-            </Space>
-          ) : null}
+              {/* 时间段 Tabs（仅收益排行和同类排行显示） */}
+              {(rankType === 'return' || rankType === 'rank') && (
+                <HStack>
+                  <Text fontWeight="bold">时间段:</Text>
+                  <Tabs
+                    variant="enclosed"
+                    index={['1w', '1m', '3m', '6m', '1y', '3y', '5y'].indexOf(period)}
+                    onChange={(index) => setPeriod(['1w', '1m', '3m', '6m', '1y', '3y', '5y'][index] as PeriodType)}
+                    size="sm"
+                  >
+                    <TabList>
+                      <Tab>近 1 周</Tab>
+                      <Tab>近 1 月</Tab>
+                      <Tab>近 3 月</Tab>
+                      <Tab>近 6 月</Tab>
+                      <Tab>近 1 年</Tab>
+                      <Tab>近 3 年</Tab>
+                      <Tab>近 5 年</Tab>
+                    </TabList>
+                  </Tabs>
+                </HStack>
+              )}
 
-          <Space wrap style={{ marginTop: 16 }}>
-            <span>基金类型:</span>
-            <Select
-              value={fundType}
-              onChange={setFundType}
-              style={{ width: 150 }}
-            >
-              <Option value="all">全部</Option>
-              <Option value="stock">股票型</Option>
-              <Option value="mix">混合型</Option>
-              <Option value="bond">债券型</Option>
-              <Option value="index">指数型</Option>
-              <Option value="money">货币型</Option>
-            </Select>
-            <span>共 {fundData.length} 只基金</span>
-          </Space>
+              {/* 基金类型选择 */}
+              <HStack wrap="wrap">
+                <Text fontWeight="bold">基金类型:</Text>
+                <Select
+                  value={fundType}
+                  onChange={(e) => setFundType(e.target.value)}
+                  width="150px"
+                >
+                  <option value="all">全部</option>
+                  <option value="stock">股票型</option>
+                  <option value="mix">混合型</option>
+                  <option value="bond">债券型</option>
+                  <option value="index">指数型</option>
+                  <option value="money">货币型</option>
+                </Select>
+                <Badge colorScheme="blue" fontSize="sm">
+                  共 {fundData.length} 只基金
+                </Badge>
+              </HStack>
+            </VStack>
+          </CardBody>
         </Card>
 
         {/* 基金列表 */}
         <Card>
-          <FundList
-            data={getSortedData()}
-            loading={loading}
-            performanceData={performanceData}
-            onAddToWatchlist={handleAddToWatchlist}
-            onViewDetail={handleViewDetail}
-          />
+          <CardBody>
+            <FundList
+              data={getSortedData()}
+              loading={loading}
+              performanceData={performanceData}
+              onAddToWatchlist={handleAddToWatchlist}
+              onViewDetail={handleViewDetail}
+            />
+          </CardBody>
         </Card>
-      </Space>
-    </div>
+      </VStack>
+    </Box>
   );
 };
 

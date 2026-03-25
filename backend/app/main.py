@@ -5,30 +5,59 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 import sys
+import os
+import warnings
 from pathlib import Path
+
+# 设置 pandas 环境变量以消除 pandas_ta 的警告
+os.environ['PANDAS_MODE'] = 'copy_on_write'
+
+# 过滤 pandas_ta 的弃用警告
+warnings.filterwarnings('ignore', category=FutureWarning, module='pandas_ta')
+warnings.filterwarnings('ignore', category=UserWarning, message='.*copy_on_write.*')
+warnings.filterwarnings('ignore', category=Warning, message='.*Pandas4Warning.*')
+
+# 临时重定向 stderr 以过滤 pandas_ta 的警告
+import io
+_old_stderr = sys.stderr
+sys.stderr = io.StringIO()
 
 from app.config import settings
 from app.api.v1 import api_router
 from app.core.exceptions import QuantException
 from app.middleware.performance import PerformanceMiddleware
 
+# 恢复 stderr
+sys.stderr = _old_stderr
+
 
 def setup_logging():
     log_path = Path(settings.LOG_FILE)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     
+    # 添加过滤器以过滤 pandas_ta 的警告
+    def pandas_warning_filter(record):
+        # 过滤 pandas_ta 的 Pandas4Warning
+        if 'Pandas4Warning' in record['message']:
+            return False
+        if 'copy_on_write' in record['message']:
+            return False
+        return True
+    
     logger.remove()
     logger.add(
         sys.stdout,
         level=settings.LOG_LEVEL,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        filter=pandas_warning_filter
     )
     logger.add(
         settings.LOG_FILE,
         rotation="10 MB",
         retention="7 days",
         level=settings.LOG_LEVEL,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        filter=pandas_warning_filter
     )
 
 

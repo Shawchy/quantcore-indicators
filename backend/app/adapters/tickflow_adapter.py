@@ -23,6 +23,7 @@ TickFlow 是一个金融数据服务，提供 A 股、港股、美股等市场�
     quotes = tf.quotes.get(symbols=["600000.SH", "000001.SZ"])
 """
 import asyncio
+import time
 from typing import Optional, List, Dict, Any, Union
 from loguru import logger
 
@@ -66,6 +67,11 @@ class TickFlowAdapter(BaseDataAdapter):
     - 完整服务需要 API Key，提供实时行情和分钟级 K 线
     """
     
+    @property
+    def source_type(self) -> DataSourceType:
+        """返回数据源类型"""
+        return DataSourceType.TICKFLOW
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         self._is_initialized = False
@@ -77,6 +83,7 @@ class TickFlowAdapter(BaseDataAdapter):
         # 不同数据的缓存时间（秒）
         self._cache_ttl = {
             'kline': 300,        # K 线：5 分钟
+            'minute_kline': 60,  # 分钟线：1 分钟（实时更新）
             'stock_list': 3600,  # 股票列表：1 小时
             'stock_info': 600,   # 股票信息：10 分钟
             'quote': 10,         # 实时行情：10 秒（TickFlow 更新快）
@@ -130,9 +137,10 @@ class TickFlowAdapter(BaseDataAdapter):
         """测试 TickFlow 连接"""
         try:
             # 尝试获取一个标的信息
-            instruments = self._tf.instruments.get(symbols=["600000.SH"])
+            # TickFlow API 参数可能是 symbol 或 code
+            instruments = self._tf.instruments.get("600000.SH")
             if instruments:
-                logger.debug(f"TickFlow 连接测试成功：{instruments[0].symbol}")
+                logger.debug(f"TickFlow 连接测试成功：{instruments}")
             else:
                 logger.debug("TickFlow 连接测试成功（无数据）")
         except Exception as e:
@@ -304,8 +312,12 @@ class TickFlowAdapter(BaseDataAdapter):
             
             symbol = self._symbol_to_tickflow(code)
             cache_key = f'tickflow_kline_{symbol}_{period}_{start_date}_{end_date}'
-            cached = self._get_from_cache(cache_key, 'kline')
+            
+            # 根据周期选择缓存类型
+            cache_type = 'minute_kline' if tf_period in ['1m', '5m', '15m', '30m', '60m'] else 'kline'
+            cached = self._get_from_cache(cache_key, cache_type)
             if cached:
+                logger.debug(f"从缓存获取 {period} K 线数据：{code}")
                 return cached
             
             # 周期映射
@@ -384,7 +396,7 @@ class TickFlowAdapter(BaseDataAdapter):
                        (not end_date or k.date <= end_date.replace('-', ''))
                 ]
             
-            self._set_to_cache(cache_key, klines, 'kline')
+            self._set_to_cache(cache_key, klines, cache_type)
             logger.info(f"TickFlow 获取 K 线数据成功 {code} ({period}): {len(klines)}条")
             return klines
             
@@ -1265,7 +1277,3 @@ class TickFlowAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"批量查询实时行情失败：{e}")
             return []
-
-
-# 导入 time 模块（用于缓存）
-import time

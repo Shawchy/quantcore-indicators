@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 美港目标价页面
  * 展示美股和港股的机构目标价评级
  */
@@ -29,7 +29,7 @@ import {
 import {
   eastMoneyApi,
   type StockPriceJS,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const StockPriceTargetPage: React.FC = () => {
   const [loading, setLoading] = useState(false);

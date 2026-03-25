@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Box, ColorModeScript } from '@chakra-ui/react'
 import { useEffect } from 'react'
 import Layout from './components/Layout'
@@ -97,22 +97,22 @@ function App() {
             <Route path="billboard" element={<Billboard />} />
             <Route path="market-quotes" element={<MarketQuotes />} />
             <Route path="settings" element={<Settings />} />
-            {/* 东方财富模块路由 */}
-            <Route path="eastmoney/changes" element={<EastMoneyChangesPage />} />
-            <Route path="eastmoney/zt-board" element={<EastMoneyZtBoardPage />} />
-            <Route path="eastmoney/stock-comment" element={<EastMoneyStockCommentPage />} />
-            <Route path="eastmoney/research-notice" element={<EastMoneyResearchNoticePage />} />
-            <Route path="eastmoney/financial" element={<EastMoneyFinancialPage />} />
-            <Route path="eastmoney/sina-financial-indicator" element={<SinaFinancialIndicatorPage />} />
-            <Route path="eastmoney/stock-list" element={<StockListPage />} />
-            <Route path="eastmoney/industry-classification" element={<IndustryClassificationPage />} />
-            <Route path="eastmoney/stock-holder" element={<StockHolderPage />} />
-            <Route path="eastmoney/stock-price-target" element={<StockPriceTargetPage />} />
-            <Route path="eastmoney/legulegu-market-indicators" element={<LeguleGuMarketIndicatorsPage />} />
-            <Route path="eastmoney/a-share-valuation" element={<AShareValuationPage />} />
-            <Route path="eastmoney/market-statistics" element={<MarketStatisticsPage />} />
-            <Route path="eastmoney/block-trade" element={<BlockTradePage />} />
-            <Route path="eastmoney/margin-trading" element={<MarginTradingPage />} />
+            {/* 东方财富模块路由（使用 AkShare 数据源） */}
+            <Route path="akshare/changes" element={<EastMoneyChangesPage />} />
+            <Route path="akshare/zt-board" element={<EastMoneyZtBoardPage />} />
+            <Route path="akshare/stock-comment" element={<EastMoneyStockCommentPage />} />
+            <Route path="akshare/research-notice" element={<EastMoneyResearchNoticePage />} />
+            <Route path="akshare/financial" element={<EastMoneyFinancialPage />} />
+            <Route path="akshare/sina-financial-indicator" element={<SinaFinancialIndicatorPage />} />
+            <Route path="akshare/stock-list" element={<StockListPage />} />
+            <Route path="akshare/industry-classification" element={<IndustryClassificationPage />} />
+            <Route path="akshare/stock-holder" element={<StockHolderPage />} />
+            <Route path="akshare/stock-price-target" element={<StockPriceTargetPage />} />
+            <Route path="akshare/legulegu-market-indicators" element={<LeguleGuMarketIndicatorsPage />} />
+            <Route path="akshare/a-share-valuation" element={<AShareValuationPage />} />
+            <Route path="akshare/market-statistics" element={<MarketStatisticsPage />} />
+            <Route path="akshare/block-trade" element={<BlockTradePage />} />
+            <Route path="akshare/margin-trading" element={<MarginTradingPage />} />
             {/* 基金模块路由 */}
             <Route path="fund" element={<FundHome />} />
             <Route path="fund/ranking" element={<FundRanking />} />

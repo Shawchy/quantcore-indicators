@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 东方财富千股千评页面
  */
 import React, { useState, useEffect } from 'react';
@@ -44,7 +44,7 @@ import {
   type StockComment,
   type StockCommentDetailInstitution,
   type StockCommentDetailScore,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const EastMoneyStockCommentPage: React.FC = () => {

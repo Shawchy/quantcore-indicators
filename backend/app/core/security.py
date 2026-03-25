@@ -126,31 +126,11 @@ def verify_refresh_token(token: str) -> Optional[TokenData]:
 
 
 # 模拟用户数据库 (生产环境应使用数据库)
-import os
 import secrets
 
-# 生成随机默认密码（仅用于开发环境）
-DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", secrets.token_urlsafe(16))
-DEFAULT_USER_PASSWORD = os.getenv("DEFAULT_USER_PASSWORD", secrets.token_urlsafe(16))
-
-fake_users_db = {
-    "admin": {
-        "user_id": 1,
-        "username": "admin",
-        "password": get_password_hash(DEFAULT_ADMIN_PASSWORD),
-        "email": "admin@example.com",
-        "role": "admin",
-        "is_active": True
-    },
-    "user": {
-        "user_id": 2,
-        "username": "user",
-        "password": get_password_hash(DEFAULT_USER_PASSWORD),
-        "email": "user@example.com",
-        "role": "user",
-        "is_active": True
-    }
-}
+# 使用 settings 中的默认密码配置
+DEFAULT_ADMIN_PASSWORD = settings.DEFAULT_ADMIN_PASSWORD
+DEFAULT_USER_PASSWORD = settings.DEFAULT_USER_PASSWORD
 
 # 开发环境打印默认密码
 if settings.DEBUG:

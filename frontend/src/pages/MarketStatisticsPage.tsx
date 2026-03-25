@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 市场统计页面
  * 包含：创新高/新低统计、破净股统计
  */
@@ -37,7 +37,7 @@ import {
   eastMoneyApi,
   type StockAHighLowStatistics,
   type StockABelowNetAssetStatistics,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const MarketStatisticsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0); // 0=创新高/新低，1=破净股

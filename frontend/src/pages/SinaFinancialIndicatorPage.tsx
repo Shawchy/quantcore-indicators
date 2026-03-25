@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 新浪财经财务指标页面
  * 展示 86 个财务指标数据
  */
@@ -36,7 +36,7 @@ import {
 import {
   eastMoneyApi,
   type StockFinancialIndicator,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const SinaFinancialIndicatorPage: React.FC = () => {
   const [loading, setLoading] = useState(false);

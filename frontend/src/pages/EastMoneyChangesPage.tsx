@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 东方财富盘口异动页面
  */
 import React, { useState, useEffect } from 'react';
@@ -26,7 +26,7 @@ import {
   StatNumber,
   StatHelpText,
 } from '@chakra-ui/react';
-import { eastMoneyApi, type StockChange, type ChangeType, type MarketChangesSummary } from '../../services/eastmoney';
+import { eastMoneyApi, type StockChange, type ChangeType, type MarketChangesSummary } from '@/services/akshare/index';
 
 const EastMoneyChangesPage: React.FC = () => {
   const [loading, setLoading] = useState(false);

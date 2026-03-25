@@ -108,11 +108,13 @@ class DataPersistence:
                 combined_df = pd.concat([existing_df, df], ignore_index=True)
                 combined_df = combined_df.drop_duplicates(subset=["date"], keep="last")
                 combined_df = combined_df.sort_values("date")
-                combined_df.to_parquet(parquet_file, index=False)
+                # 使用 snappy 压缩，减少磁盘占用（压缩率约 60-70%）
+                combined_df.to_parquet(parquet_file, index=False, compression='snappy')
             else:
-                df.to_parquet(parquet_file, index=False)
+                # 使用 snappy 压缩
+                df.to_parquet(parquet_file, index=False, compression='snappy')
             
-            logger.info(f"已归档到 Parquet: {code}_{adjust}")
+            logger.info(f"已归档到 Parquet（snappy 压缩）: {code}_{adjust}")
             
         except Exception as e:
             logger.warning(f"保存 Parquet 失败 {code}: {e}")

@@ -1,10 +1,11 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, Float, Integer, DateTime, Text, Boolean, UniqueConstraint, Index
+from sqlalchemy import String, Float, Integer, DateTime, Text, Boolean, UniqueConstraint, Index, select
 from datetime import datetime
 from typing import Optional, AsyncGenerator
 from pathlib import Path
 from contextlib import asynccontextmanager
+from loguru import logger
 
 from app.config import settings
 
@@ -288,6 +289,50 @@ async def init_database():
     # 只创建表结构，不删除现有数据
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # 创建默认用户
+    await create_default_users()
+
+
+async def create_default_users():
+    """创建默认管理员和用户"""
+    from app.core.security import get_password_hash
+    
+    async with get_session() as session:
+        # 检查是否已有 admin 用户
+        result = await session.execute(select(User).where(User.username == "admin"))
+        if result.scalar_one_or_none():
+            return  # 已存在，不重复创建
+        
+        # 创建 admin 用户
+        admin_user = User(
+            user_id=1,
+            username="admin",
+            email="admin@example.com",
+            password=get_password_hash(settings.DEFAULT_ADMIN_PASSWORD),
+            role="admin",
+            is_active=True
+        )
+        
+        # 检查是否已有 user 用户
+        result = await session.execute(select(User).where(User.username == "user"))
+        if not result.scalar_one_or_none():
+            # 创建普通用户
+            user_user = User(
+                user_id=2,
+                username="user",
+                email="user@example.com",
+                password=get_password_hash(settings.DEFAULT_USER_PASSWORD),
+                role="user",
+                is_active=True
+            )
+            session.add(user_user)
+        
+        session.add(admin_user)
+        await session.commit()
+        
+        if settings.DEBUG:
+            logger.info(f"已创建默认用户：admin/{settings.DEFAULT_ADMIN_PASSWORD}, user/{settings.DEFAULT_USER_PASSWORD}")
 
 
 @asynccontextmanager

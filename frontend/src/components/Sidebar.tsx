@@ -27,6 +27,7 @@ import {
   FiDollarSign,
   FiFile,
   FiPieChart,
+  FiShoppingCart,
 } from 'react-icons/fi'
 
 const menuItems = [
@@ -42,16 +43,16 @@ const menuItems = [
   { name: '智能选股', icon: FiSearch, path: '/screener' },
   { name: '策略管理', icon: FiSettings, path: '/strategy' },
   { name: '策略回测', icon: FiActivity, path: '/backtest' },
-  { name: '东方财富', icon: FiCpu, path: '/eastmoney/zt-board' },
-  { name: '盘口异动', icon: FiActivity, path: '/eastmoney/changes' },
-  { name: '千股千评', icon: FiBarChart, path: '/eastmoney/stock-comment' },
-  { name: '研报公告', icon: FiFile, path: '/eastmoney/research-notice' },
-  { name: '财务分析', icon: FiPieChart, path: '/eastmoney/financial' },
-  { name: '市场指标', icon: FiBarChart, path: '/eastmoney/legulegu-market-indicators' },
-  { name: '估值指标', icon: FiTrendingUp, path: '/eastmoney/a-share-valuation' },
-  { name: '市场统计', icon: FiList, path: '/eastmoney/market-statistics' },
-  { name: '大宗交易', icon: FiShoppingCart, path: '/eastmoney/block-trade' },
-  { name: '融资融券', icon: FiDollarSign, path: '/eastmoney/margin-trading' },
+  { name: '东方财富', icon: FiCpu, path: '/akshare/zt-board' },
+  { name: '盘口异动', icon: FiActivity, path: '/akshare/changes' },
+  { name: '千股千评', icon: FiBarChart, path: '/akshare/stock-comment' },
+  { name: '研报公告', icon: FiFile, path: '/akshare/research-notice' },
+  { name: '财务分析', icon: FiPieChart, path: '/akshare/financial' },
+  { name: '市场指标', icon: FiBarChart, path: '/akshare/legulegu-market-indicators' },
+  { name: '估值指标', icon: FiTrendingUp, path: '/akshare/a-share-valuation' },
+  { name: '市场统计', icon: FiList, path: '/akshare/market-statistics' },
+  { name: '大宗交易', icon: FiShoppingCart, path: '/akshare/block-trade' },
+  { name: '融资融券', icon: FiDollarSign, path: '/akshare/margin-trading' },
   { name: '系统设置', icon: FiSliders, path: '/settings' },
 ]
 

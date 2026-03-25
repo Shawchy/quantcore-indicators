@@ -5,22 +5,29 @@
  */
 import React, { useState, useMemo } from 'react';
 import {
+  Box,
   Table,
-  Tag,
-  Space,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  TableContainer,
+  Badge,
+  HStack,
+  VStack,
   Button,
   Input,
+  InputGroup,
+  InputLeftElement,
   Select,
-  Typography,
+  Text,
   Tooltip,
-  Rate,
-} from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import { SearchOutlined, StarOutlined, StarFilled } from '@ant-design/icons';
+  useColorModeValue,
+  Icon,
+} from '@chakra-ui/react';
+import { StarIcon, SearchIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { FundInfo, FundPeriodChangeInfo } from '@/services/fund';
-
-const { Text } = Typography;
-const { Option } = Select;
 
 interface FundListProps {
   data: FundInfo[];
@@ -64,6 +71,7 @@ const FundList: React.FC<FundListProps> = ({
 }) => {
   const [filters, setFilters] = useState<FundFilter>({});
   const [searchText, setSearchText] = useState('');
+  const hoverBg = useColorModeValue('gray.50', 'gray.700');
 
   // 处理基金类型
   const getFundTypeTag = (type?: string) => {
@@ -74,16 +82,16 @@ const FundList: React.FC<FundListProps> = ({
       'index': { color: 'orange', text: '指数型' },
       'mix': { color: 'purple', text: '混合型' },
     };
-    const config = type ? typeMap[type] || { color: 'default', text: type } : { color: 'default', text: '未知' };
-    return <Tag color={config.color}>{config.text}</Tag>;
+    const config = type ? typeMap[type] || { color: 'gray', text: type } : { color: 'gray', text: '未知' };
+    return <Badge colorScheme={config.color as any}>{config.text}</Badge>;
   };
 
   // 处理收益率颜色
   const getReturnColor = (value?: number) => {
-    if (value === undefined || value === null) return '#999';
-    if (value > 0) return '#ff4d4f';
-    if (value < 0) return '#52c41a';
-    return '#1890ff';
+    if (value === undefined || value === null) return 'gray.500';
+    if (value > 0) return 'red.500';
+    if (value < 0) return 'green.500';
+    return 'blue.500';
   };
 
   // 处理收益率显示
@@ -124,210 +132,50 @@ const FundList: React.FC<FundListProps> = ({
     });
   }, [data, performanceData, watchlist]);
 
-  // 表格列定义
-  const columns: ColumnsType<FundListTableItem> = [
-    {
-      title: '收藏',
-      dataIndex: 'isFavorite',
-      key: 'favorite',
-      width: 60,
-      render: (isFavorite: boolean, record) => (
-        <Button
-          type="text"
-          icon={isFavorite ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddToWatchlist?.(record.code);
-          }}
-        />
-      ),
-    },
-    {
-      title: '基金代码',
-      dataIndex: 'code',
-      key: 'code',
-      width: 100,
-      sorter: (a, b) => a.code.localeCompare(b.code),
-      render: (code: string) => (
-        <Text strong>{code}</Text>
-      ),
-    },
-    {
-      title: '基金名称',
-      dataIndex: 'name',
-      key: 'name',
-      width: 200,
-      sorter: (a, b) => a.name.localeCompare(b.name),
-      render: (name: string, record) => (
-        <Space direction="vertical" size={0}>
-          <Text>{name}</Text>
-          {getFundTypeTag(record.type)}
-        </Space>
-      ),
-    },
-    {
-      title: '最新净值',
-      dataIndex: 'net_asset_value',
-      key: 'net_asset_value',
-      width: 100,
-      sorter: (a, b) => (a.net_asset_value || 0) - (b.net_asset_value || 0),
-      render: (value?: number) => (
-        <Text>{value?.toFixed(4) || '--'}</Text>
-      ),
-    },
-    {
-      title: '日涨跌',
-      dataIndex: 'change_pct',
-      key: 'change_pct',
-      width: 100,
-      sorter: (a, b) => (a.change_pct || 0) - (b.change_pct || 0),
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value), fontWeight: 'bold' }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '近 1 周',
-      dataIndex: ['performance', '1w'],
-      key: 'perf_1w',
-      width: 90,
-      sorter: (a, b) => (a.performance?.['1w'] || 0) - (b.performance?.['1w'] || 0),
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value) }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '近 1 月',
-      dataIndex: ['performance', '1m'],
-      key: 'perf_1m',
-      width: 90,
-      sorter: (a, b) => (a.performance?.['1m'] || 0) - (b.performance?.['1m'] || 0),
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value) }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '近 3 月',
-      dataIndex: ['performance', '3m'],
-      key: 'perf_3m',
-      width: 90,
-      sorter: (a, b) => (a.performance?.['3m'] || 0) - (b.performance?.['3m'] || 0),
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value) }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '近 6 月',
-      dataIndex: ['performance', '6m'],
-      key: 'perf_6m',
-      width: 90,
-      sorter: (a, b) => (a.performance?.['6m'] || 0) - (b.performance?.['6m'] || 0),
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value) }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '近 1 年',
-      dataIndex: ['performance', '1y'],
-      key: 'perf_1y',
-      width: 90,
-      sorter: (a, b) => (a.performance?.['1y'] || 0) - (b.performance?.['1y'] || 0),
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value), fontWeight: 'bold' }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '基金规模',
-      dataIndex: 'fund_scale',
-      key: 'fund_scale',
-      width: 110,
-      sorter: (a, b) => (a.fund_scale || 0) - (b.fund_scale || 0),
-      render: (value?: number) => (
-        <Text>{value ? `${value.toFixed(2)}亿` : '--'}</Text>
-      ),
-    },
-    {
-      title: '基金公司',
-      dataIndex: 'fund_company',
-      key: 'fund_company',
-      width: 150,
-      ellipsis: true,
-      render: (company?: string) => (
-        <Tooltip title={company}>
-          <Text>{company || '--'}</Text>
-        </Tooltip>
-      ),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 100,
-      fixed: 'right',
-      render: (_, record) => (
-        <Button
-          type="link"
-          onClick={() => onViewDetail?.(record.code)}
-        >
-          详情
-        </Button>
-      ),
-    },
-  ];
-
   // 筛选栏
   const FilterBar = () => (
-    <Space wrap style={{ marginBottom: 16 }}>
-      <Input
-        placeholder="搜索基金代码或名称"
-        prefix={<SearchOutlined />}
-        style={{ width: 300 }}
-        value={searchText}
-        onChange={(e) => setSearchText(e.target.value)}
-        onPressEnter={() => {
-          // 可以在这里添加搜索逻辑
-        }}
-      />
+    <HStack wrap="wrap" mb={4} gap={2}>
+      <InputGroup w="300px">
+        <InputLeftElement pointerEvents="none">
+          <SearchIcon color="gray.300" />
+        </InputLeftElement>
+        <Input
+          placeholder="搜索基金代码或名称"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+        />
+      </InputGroup>
+      
       <Select
         placeholder="基金类型"
-        style={{ width: 120 }}
-        allowClear
-        onChange={(value) => setFilters({ ...filters, fundType: value })}
+        w="120px"
+        onChange={(e) => setFilters({ ...filters, fundType: e.target.value })}
       >
-        <Option value="stock">股票型</Option>
-        <Option value="mix">混合型</Option>
-        <Option value="bond">债券型</Option>
-        <Option value="index">指数型</Option>
-        <Option value="money">货币型</Option>
+        <option value="stock">股票型</option>
+        <option value="mix">混合型</option>
+        <option value="bond">债券型</option>
+        <option value="index">指数型</option>
+        <option value="money">货币型</option>
       </Select>
+      
       <Input
         placeholder="最小收益率"
-        style={{ width: 120 }}
+        w="120px"
         type="number"
         onChange={(e) => setFilters({ ...filters, minReturn: parseFloat(e.target.value) || undefined })}
       />
+      
       <Input
         placeholder="最大收益率"
-        style={{ width: 120 }}
+        w="120px"
         type="number"
         onChange={(e) => setFilters({ ...filters, maxReturn: parseFloat(e.target.value) || undefined })}
       />
-      <Button
-        type="primary"
-        onClick={() => onFilter?.(filters)}
-      >
+      
+      <Button colorScheme="blue" onClick={() => onFilter?.(filters)}>
         筛选
       </Button>
+      
       <Button
         onClick={() => {
           setFilters({});
@@ -336,29 +184,100 @@ const FundList: React.FC<FundListProps> = ({
       >
         重置
       </Button>
-    </Space>
+    </HStack>
   );
 
   return (
-    <div>
+    <Box>
       <FilterBar />
-      <Table
-        columns={columns}
-        dataSource={tableData}
-        loading={loading}
-        scroll={{ x: 1500 }}
-        pagination={{
-          pageSize: 20,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 只基金`,
-        }}
-        onRow={(record) => ({
-          onClick: () => onViewDetail?.(record.code),
-          style: { cursor: 'pointer' },
-        })}
-      />
-    </div>
+      <TableContainer>
+        <Table variant="simple" size="sm">
+          <Thead>
+            <Tr>
+              <Th w="60px">收藏</Th>
+              <Th w="100px">基金代码</Th>
+              <Th w="200px">基金名称</Th>
+              <Th w="100px">最新净值</Th>
+              <Th w="100px">日涨跌</Th>
+              <Th w="90px">近 1 周</Th>
+              <Th w="90px">近 1 月</Th>
+              <Th w="90px">近 3 月</Th>
+              <Th w="90px">近 6 月</Th>
+              <Th w="90px">近 1 年</Th>
+              <Th w="110px">基金规模</Th>
+              <Th w="150px">基金公司</Th>
+              <Th w="100px">操作</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {tableData.map((item) => (
+              <Tr
+                key={item.code}
+                _hover={{ bg: hoverBg }}
+                cursor="pointer"
+                onClick={() => onViewDetail?.(item.code)}
+              >
+                <Td>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddToWatchlist?.(item.code);
+                    }}
+                  >
+                    <Icon
+                      as={StarIcon}
+                      color={item.isFavorite ? 'yellow.500' : 'inherit'}
+                      fill={item.isFavorite ? 'yellow.500' : 'none'}
+                    />
+                  </Button>
+                </Td>
+                <Td fontWeight="bold">{item.code}</Td>
+                <Td>
+                  <VStack align="start" spacing={1}>
+                    <Text>{item.name}</Text>
+                    {getFundTypeTag(item.type)}
+                  </VStack>
+                </Td>
+                <Td>{item.net_asset_value?.toFixed(4) || '--'}</Td>
+                <Td>
+                  <Text fontWeight="bold" color={getReturnColor(item.change_pct)}>
+                    {getReturnText(item.change_pct)}
+                  </Text>
+                </Td>
+                <Td color={getReturnColor(item.performance?.['1w'])}>
+                  {getReturnText(item.performance?.['1w'])}
+                </Td>
+                <Td color={getReturnColor(item.performance?.['1m'])}>
+                  {getReturnText(item.performance?.['1m'])}
+                </Td>
+                <Td color={getReturnColor(item.performance?.['3m'])}>
+                  {getReturnText(item.performance?.['3m'])}
+                </Td>
+                <Td color={getReturnColor(item.performance?.['6m'])}>
+                  {getReturnText(item.performance?.['6m'])}
+                </Td>
+                <Td fontWeight="bold" color={getReturnColor(item.performance?.['1y'])}>
+                  {getReturnText(item.performance?.['1y'])}
+                </Td>
+                <Td>{item.fund_scale ? `${item.fund_scale.toFixed(2)}亿` : '--'}</Td>
+                <Td>
+                  <Tooltip label={item.fund_company}>
+                    <Text noOfLines={1}>{item.fund_company || '--'}</Text>
+                  </Tooltip>
+                </Td>
+                <Td>
+                  <Button size="sm" variant="link" colorScheme="blue">
+                    详情
+                  </Button>
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 };
 

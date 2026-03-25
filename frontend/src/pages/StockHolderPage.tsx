@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 股东人数及持股集中度页面
  * 展示股东人数变化和持股集中度分析
  */
@@ -31,7 +31,7 @@ import {
 import {
   eastMoneyApi,
   type StockHoldNumCNInfo,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const StockHolderPage: React.FC = () => {
   const [loading, setLoading] = useState(false);

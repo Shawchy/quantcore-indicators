@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 东方财富涨停板行情页面
  */
 import React, { useState, useEffect } from 'react';
@@ -25,7 +25,7 @@ import {
   InputGroup,
   InputRightAddon,
 } from '@chakra-ui/react';
-import { eastMoneyApi, type StockZtPool } from '../../services/eastmoney';
+import { eastMoneyApi, type StockZtPool } from '@/services/akshare/index';
 
 const EastMoneyZtPoolPage: React.FC = () => {
   const [loading, setLoading] = useState(false);

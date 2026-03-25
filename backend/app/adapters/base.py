@@ -16,7 +16,6 @@ class DataSourceType(str, Enum):
     YFINANCE = "yfinance"
     EFINANCE = "efinance"
     TICKFLOW = "tickflow"
-    EASTMONEY = "eastmoney"  # 东方财富
 
 
 @dataclass
@@ -561,9 +560,9 @@ class StockZhGrowthComparisonEM:
 @dataclass
 class StockZhValuationComparisonEM:
     """东方财富 - 估值比较数据（同行比较）"""
-    rank: Optional[float] = None  # 排名
     code: str                    # 代码
     name: str                    # 简称
+    rank: Optional[float] = None  # 排名
     peg: Optional[float] = None  # PEG
     pe_24a: Optional[float] = None  # 市盈率 -24A
     pe_ttm: Optional[float] = None  # 市盈率 -TTM
@@ -1357,7 +1356,6 @@ class BaseDataAdapter(ABC):
         """
         pass
     
-    @abstractmethod
     async def get_weekly_kline(
         self,
         code: str,
@@ -1365,9 +1363,10 @@ class BaseDataAdapter(ABC):
         end_date: Optional[str] = None,
         adjust: str = "qfq"
     ) -> List[KLineData]:
-        pass
+        """获取周 K 线数据（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_weekly_kline 方法")
+        return []
     
-    @abstractmethod
     async def get_monthly_kline(
         self,
         code: str,
@@ -1375,7 +1374,9 @@ class BaseDataAdapter(ABC):
         end_date: Optional[str] = None,
         adjust: str = "qfq"
     ) -> List[KLineData]:
-        pass
+        """获取月 K 线数据（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_monthly_kline 方法")
+        return []
     
     @abstractmethod
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
@@ -1398,68 +1399,55 @@ class BaseDataAdapter(ABC):
     ) -> List[ChipData]:
         pass
     
-    @abstractmethod
     async def get_daily_billboard(self, trade_date: Optional[str] = None) -> List[BillboardEntry]:
-        pass
+        """获取龙虎榜数据（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_daily_billboard 方法")
+        return []
     
-    @abstractmethod
     async def get_belong_board(self, code: str) -> List[BoardInfo]:
-        pass
+        """获取所属板块（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_belong_board 方法")
+        return []
     
-    @abstractmethod
     async def get_members(self, index_code: str) -> List[IndexComponent]:
-        """获取指数成分股
-        
-        Args:
-            index_code: 指数代码或指数名称
-        
-        Returns:
-            指数成分股列表
-        """
-        pass
+        """获取指数成分股（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_members 方法")
+        return []
     
-    @abstractmethod
     async def get_today_bill(self, trade_date: Optional[str] = None) -> List[CapitalFlowItem]:
-        pass
+        """获取今日资金流向（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_today_bill 方法")
+        return []
     
-    @abstractmethod
     async def get_history_bill(
         self,
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[CapitalFlowItem]:
-        pass
+        """获取历史资金流向（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_history_bill 方法")
+        return []
     
-    @abstractmethod
     async def get_top10_stock_holder_info(self, code: str) -> List[ShareholderInfo]:
-        pass
+        """获取前十大股东（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_top10_stock_holder_info 方法")
+        return []
     
-    @abstractmethod
     async def get_market_realtime_quotes(self, market_types: Optional[List[str]] = None) -> List[MarketQuote]:
-        pass
+        """获取市场实时行情（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_market_realtime_quotes 方法")
+        return []
     
-    @abstractmethod
     async def get_financial_performance(
         self,
         code: str,
         report_date: Optional[str] = None,
         report_type: str = "quarterly"
     ) -> List[FinancialPerformance]:
-        """获取财务业绩数据
-        
-        Args:
-            code: 股票代码
-            report_date: 报告日期，格式 'YYYY-MM-DD'
-                - None: 获取最新季报
-                - '2024-03-31': 获取 2024 年一季报
-                - '2023-12-31': 获取 2023 年年报
-            report_type: 报告类型
-        
-        Returns:
-            财务业绩数据列表
-        """
-        pass
+        """获取财务业绩数据（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_financial_performance 方法")
+        return []
     
     def normalize_code(self, code: str) -> str:
         return code.strip().upper()

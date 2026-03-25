@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 融资融券页面
  * 包含：保证金比例查询、两融账户统计
  */
@@ -44,7 +44,7 @@ import {
   type StockMarginDetailSse,
   type StockMarginSzse,
   type StockMarginDetailSzse,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const MarginTradingPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0); // 0=保证金比例，1=账户统计，2=上交所汇总，3=上交所明细，4=深交所汇总，5=深交所明细

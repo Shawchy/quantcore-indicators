@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 东方财富个股研报和公告页面
  */
 import React, { useState, useEffect } from 'react';
@@ -34,7 +34,7 @@ import {
   eastMoneyApi,
   type StockResearchReport,
   type StockNotice,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 import { ExternalLinkIcon } from '@chakra-ui/icons';
 
 const noticeTypes = [

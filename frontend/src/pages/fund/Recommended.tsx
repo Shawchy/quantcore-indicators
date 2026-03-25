@@ -5,27 +5,31 @@
  */
 import React, { useState, useEffect } from 'react';
 import {
+  Box,
   Card,
-  Typography,
+  CardBody,
+  Heading,
+  Text,
+  HStack,
+  VStack,
+  SimpleGrid,
+  Badge,
   Tabs,
-  Row,
-  Col,
-  Tag,
-  Space,
-  Button,
-  Rate,
-  Tooltip,
-} from 'antd';
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Icon,
+  useColorModeValue,
+} from '@chakra-ui/react';
 import {
-  TrophyOutlined,
-  StarOutlined,
-  ThunderboltOutlined,
-  SafetyOutlined,
-} from '@ant-design/icons';
+  StarIcon,
+  WarningIcon,
+  CheckCircleIcon,
+  InfoOutlineIcon,
+} from '@chakra-ui/icons';
 import FundCard from '@/components/fund/FundCard';
 import { FundInfo } from '@/services/fund';
-
-const { Title, Text } = Typography;
 
 interface RecommendedFund extends FundInfo {
   reason: string;
@@ -39,6 +43,7 @@ const FundRecommended: React.FC = () => {
   const [steadyFunds, setSteadyFunds] = useState<RecommendedFund[]>([]);
   const [highElasticFunds, setHighElasticFunds] = useState<RecommendedFund[]>([]);
   const [valueFunds, setValueFunds] = useState<RecommendedFund[]>([]);
+  const cardHoverBg = useColorModeValue('gray.50', 'gray.700');
 
   // 模拟数据（实际应从 API 获取）
   useEffect(() => {
@@ -121,9 +126,9 @@ const FundRecommended: React.FC = () => {
 
   // 渲染基金卡片
   const renderFundCards = (funds: RecommendedFund[]) => (
-    <Row gutter={[16, 16]}>
+    <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
       {funds.map((fund) => (
-        <Col xs={24} sm={12} lg={8} xl={6} key={fund.code}>
+        <VStack key={fund.code} align="stretch">
           <FundCard
             fund={fund}
             showRank={false}
@@ -131,146 +136,156 @@ const FundRecommended: React.FC = () => {
             compact={false}
           />
           <Card
-            size="small"
-            style={{ marginTop: 8, borderTop: '2px solid #1890ff' }}
+            size="sm"
+            borderTopWidth="4px"
+            borderTopColor="blue.500"
           >
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
-              <div>
-                <Rate disabled value={fund.rating} />
-              </div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {fund.reason}
-              </Text>
-              <Space wrap>
-                {fund.tags.map((tag, idx) => (
-                  <Tag key={idx} color="blue">
-                    {tag}
-                  </Tag>
-                ))}
-              </Space>
-            </Space>
+            <CardBody>
+              <VStack spacing={2} align="stretch">
+                <HStack>
+                  {[...Array(5)].map((_, i) => (
+                    <Icon
+                      key={i}
+                      as={StarIcon}
+                      color={i < fund.rating ? 'yellow.400' : 'gray.300'}
+                      fill={i < fund.rating ? 'yellow.400' : 'none'}
+                      w={4}
+                      h={4}
+                    />
+                  ))}
+                </HStack>
+                <Text fontSize="xs" color="gray.600">
+                  {fund.reason}
+                </Text>
+                <HStack wrap="wrap">
+                  {fund.tags.map((tag, idx) => (
+                    <Badge key={idx} colorScheme="blue" fontSize="xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </HStack>
+              </VStack>
+            </CardBody>
           </Card>
-        </Col>
+        </VStack>
       ))}
-    </Row>
+    </SimpleGrid>
   );
 
   return (
-    <div style={{ padding: 24 }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Box p={6}>
+      <VStack spacing={8} align="stretch">
         {/* 标题 */}
-        <div>
-          <Title level={2} style={{ margin: 0 }}>
+        <Box>
+          <Heading size="xl" mb={2}>
             基金优选
-          </Title>
-          <Text type="secondary">
+          </Heading>
+          <Text color="gray.500">
             专业投研团队精选优质基金，助您轻松投资
           </Text>
-        </div>
+        </Box>
 
         {/* 分类说明卡片 */}
-        <Row gutter={16}>
-          <Col xs={24} sm={12} lg={6}>
-            <Card hoverable>
-              <Space direction="vertical" size="small">
-                <Space>
-                  <TrophyOutlined style={{ fontSize: 24, color: '#faad14' }} />
-                  <Title level={5} style={{ margin: 0 }}>明星基金</Title>
-                </Space>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+        <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={4}>
+          <Card _hover={{ bg: cardHoverBg }}>
+            <CardBody>
+              <VStack spacing={2}>
+                <HStack>
+                  <Icon as={WarningIcon} w={6} h={6} color="yellow.500" />
+                  <Heading size="sm">明星基金</Heading>
+                </HStack>
+                <Text fontSize="xs" color="gray.500">
                   长期业绩优秀，市场公认的优质基金
                 </Text>
-              </Space>
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card hoverable>
-              <Space direction="vertical" size="small">
-                <Space>
-                  <SafetyOutlined style={{ fontSize: 24, color: '#52c41a' }} />
-                  <Title level={5} style={{ margin: 0 }}>稳健增长</Title>
-                </Space>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+              </VStack>
+            </CardBody>
+          </Card>
+          <Card _hover={{ bg: cardHoverBg }}>
+            <CardBody>
+              <VStack spacing={2}>
+                <HStack>
+                  <Icon as={CheckCircleIcon} w={6} h={6} color="green.500" />
+                  <Heading size="sm">稳健增长</Heading>
+                </HStack>
+                <Text fontSize="xs" color="gray.500">
                   波动小，稳定增长，适合风险偏好较低的投资者
                 </Text>
-              </Space>
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card hoverable>
-              <Space direction="vertical" size="small">
-                <Space>
-                  <ThunderboltOutlined style={{ fontSize: 24, color: '#1890ff' }} />
-                  <Title level={5} style={{ margin: 0 }}>高弹性</Title>
-                </Space>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+              </VStack>
+            </CardBody>
+          </Card>
+          <Card _hover={{ bg: cardHoverBg }}>
+            <CardBody>
+              <VStack spacing={2}>
+                <HStack>
+                  <Icon as={InfoOutlineIcon} w={6} h={6} color="blue.500" />
+                  <Heading size="sm">高弹性</Heading>
+                </HStack>
+                <Text fontSize="xs" color="gray.500">
                   高收益、高波动，适合风险偏好较高的投资者
                 </Text>
-              </Space>
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card hoverable>
-              <Space direction="vertical" size="small">
-                <Space>
-                  <StarOutlined style={{ fontSize: 24, color: '#722ed1' }} />
-                  <Title level={5} style={{ margin: 0 }}>价值投资</Title>
-                </Space>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+              </VStack>
+            </CardBody>
+          </Card>
+          <Card _hover={{ bg: cardHoverBg }}>
+            <CardBody>
+              <VStack spacing={2}>
+                <HStack>
+                  <Icon as={StarIcon} w={6} h={6} color="purple.500" />
+                  <Heading size="sm">价值投资</Heading>
+                </HStack>
+                <Text fontSize="xs" color="gray.500">
                   专注低估值价值股，安全边际高
                 </Text>
-              </Space>
-            </Card>
-          </Col>
-        </Row>
+              </VStack>
+            </CardBody>
+          </Card>
+        </SimpleGrid>
 
         {/* Tab 切换 */}
-        <Tabs
-          items={[
-            {
-              key: 'star',
-              label: (
-                <Space>
-                  <TrophyOutlined />
-                  <span>明星基金</span>
-                </Space>
-              ),
-              children: renderFundCards(starFunds),
-            },
-            {
-              key: 'steady',
-              label: (
-                <Space>
-                  <SafetyOutlined />
-                  <span>稳健增长</span>
-                </Space>
-              ),
-              children: renderFundCards(steadyFunds),
-            },
-            {
-              key: 'highElastic',
-              label: (
-                <Space>
-                  <ThunderboltOutlined />
-                  <span>高弹性</span>
-                </Space>
-              ),
-              children: renderFundCards(highElasticFunds),
-            },
-            {
-              key: 'value',
-              label: (
-                <Space>
-                  <StarOutlined />
-                  <span>价值投资</span>
-                </Space>
-              ),
-              children: renderFundCards(valueFunds),
-            },
-          ]}
-        />
-      </Space>
-    </div>
+        <Tabs variant="enclosed">
+          <TabList>
+            <Tab>
+              <HStack>
+                <Icon as={WarningIcon} />
+                <span>明星基金</span>
+              </HStack>
+            </Tab>
+            <Tab>
+              <HStack>
+                <Icon as={CheckCircleIcon} />
+                <span>稳健增长</span>
+              </HStack>
+            </Tab>
+            <Tab>
+              <HStack>
+                <Icon as={InfoOutlineIcon} />
+                <span>高弹性</span>
+              </HStack>
+            </Tab>
+            <Tab>
+              <HStack>
+                <Icon as={StarIcon} />
+                <span>价值投资</span>
+              </HStack>
+            </Tab>
+          </TabList>
+          <TabPanels>
+            <TabPanel>
+              {renderFundCards(starFunds)}
+            </TabPanel>
+            <TabPanel>
+              {renderFundCards(steadyFunds)}
+            </TabPanel>
+            <TabPanel>
+              {renderFundCards(highElasticFunds)}
+            </TabPanel>
+            <TabPanel>
+              {renderFundCards(valueFunds)}
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+      </VStack>
+    </Box>
   );
 };
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 东方财富财务分析页面
  * 包含：资产负债表、利润表
  */
@@ -32,7 +32,7 @@ import {
   eastMoneyApi,
   type StockBalanceSheet,
   type StockProfitSheet,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const EastMoneyFinancialPage: React.FC = () => {
   const [activeMainTab, setActiveMainTab] = useState(0); // 0=资产负债表，1=利润表

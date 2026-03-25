@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 东方财富综合涨停板行情页面
  * 包含：涨停股池、昨日涨停、强势股、次新股
  */
@@ -38,7 +38,7 @@ import {
   type StockZtPrevious,
   type StockZtStrong,
   type StockZtSubNew,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const EastMoneyZtBoardPage: React.FC = () => {
   const [loading, setLoading] = useState(false);

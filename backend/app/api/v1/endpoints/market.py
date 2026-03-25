@@ -11,7 +11,7 @@ from app.api.deps import OptionalCurrentUser
 from app.models.schemas import ResponseModel
 from app.storage.cache import cache_manager
 from app.config import settings
-import tushare as ts
+# import tushare as ts  # Tushare 已移除，使用其他数据源替代
 from app.services.data_persistence import data_persistence
 
 router = APIRouter()
@@ -55,10 +55,12 @@ async def get_market_ranking(
         # 获取全市场数据（添加超时控制）
         start_time = time.time()
         try:
+            # 使用 efinance 获取全市场数据
+            import efinance as ef
             # 使用 asyncio.wait_for 添加超时控制
             df = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ts.realtime_list(src=src)
+                    None, lambda: ef.stock.get_realtime_data()
                 ),
                 timeout=MARKET_RANKING_TIMEOUT
             )
@@ -221,9 +223,10 @@ async def get_market_overview(
         
         # 获取全市场数据（添加超时控制）
         try:
+            import efinance as ef
             df = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ts.realtime_list(src='sina')
+                    None, lambda: ef.stock.get_realtime_data()
                 ),
                 timeout=MARKET_OVERVIEW_TIMEOUT
             )

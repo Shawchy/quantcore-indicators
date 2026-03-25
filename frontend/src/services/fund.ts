@@ -17,6 +17,8 @@ export interface FundInfo {
   fund_company?: string           // 基金公司
   nav_update_date?: string        // 净值更新日期
   description?: string            // 简介
+  type?: string                   // 基金类型
+  fund_scale?: number             // 基金规模（亿元）
 }
 
 /** 基金代码信息 */

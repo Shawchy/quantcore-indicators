@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 股票列表页面
  * 展示沪深京三个交易所的股票列表
  */
@@ -35,7 +35,7 @@ import {
   type StockInfoSH,
   type StockInfoSZ,
   type StockInfoBJ,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const StockListPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);

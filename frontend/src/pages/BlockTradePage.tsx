@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 大宗交易页面
  * 包含：市场统计、每日明细
  */
@@ -40,7 +40,7 @@ import {
   eastMoneyApi,
   type StockDzjySctj,
   type StockDzjyMrmx,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const BlockTradePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0); // 0=市场统计，1=每日明细

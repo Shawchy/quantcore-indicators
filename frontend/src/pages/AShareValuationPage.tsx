@@ -1,4 +1,4 @@
-/**
+﻿/**
  * A 股估值指标页面
  * 包含：百度估值、个股估值、涨跌投票
  */
@@ -43,7 +43,7 @@ import {
   type StockZhValuationBaidu,
   type StockValueEM,
   type StockZhVoteBaidu,
-} from '../../services/eastmoney';
+} from '@/services/akshare/index';
 
 const AShareValuationPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0); // 0=百度估值，1=个股估值，2=涨跌投票

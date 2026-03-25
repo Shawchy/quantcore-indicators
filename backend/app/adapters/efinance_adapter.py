@@ -1,5 +1,7 @@
 import asyncio
 import random
+import time
+from datetime import datetime
 from typing import Optional, List, Dict, Any, Union
 from enum import Enum
 from loguru import logger
@@ -97,7 +99,7 @@ class FinancialPerformance(BaseModel):
 
 
 from app.utils.data_validator import validator
-from app.utils.tushare_cache_stats import api_call_cache
+from app.utils.api_cache_stats import api_call_cache
 
 
 class MarketQuote(BaseModel):
@@ -904,6 +906,69 @@ class EFinanceAdapter(BaseDataAdapter):
             
         except Exception as e:
             logger.error(f"获取历史资金流向失败 {stock_code}: {e}")
+            return []
+    
+    async def get_market_index_kline(
+        self,
+        index_code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[KLineData]:
+        """获取大盘指数 K 线数据
+        
+        Args:
+            index_code: 指数代码，如 000001（上证指数）、399001（深证成指）
+            start_date: 开始日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            end_date: 结束日期，格式：YYYY-MM-DD 或 YYYYMMDD
+            
+        Returns:
+            K 线数据列表
+            
+        Note:
+            efinance 获取指数数据使用 stock_zh_index_hist 接口
+        """
+        try:
+            # 处理日期格式
+            if start_date:
+                start_date = start_date.replace('-', '') if '-' in start_date else start_date
+            else:
+                start_date = '19900101'
+            
+            if end_date:
+                end_date = end_date.replace('-', '') if '-' in end_date else end_date
+            else:
+                end_date = datetime.now().strftime('%Y%m%d')
+            
+            # 使用 efinance 获取指数历史行情
+            df = ef.stock.zs_index_hist(symbol=index_code, start_date=start_date, end_date=end_date)
+            
+            if df is None or df.empty:
+                logger.warning(f"获取指数 K 线数据为空 {index_code}")
+                return []
+            
+            klines = []
+            for _, row in df.iterrows():
+                # 解析日期
+                date_str = str(row.get('日期', ''))
+                if len(date_str) == 8:
+                    date_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+                
+                klines.append(KLineData(
+                    code=index_code,
+                    date=date_str,
+                    open=float(row.get('开盘', 0)),
+                    high=float(row.get('最高', 0)),
+                    low=float(row.get('最低', 0)),
+                    close=float(row.get('收盘', 0)),
+                    volume=float(row.get('成交量', 0)) if '成交量' in row else 0,
+                    amount=float(row.get('成交额', 0)) if '成交额' in row else 0
+                ))
+            
+            logger.info(f"获取指数 K 线成功 {index_code}: {len(klines)}条")
+            return klines
+            
+        except Exception as e:
+            logger.error(f"获取指数 K 线失败 {index_code}: {e}")
             return []
     
     async def get_kline(

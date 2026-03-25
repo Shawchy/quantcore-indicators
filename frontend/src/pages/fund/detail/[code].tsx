@@ -6,28 +6,47 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  Box,
   Card,
-  Typography,
-  Space,
-  Row,
-  Col,
-  Statistic,
-  Tag,
+  CardBody,
+  Heading,
+  Text,
+  HStack,
+  VStack,
+  Badge,
   Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  TableContainer,
   Tabs,
-  Spin,
-  Alert,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
   Button,
-  Descriptions,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatHelpText,
+  SimpleGrid,
+  Divider,
+  Spinner,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
   Progress,
-} from 'antd';
+  Icon,
+  useToast,
+} from '@chakra-ui/react';
 import {
-  ArrowLeftOutlined,
-  StarOutlined,
-  StarFilled,
-  RiseOutlined,
-  FallOutlined,
-} from '@ant-design/icons';
+  ArrowBackIcon,
+  StarIcon,
+} from '@chakra-ui/icons';
+import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
 import {
   fundApi,
   FundInfo,
@@ -37,11 +56,10 @@ import {
   FundPositionInfo,
 } from '@/services/fund';
 
-const { Title, Text } = Typography;
-
 const FundDetail: React.FC = () => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [loading, setLoading] = useState(false);
   const [fundInfo, setFundInfo] = useState<FundInfo | null>(null);
@@ -96,27 +114,27 @@ const FundDetail: React.FC = () => {
       }
     } catch (error: any) {
       console.error('加载基金数据失败:', error);
+      toast({
+        title: '加载失败',
+        description: '加载基金数据失败',
+        status: 'error',
+        duration: 3000,
+      });
     } finally {
       setLoading(false);
     }
-  }, [code]);
+  }, [code, toast]);
 
   useEffect(() => {
     loadFundData();
   }, [loadFundData]);
 
-  // 处理添加到自选
-  const handleAddToWatchlist = () => {
-    setIsFavorite(!isFavorite);
-    // TODO: 实际添加到自选列表
-  };
-
   // 获取收益率颜色
   const getReturnColor = (value?: number) => {
-    if (value === undefined || value === null) return '#999';
-    if (value > 0) return '#ff4d4f';
-    if (value < 0) return '#52c41a';
-    return '#1890ff';
+    if (value === undefined || value === null) return 'gray.500';
+    if (value > 0) return 'red.500';
+    if (value < 0) return 'green.500';
+    return 'blue.500';
   };
 
   // 获取收益率文本
@@ -125,295 +143,205 @@ const FundDetail: React.FC = () => {
     return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
   };
 
+  // 获取基金类型标签
+  const getFundTypeTag = () => {
+    if (!fundInfo?.type) return null;
+    const typeMap: Record<string, { color: string; text: string }> = {
+      'stock': { color: 'red', text: '股票型' },
+      'bond': { color: 'blue', text: '债券型' },
+      'money': { color: 'green', text: '货币型' },
+      'index': { color: 'orange', text: '指数型' },
+      'mix': { color: 'purple', text: '混合型' },
+    };
+    const config = typeMap[fundInfo.type] || { color: 'gray', text: '未知' };
+    return <Badge colorScheme={config.color as any}>{config.text}</Badge>;
+  };
+
+  // 渲染基本信息
+  const renderBasicInfo = () => (
+    <Card>
+      <CardBody>
+        <VStack spacing={4} align="stretch">
+          <HStack justify="space-between">
+            <VStack align="start" spacing={1}>
+              <HStack>
+                <Heading size="lg">{fundInfo?.name}</Heading>
+                {getFundTypeTag()}
+              </HStack>
+              <Text color="gray.500">基金代码：{code}</Text>
+            </VStack>
+            <Button
+              leftIcon={<Icon as={StarIcon} fill={isFavorite ? 'yellow.500' : 'none'} color={isFavorite ? 'yellow.500' : 'inherit'} />}
+              onClick={() => {
+                setIsFavorite(!isFavorite);
+                toast({
+                  title: isFavorite ? '已取消收藏' : '已加入收藏',
+                  status: 'success',
+                  duration: 2000,
+                });
+              }}
+            >
+              {isFavorite ? '已收藏' : '收藏'}
+            </Button>
+          </HStack>
+
+          <Divider />
+
+          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
+            <Stat>
+              <StatLabel>最新净值</StatLabel>
+              <StatNumber>{fundInfo?.net_asset_value?.toFixed(4) || '--'}</StatNumber>
+            </Stat>
+            <Stat>
+              <StatLabel>日涨跌幅</StatLabel>
+              <StatNumber color={getReturnColor(fundInfo?.change_pct)}>
+                {getReturnText(fundInfo?.change_pct)}
+              </StatNumber>
+            </Stat>
+            <Stat>
+              <StatLabel>基金规模</StatLabel>
+              <StatNumber>{fundInfo?.fund_scale ? `${fundInfo.fund_scale.toFixed(2)}亿` : '--'}</StatNumber>
+            </Stat>
+            <Stat>
+              <StatLabel>基金公司</StatLabel>
+              <StatNumber fontSize="md">{fundInfo?.fund_company || '--'}</StatNumber>
+            </Stat>
+          </SimpleGrid>
+        </VStack>
+      </CardBody>
+    </Card>
+  );
+
+  // 渲染阶段涨跌幅
+  const renderPeriodChange = () => (
+    <Card>
+      <CardBody>
+        <Heading size="md" mb={4}>阶段涨跌幅</Heading>
+        <SimpleGrid columns={{ base: 2, sm: 3, md: 5 }} spacing={4}>
+          {periodChange.map((item, idx) => (
+            <VStack key={idx} p={3} borderWidth="1px" borderRadius="md">
+              <Text fontSize="sm" color="gray.500">{item.period}</Text>
+              <Text fontWeight="bold" color={getReturnColor(item.return_rate)} fontSize="lg">
+                {getReturnText(item.return_rate)}
+              </Text>
+              <Text fontSize="xs" color="gray.500">排名：{item.rank}</Text>
+            </VStack>
+          ))}
+        </SimpleGrid>
+      </CardBody>
+    </Card>
+  );
+
+  // 渲染资产配置
+  const renderAssetsAllocation = () => (
+    <Card>
+      <CardBody>
+        <Heading size="md" mb={4}>资产配置</Heading>
+        <VStack spacing={3} align="stretch">
+          {assetsAllocation.slice(0, 5).map((item, idx) => (
+            <VStack key={idx} align="stretch">
+              <HStack justify="space-between">
+                <Text>{item.asset_name}</Text>
+                <Text fontWeight="bold">{item.ratio?.toFixed(2)}%</Text>
+              </HStack>
+              <Progress
+                value={item.ratio || 0}
+                colorScheme={idx === 0 ? 'blue' : 'green'}
+                size="sm"
+                borderRadius="full"
+              />
+            </VStack>
+          ))}
+        </VStack>
+      </CardBody>
+    </Card>
+  );
+
+  // 渲染持仓占比
+  const renderPosition = () => (
+    <Card>
+      <CardBody>
+        <Heading size="md" mb={4}>持仓占比</Heading>
+        <TableContainer>
+          <Table variant="simple" size="sm">
+            <Thead>
+              <Tr>
+                <Th>股票代码</Th>
+                <Th>股票名称</Th>
+                <Th isNumeric>持仓占比</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {position.slice(0, 10).map((item, idx) => (
+                <Tr key={idx}>
+                  <Td fontWeight="bold">{item.stock_code}</Td>
+                  <Td>{item.stock_name}</Td>
+                  <Td isNumeric fontWeight="bold" color={getReturnColor(item.ratio)}>
+                    {item.ratio?.toFixed(2)}%
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </TableContainer>
+      </CardBody>
+    </Card>
+  );
+
   if (loading) {
     return (
-      <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spin size="large" tip="加载中..." />
-      </div>
+      <Box p={6} textAlign="center">
+        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
+        <Text mt={4}>加载中...</Text>
+      </Box>
     );
   }
 
   if (!fundInfo) {
     return (
-      <div style={{ padding: 48 }}>
-        <Alert
-          message="基金不存在"
-          description="未找到该基金的信息"
-          type="error"
-          showIcon
-        />
-      </div>
+      <Box p={6}>
+        <Alert status="error" borderRadius="md">
+          <AlertIcon />
+          <AlertTitle mr={2}>基金不存在</AlertTitle>
+          <AlertDescription>未找到该基金的信息</AlertDescription>
+        </Alert>
+      </Box>
     );
   }
 
-  // 基本信息表格列
-  const periodColumns = [
-    {
-      title: '时间段',
-      dataIndex: 'period',
-      key: 'period',
-      width: 100,
-    },
-    {
-      title: '收益率',
-      dataIndex: 'return_rate',
-      key: 'return_rate',
-      width: 120,
-      render: (value?: number) => (
-        <Text strong style={{ color: getReturnColor(value) }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '同类平均',
-      dataIndex: 'avg_return',
-      key: 'avg_return',
-      width: 120,
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value) }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '同类排行',
-      key: 'rank',
-      width: 150,
-      render: (_: any, record: FundPeriodChangeInfo) => {
-        if (!record.rank || !record.total_count) return '--';
-        const rankRate = record.rank_rate || 0;
-        let color = rankRate < 0.1 ? 'gold' : rankRate < 0.3 ? 'lime' : rankRate < 0.5 ? 'orange' : 'default';
-        return (
-          <Tag color={color}>
-            {record.rank}/{record.total_count} (前{(rankRate * 100).toFixed(1)}%)
-          </Tag>
-        );
-      },
-    },
-  ];
-
-  // 资产配置表格列
-  const assetsColumns = [
-    {
-      title: '报告期',
-      dataIndex: 'report_date',
-      key: 'report_date',
-      width: 120,
-    },
-    {
-      title: '股票比重',
-      dataIndex: 'stock_ratio',
-      key: 'stock_ratio',
-      width: 150,
-      render: (value?: number) => (
-        <Space>
-          <Progress
-            percent={value || 0}
-            size="small"
-            strokeColor={getReturnColor(value)}
-            format={(val?: number) => `${val?.toFixed(2)}%`}
-          />
-        </Space>
-      ),
-    },
-    {
-      title: '债券比重',
-      dataIndex: 'bond_ratio',
-      key: 'bond_ratio',
-      width: 150,
-      render: (value?: number) => (
-        <Progress
-          percent={value || 0}
-          size="small"
-          strokeColor="#1890ff"
-          format={(val?: number) => `${val?.toFixed(2)}%`}
-        />
-      ),
-    },
-    {
-      title: '现金比重',
-      dataIndex: 'cash_ratio',
-      key: 'cash_ratio',
-      width: 150,
-      render: (value?: number) => (
-        <Progress
-          percent={value || 0}
-          size="small"
-          strokeColor="#52c41a"
-          format={(val?: number) => `${val?.toFixed(2)}%`}
-        />
-      ),
-    },
-    {
-      title: '总规模 (亿)',
-      dataIndex: 'total_scale',
-      key: 'total_scale',
-      width: 120,
-      render: (value?: number) => `${value?.toFixed(2) || '--'}`,
-    },
-  ];
-
-  // 持仓占比表格列
-  const positionColumns = [
-    {
-      title: '股票代码',
-      dataIndex: 'stock_code',
-      key: 'stock_code',
-      width: 100,
-    },
-    {
-      title: '股票名称',
-      dataIndex: 'stock_name',
-      key: 'stock_name',
-      width: 120,
-    },
-    {
-      title: '持仓占比',
-      dataIndex: 'position_ratio',
-      key: 'position_ratio',
-      width: 120,
-      render: (value?: number) => `${value?.toFixed(2) || '--'}%`,
-    },
-    {
-      title: '较上期变化',
-      dataIndex: 'change',
-      key: 'change',
-      width: 120,
-      render: (value?: number) => (
-        <Text style={{ color: getReturnColor(value) }}>
-          {getReturnText(value)}
-        </Text>
-      ),
-    },
-    {
-      title: '报告期',
-      dataIndex: 'report_date',
-      key: 'report_date',
-      width: 120,
-    },
-  ];
-
   return (
-    <div style={{ padding: 24 }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Box p={6}>
+      <VStack spacing={6} align="stretch">
         {/* 返回按钮 */}
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/fund/ranking')}>
-          返回排行榜
-        </Button>
+        <HStack>
+          <Button
+            leftIcon={<ArrowBackIcon />}
+            variant="ghost"
+            onClick={() => navigate('/fund')}
+          >
+            返回
+          </Button>
+          <Heading size="lg">基金详情</Heading>
+        </HStack>
 
-        {/* 基本信息卡片 */}
-        <Card>
-          <Row gutter={16}>
-            <Col flex={1}>
-              <Space direction="vertical" size="small">
-                <Space>
-                  <Title level={3} style={{ margin: 0 }}>
-                    {fundInfo.name}
-                  </Title>
-                  <Tag color="blue">{fundInfo.code}</Tag>
-                  <Tag>{fundInfo.type === 'stock' ? '股票型' : fundInfo.type === 'bond' ? '债券型' : '混合型'}</Tag>
-                </Space>
-                <Text type="secondary">{fundInfo.fund_company}</Text>
-              </Space>
-            </Col>
-            <Col flex={1}>
-              <Row gutter={16} justify="end">
-                <Col>
-                  <Statistic
-                    title="最新净值"
-                    value={fundInfo.net_asset_value}
-                    precision={4}
-                    valueStyle={{ fontSize: 24 }}
-                  />
-                </Col>
-                <Col>
-                  <Statistic
-                    title="日涨跌"
-                    value={fundInfo.change_pct}
-                    precision={2}
-                    suffix="%"
-                    valueStyle={{
-                      fontSize: 24,
-                      color: getReturnColor(fundInfo.change_pct),
-                    }}
-                    prefix={fundInfo.change_pct && fundInfo.change_pct > 0 ? <RiseOutlined /> : fundInfo.change_pct && fundInfo.change_pct < 0 ? <FallOutlined /> : undefined}
-                  />
-                </Col>
-                <Col>
-                  <Button
-                    type={isFavorite ? 'primary' : 'default'}
-                    icon={isFavorite ? <StarFilled /> : <StarOutlined />}
-                    onClick={handleAddToWatchlist}
-                  >
-                    {isFavorite ? '已收藏' : '收藏'}
-                  </Button>
-                </Col>
-              </Row>
-            </Col>
-          </Row>
-
-          {/* 实时估算 */}
-          {realtimeRate && (
-            <Alert
-              message={`估算时间：${realtimeRate.estimate_time}`}
-              description={`估算涨跌幅：${getReturnText(realtimeRate.estimate_change_pct)}`}
-              type={realtimeRate.estimate_change_pct && realtimeRate.estimate_change_pct > 0 ? 'success' : 'warning'}
-              showIcon
-              style={{ marginTop: 16 }}
-            />
-          )}
-        </Card>
+        {/* 基本信息 */}
+        {renderBasicInfo()}
 
         {/* Tab 切换 */}
-        <Tabs
-          items={[
-            {
-              key: 'period',
-              label: '阶段涨跌幅',
-              children: (
-                <Card>
-                  <Table
-                    columns={periodColumns}
-                    dataSource={periodChange}
-                    pagination={false}
-                    rowKey="period"
-                  />
-                </Card>
-              ),
-            },
-            {
-              key: 'assets',
-              label: '资产配置',
-              children: (
-                <Card>
-                  <Table
-                    columns={assetsColumns}
-                    dataSource={assetsAllocation}
-                    pagination={false}
-                    rowKey="report_date"
-                  />
-                </Card>
-              ),
-            },
-            {
-              key: 'position',
-              label: '持仓详情',
-              children: (
-                <Card>
-                  <Table
-                    columns={positionColumns}
-                    dataSource={position}
-                    pagination={false}
-                    rowKey="stock_code"
-                  />
-                </Card>
-              ),
-            },
-          ]}
-        />
-      </Space>
-    </div>
+        <Tabs variant="enclosed">
+          <TabList>
+            <Tab>阶段涨跌幅</Tab>
+            <Tab>资产配置</Tab>
+            <Tab>持仓占比</Tab>
+          </TabList>
+          <TabPanels>
+            <TabPanel>{renderPeriodChange()}</TabPanel>
+            <TabPanel>{renderAssetsAllocation()}</TabPanel>
+            <TabPanel>{renderPosition()}</TabPanel>
+          </TabPanels>
+        </Tabs>
+      </VStack>
+    </Box>
   );
 };
 

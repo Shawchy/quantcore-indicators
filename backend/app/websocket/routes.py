@@ -9,8 +9,8 @@ from datetime import datetime
 import json
 
 from app.websocket.manager import connection_manager, ConnectionManager
-from app.api.deps import get_current_user_optional
-from app.models.unified_models import User
+from app.api.deps import get_optional_current_user
+from app.core.security import User
 from loguru import logger
 
 router = APIRouter()

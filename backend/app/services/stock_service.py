@@ -140,7 +140,8 @@ class StockService:
         adjust: str = "qfq",
         use_cache: bool = True,
         persist: bool = True,
-        priority_load: bool = True
+        priority_load: bool = True,
+        freq: str = "daily"
     ) -> Dict[str, Any]:
         """
         获取 K 线数据（按需加载）
@@ -150,6 +151,16 @@ class StockService:
         2. 如果数据库没有，才从数据源拉取
         3. 拉取后保存到数据库供后续使用
         
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+            use_cache: 是否使用缓存
+            persist: 是否持久化
+            priority_load: 是否优先加载
+            freq: 频率 (daily/weekly/monthly/1m/5m/15m/30m/60m)
+        
         Returns:
             {
                 "status": "complete",
@@ -158,7 +169,19 @@ class StockService:
                 "background_loading": False
             }
         """
-        # 按需加载：先查数据库，没有才拉取
+        # 分钟线直接走数据源
+        if freq in ['1m', '5m', '15m', '30m', '60m']:
+            klines = await self._load_minute_kline(
+                code, freq, start_date, end_date, adjust
+            )
+            return {
+                "status": "complete",
+                "data": klines,
+                "coverage": None,
+                "background_loading": False
+            }
+        
+        # 日周月线：按需加载
         klines = await self._load_kline_on_demand(
             code, start_date, end_date, adjust, use_cache, persist
         )
@@ -168,6 +191,55 @@ class StockService:
             "coverage": None,
             "background_loading": False
         }
+    
+    async def _load_minute_kline(
+        self,
+        code: str,
+        freq: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        adjust: str
+    ) -> List[Dict[str, Any]]:
+        """
+        加载分钟线数据（实时从数据源获取）
+        
+        Args:
+            code: 股票代码
+            freq: 分钟频率 (1m/5m/15m/30m/60m)
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+        
+        Returns:
+            K线数据列表
+        """
+        try:
+            # 从数据源获取分钟线
+            klines = await data_source_manager.get_kline_data(
+                code=code,
+                start_date=start_date,
+                end_date=end_date,
+                k_type=freq,
+                adjust=adjust
+            )
+            
+            # 转换为字典列表
+            return [
+                {
+                    "date": k.date,
+                    "open": k.open,
+                    "high": k.high,
+                    "low": k.low,
+                    "close": k.close,
+                    "volume": k.volume,
+                    "amount": getattr(k, 'amount', None),
+                    "turnover_rate": getattr(k, 'turnover_rate', None)
+                }
+                for k in klines
+            ]
+        except Exception as e:
+            logger.error(f"获取分钟线数据失败 {code} {freq}: {e}")
+            return []
     
     async def _load_kline_on_demand(
         self,

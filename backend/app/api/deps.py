@@ -12,10 +12,18 @@ from app.core.security import (
     TokenData,
     User
 )
+from app.adapters.factory import DataSourceManager
+from app.adapters.akshare_adapter import AkShareAdapter
 
 
 # HTTP Bearer Token 认证
 security = HTTPBearer(auto_error=False)
+
+
+async def get_akshare_adapter() -> AkShareAdapter:
+    """获取 AkShare 数据源适配器"""
+    manager = DataSourceManager()
+    return manager.get_adapter("akshare")
 
 
 async def get_current_user(

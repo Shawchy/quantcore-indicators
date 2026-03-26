@@ -26,6 +26,7 @@ import { screenerApi, sectorApi, marketIndexApi } from '../services/api'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { INDEX_CODES } from '../constants'
 import { getKlineOption } from '../utils/chartConfig'
+import { getMarketColor } from '../utils/marketColors'
 import { StatCard } from '../components/StatCard'
 import { RankBadge } from '../components/RankBadge'
 import { SmartDateSelector } from '../components/SmartDateSelector'
@@ -206,12 +207,12 @@ const Dashboard = () => {
           value={realtimeLoading ? <Spinner size="sm" /> : (shIndex ? shIndex.price.toFixed(2) : '-')}
           helpText={shIndex ? `${shIndex.change >= 0 ? '+' : ''}${shIndex.change?.toFixed(2)} (${shIndex.change_pct?.toFixed(2)}%)` : ''}
           icon={FiBarChart}
-          accentColor={shIndex?.change >= 0 ? 'green' : 'red'}
+          accentColor={shIndex?.change >= 0 ? 'red' : 'green'}
         />
         <StatCard
           label="市场成交额"
-          value={shIndex ? `${(shIndex.amount / 100000000).toFixed(2)}亿` : '-'}
-          helpText="上证指数"
+          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.data?.turnover ? `${(marketStats.data.turnover / 100000000).toFixed(2)}亿` : '-')}
+          helpText="全市场"
           icon={FiTrendingUp}
           accentColor="orange"
         />
@@ -279,10 +280,10 @@ const Dashboard = () => {
                       </Text>
                     </VStack>
                     <VStack align="end" spacing={1}>
-                      <Text fontSize="lg" fontWeight="bold" color={item.change >= 0 ? 'green.500' : 'red.500'}>
+                      <Text fontSize="lg" fontWeight="bold" color={getMarketColor(item.change)}>
                         {item.price?.toFixed(2)}
                       </Text>
-                      <Text fontSize="xs" color={item.change >= 0 ? 'green.500' : 'red.500'}>
+                      <Text fontSize="xs" color={getMarketColor(item.change)}>
                         {item.change >= 0 ? '+' : ''}{item.change?.toFixed(2)} ({item.change_pct?.toFixed(2)}%)
                       </Text>
                     </VStack>
@@ -334,7 +335,9 @@ const Dashboard = () => {
                       <Text fontWeight="medium" fontSize="sm">{sector.name}</Text>
                     </HStack>
                     <HStack spacing={4}>
-                      <Text fontSize="sm" color="gray.500">{sector.change_pct >= 0 ? '+' : ''}{(sector.change_pct * 100).toFixed(2)}%</Text>
+                      <Text fontSize="sm" color={getMarketColor(sector.change_pct)}>
+                        {sector.change_pct >= 0 ? '+' : ''}{(sector.change_pct || 0).toFixed(2)}%
+                      </Text>
                     </HStack>
                   </HStack>
                 ))}

@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, Type
+from typing import Optional, Dict, Any, Type, Union, List
 from enum import Enum
 from loguru import logger
 
@@ -10,6 +10,7 @@ from .base import (
     SectorInfo,
     ChipData
 )
+from app.models.schemas import FundInfo
 from .akshare_adapter import AkShareAdapter
 from .baostock_adapter import BaostockAdapter
 from .yfinance_adapter import YFinanceAdapter
@@ -114,7 +115,10 @@ class DataSourceManager:
         source_type: Optional[str] = None
     ) -> list[KLineData]:
         adapter = self.get_adapter(source_type)
-        return await adapter.get_kline(code, start_date, end_date, adjust)
+        # 将 adjust 转换为 fqt 参数传递给适配器
+        fqt_map = {'qfk': 1, 'qfq': 1, 'hfq': 2, '': 0}
+        fqt = fqt_map.get(adjust, 1)
+        return await adapter.get_kline(code, start_date, end_date, fqt=fqt)
     
     async def get_market_index_kline(
         self,
@@ -147,6 +151,92 @@ class DataSourceManager:
     ) -> list[ChipData]:
         adapter = self.get_adapter(source_type)
         return await adapter.get_chip_data(code, start_date, end_date)
+    
+    # ===== 基金相关方法 =====
+    
+    async def get_fund_codes(
+        self,
+        fund_type: Optional[str] = None,
+        source_type: Optional[str] = None
+    ) -> list[dict]:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_codes(fund_type)
+    
+    async def get_fund_base_info(
+        self,
+        fund_codes: Union[str, list[str]],
+        source_type: Optional[str] = None
+    ) -> Union[FundInfo, list[FundInfo]]:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_base_info(fund_codes)
+    
+    async def get_fund_realtime_increase_rate(
+        self,
+        fund_codes: Union[str, list[str]],
+        source_type: Optional[str] = None
+    ) -> Union[dict, list[dict]]:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_realtime_increase_rate(fund_codes)
+    
+    async def get_fund_quote_history(
+        self,
+        fund_code: str,
+        pz: int = 40000,
+        source_type: Optional[str] = None
+    ) -> list[dict]:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_quote_history(fund_code, pz)
+    
+    async def get_fund_quote_history_multi(
+        self,
+        fund_codes: list[str],
+        pz: int = 40000,
+        source_type: Optional[str] = None
+    ) -> dict:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_quote_history_multi(fund_codes, pz)
+    
+    async def get_fund_invest_position(
+        self,
+        fund_code: str,
+        dates: Optional[Union[str, list[str]]] = None,
+        source_type: Optional[str] = None
+    ) -> list[dict]:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_invest_position(fund_code, dates)
+    
+    async def get_fund_period_change(
+        self,
+        fund_code: str,
+        source_type: Optional[str] = None
+    ) -> list[dict]:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_period_change(fund_code)
+    
+    async def get_fund_types_percentage(
+        self,
+        fund_code: str,
+        dates: Optional[Union[str, list[str]]] = None,
+        source_type: Optional[str] = None
+    ) -> list[dict]:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_fund_types_percentage(fund_code, dates)
+    
+    async def get_belong_board(
+        self,
+        code: str,
+        source_type: Optional[str] = None
+    ) -> list:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_belong_board(code)
+    
+    async def get_today_bill(
+        self,
+        trade_date: Optional[str] = None,
+        source_type: Optional[str] = None
+    ) -> list:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_today_bill(trade_date)
     
     async def close(self) -> None:
         await self._factory.close_all()

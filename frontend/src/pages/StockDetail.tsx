@@ -40,7 +40,8 @@ import { stockApi, realtimeApi, boardApi, capitalFlowApi, shareholderApi } from 
 import RealtimeQuotePanel from '../components/RealtimeQuote'
 import RealtimeQuoteWS from '../components/RealtimeQuoteWS'
 import TickDataTable from '../components/TickDataTable'
-import { KLineChart, IndicatorChart } from '../components/KLineChart'
+import { ProKLineChart as KLineChart } from '../components/charts/KLineChart'
+import { IndicatorChart } from '../components/KLineChart'
 import type { RealtimeQuoteData, TickData, StockBasic, KLineData, TechnicalIndicator, RealtimeQuote } from '../types'
 import { useEffect, useState } from 'react'
 

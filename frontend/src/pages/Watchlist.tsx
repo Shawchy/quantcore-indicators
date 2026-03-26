@@ -39,14 +39,20 @@ import {
   TabPanels,
   Tab,
   TabPanel,
+  Box,
+  Flex,
+  Icon,
+  useColorModeValue,
+  Divider,
 } from '@chakra-ui/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FiTrash2, FiEdit, FiPlus, FiRefreshCw, FiStar } from 'react-icons/fi'
+import { FiTrash2, FiEdit, FiPlus, FiRefreshCw, FiStar, FiTrendingUp, FiTrendingDown, FiActivity } from 'react-icons/fi'
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { watchlistApi } from '../services/api'
 import { fundApi } from '../services/fund'
 import { FundInfo } from '../services/fund'
+import { getMarketColor } from '../utils/marketColors'
 
 const Watchlist = () => {
   const queryClient = useQueryClient()
@@ -69,13 +75,16 @@ const Watchlist = () => {
   })
 
   // 基金自选列表（从本地存储或 API 获取）
-  const { data: fundWatchlistData, isLoading: fundLoading } = useQuery({
+  const { data: fundWatchlistData, isLoading: fundLoading, refetch: refetchFundWatchlist } = useQuery({
     queryKey: ['fundWatchlist'],
     queryFn: async () => {
       // 从本地存储获取基金自选代码
       const stored = localStorage.getItem('fundWatchlist')
       const codes = stored ? JSON.parse(stored) : []
-      if (codes.length === 0) return []
+      
+      if (codes.length === 0) {
+        return []
+      }
       
       // 批量获取基金信息
       const infoRes = await fundApi.getFundBaseInfo(codes)
@@ -90,7 +99,7 @@ const Watchlist = () => {
   })
 
   // 基金行情数据
-  const { data: fundQuotesData, isLoading: fundQuotesLoading } = useQuery({
+  const { data: fundQuotesData, isLoading: fundQuotesLoading, refetch: refetchFundQuotes } = useQuery({
     queryKey: ['fundWatchlistQuotes'],
     queryFn: async () => {
       const stored = localStorage.getItem('fundWatchlist')
@@ -171,7 +180,30 @@ const Watchlist = () => {
 
   const confirmAdd = () => {
     if (selectedType === 'stock') {
-      // 股票添加逻辑（原有）
+      // 股票添加到自选 - 调用 API
+      watchlistApi.add(addCode)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['watchlist'] })
+          queryClient.invalidateQueries({ queryKey: ['watchlistQuotes'] })
+          toast({
+            title: '添加成功',
+            description: `已添加股票 ${addCode}`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          })
+          setAddCode('')
+          onAddClose()
+        })
+        .catch((err) => {
+          toast({
+            title: '添加失败',
+            description: err.message || '请重试',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          })
+        })
     } else {
       // 基金添加到自选
       const stored = localStorage.getItem('fundWatchlist')
@@ -179,8 +211,11 @@ const Watchlist = () => {
       if (!codes.includes(addCode)) {
         codes.push(addCode)
         localStorage.setItem('fundWatchlist', JSON.stringify(codes))
-        queryClient.invalidateQueries({ queryKey: ['fundWatchlist'] })
-        queryClient.invalidateQueries({ queryKey: ['fundWatchlistQuotes'] })
+        
+        // 手动刷新基金列表和行情数据
+        refetchFundWatchlist()
+        refetchFundQuotes()
+        
         toast({
           title: '添加成功',
           description: `已添加基金 ${addCode}`,
@@ -188,10 +223,18 @@ const Watchlist = () => {
           duration: 3000,
           isClosable: true,
         })
+        setAddCode('')
+        onAddClose()
+      } else {
+        toast({
+          title: '添加失败',
+          description: '该基金已在自选列表中',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        })
       }
     }
-    setAddCode('')
-    onAddClose()
   }
 
   // 获取涨跌幅颜色
@@ -204,74 +247,152 @@ const Watchlist = () => {
 
   // 渲染股票列表
   const renderStockWatchlist = () => {
+    const cardBg = useColorModeValue('white', 'gray.800')
+    const cardHoverBg = useColorModeValue('gray.50', 'gray.700')
+    const borderColor = useColorModeValue('gray.200', 'gray.700')
+    
     if (stockLoading || quotesLoading) {
       return (
-        <VStack py={8}>
-          <Spinner size="xl" />
-          <Text>加载中...</Text>
+        <VStack py={12}>
+          <Spinner size="xl" color="blue.500" thickness="3px" />
+          <Text color="gray.500" fontSize="sm">加载自选股数据...</Text>
         </VStack>
       )
     }
 
-    const watchlist = stockWatchlistData || []
-    const quotes = quotesData || []
+    const watchlist = (stockWatchlistData?.data || []).map((item: any) => item.code || item)
+    const quotes = (quotesData?.data || []).filter((q: any) => q !== null && q !== undefined)
 
     if (watchlist.length === 0) {
       return (
-        <VStack py={8}>
-          <Text color="gray.500">暂无自选股，点击右上角添加</Text>
-          <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={handleAddToWatchlist}>
+        <VStack py={16} spacing={6}>
+          <Icon as={FiStar} w={16} h={16} color="gray.300" />
+          <VStack spacing={2}>
+            <Text color="gray.500" fontSize="lg">暂无自选股</Text>
+            <Text color="gray.400" fontSize="sm">点击右上角添加您关注的股票</Text>
+          </VStack>
+          <Button 
+            leftIcon={<FiPlus />} 
+            colorScheme="blue" 
+            onClick={handleAddToWatchlist}
+            size="md"
+          >
             添加自选股
           </Button>
         </VStack>
       )
     }
 
+    // 统计涨跌家数
+    const riseCount = quotes.filter((q: any) => q.change_percent !== null && q.change_percent !== undefined && q.change_percent > 0).length
+    const fallCount = quotes.filter((q: any) => q.change_percent !== null && q.change_percent !== undefined && q.change_percent < 0).length
+    const flatCount = quotes.filter((q: any) => q.change_percent !== null && q.change_percent !== undefined && q.change_percent === 0).length
+
     return (
       <>
-        <HStack mb={4}>
-          <Button leftIcon={<FiPlus />} size="sm" colorScheme="blue" onClick={handleAddToWatchlist}>
-            添加股票
-          </Button>
-          <IconButton
-            aria-label="刷新"
-            icon={<FiRefreshCw />}
-            size="sm"
-            onClick={() => refetch()}
-          />
-        </HStack>
-        <TableContainer>
+        {/* 工具栏 */}
+        <Flex justify="space-between" align="center" mb={4}>
+          <HStack spacing={2}>
+            <Button 
+              leftIcon={<FiPlus />} 
+              size="sm" 
+              colorScheme="blue" 
+              onClick={handleAddToWatchlist}
+              variant="solid"
+            >
+              添加股票
+            </Button>
+            <IconButton
+              aria-label="刷新"
+              icon={<FiRefreshCw />}
+              size="sm"
+              onClick={() => refetch()}
+              variant="outline"
+              colorScheme="blue"
+            />
+          </HStack>
+          
+          {/* 涨跌统计 */}
+          <HStack spacing={3} fontSize="xs">
+            <Badge colorScheme="red" px={2} py={1} borderRadius="md">
+              涨 {riseCount}
+            </Badge>
+            <Badge colorScheme="green" px={2} py={1} borderRadius="md">
+              跌 {fallCount}
+            </Badge>
+            <Badge colorScheme="gray" px={2} py={1} borderRadius="md">
+              平 {flatCount}
+            </Badge>
+          </HStack>
+        </Flex>
+        
+        {/* 表格 */}
+        <TableContainer borderRadius="lg" border="1px" borderColor={borderColor}>
           <Table variant="simple" size="sm">
-            <Thead>
+            <Thead bg={cardBg}>
               <Tr>
-                <Th>代码</Th>
-                <Th>名称</Th>
-                <Th isNumeric>最新价</Th>
-                <Th isNumeric>涨跌幅</Th>
-                <Th isNumeric>成交量</Th>
-                <Th isNumeric>成交额</Th>
-                <Th>操作</Th>
+                <Th color="gray.500" fontSize="xs" fontWeight="medium">代码</Th>
+                <Th color="gray.500" fontSize="xs" fontWeight="medium">名称</Th>
+                <Th isNumeric color="gray.500" fontSize="xs" fontWeight="medium">最新价</Th>
+                <Th isNumeric color="gray.500" fontSize="xs" fontWeight="medium">涨跌幅</Th>
+                <Th isNumeric color="gray.500" fontSize="xs" fontWeight="medium">成交量</Th>
+                <Th isNumeric color="gray.500" fontSize="xs" fontWeight="medium">成交额</Th>
+                <Th color="gray.500" fontSize="xs" fontWeight="medium">操作</Th>
               </Tr>
             </Thead>
             <Tbody>
-              {watchlist.map((code: string) => {
+              {watchlist.map((code: string, index: number) => {
                 const quote = quotes.find((q: any) => q.code === code)
+                const isRising = quote?.change_percent !== null && quote?.change_percent !== undefined && quote.change_percent > 0
+                const isFalling = quote?.change_percent !== null && quote?.change_percent !== undefined && quote.change_percent < 0
+                
                 return (
-                  <Tr key={code} _hover={{ bg: 'gray.50' }} cursor="pointer">
+                  <Tr 
+                    key={code} 
+                    _hover={{ bg: cardHoverBg }} 
+                    cursor="pointer"
+                    onClick={() => navigate(`/stock/${code}`)}
+                    bg={index % 2 === 0 ? 'transparent' : useColorModeValue('gray.50', 'gray.750')}
+                  >
                     <Td>
-                      <Text fontWeight="bold" color="blue.600">{code}</Text>
+                      <VStack align="start" spacing={1}>
+                        <Text fontWeight="bold" color="blue.600" fontSize="sm">{code}</Text>
+                      </VStack>
                     </Td>
-                    <Td>{quote?.name || code}</Td>
+                    <Td>
+                      <Text fontSize="sm" fontWeight="medium">{quote?.name || code}</Text>
+                    </Td>
                     <Td isNumeric>
-                      <Text fontWeight="bold">{quote?.price?.toFixed(2) || '--'}</Text>
+                      <Text fontWeight="bold" fontSize="sm">{quote?.price?.toFixed(2) || '--'}</Text>
                     </Td>
                     <Td isNumeric>
-                      <Badge colorScheme={quote?.changePercent && quote.changePercent > 0 ? 'red' : quote?.changePercent && quote.changePercent < 0 ? 'green' : 'gray'}>
-                        {quote?.changePercent ? `${quote.changePercent > 0 ? '+' : ''}${quote.changePercent.toFixed(2)}%` : '--'}
-                      </Badge>
+                      {quote?.change_percent !== null && quote?.change_percent !== undefined ? (
+                        <HStack justify="end" spacing={1}>
+                          <Icon 
+                            as={isRising ? FiTrendingUp : isFalling ? FiTrendingDown : FiActivity} 
+                            color={getMarketColor(quote.change_percent)}
+                            w={4}
+                            h={4}
+                          />
+                          <Badge 
+                            colorScheme={isRising ? 'red' : isFalling ? 'green' : 'gray'}
+                            fontSize="xs"
+                            px={2}
+                            py={1}
+                          >
+                            {isRising ? '+' : ''}{quote.change_percent.toFixed(2)}%
+                          </Badge>
+                        </HStack>
+                      ) : (
+                        <Text fontSize="sm" color="gray.400">--</Text>
+                      )}
                     </Td>
-                    <Td isNumeric>{quote?.volume || '--'}</Td>
-                    <Td isNumeric>{quote?.amount || '--'}</Td>
+                    <Td isNumeric>
+                      <Text fontSize="sm" color="gray.600">{quote?.volume || '--'}</Text>
+                    </Td>
+                    <Td isNumeric>
+                      <Text fontSize="sm" color="gray.600">{quote?.amount || '--'}</Text>
+                    </Td>
                     <Td>
                       <HStack spacing={2}>
                         <IconButton
@@ -284,6 +405,7 @@ const Watchlist = () => {
                             e.stopPropagation()
                             handleDelete(code, 'stock')
                           }}
+                          _hover={{ bg: 'red.50' }}
                         />
                       </HStack>
                     </Td>
@@ -299,78 +421,165 @@ const Watchlist = () => {
 
   // 渲染基金列表
   const renderFundWatchlist = () => {
+    const cardBg = useColorModeValue('white', 'gray.800')
+    const cardHoverBg = useColorModeValue('gray.50', 'gray.700')
+    const borderColor = useColorModeValue('gray.200', 'gray.700')
+    
     if (fundLoading || fundQuotesLoading) {
       return (
-        <VStack py={8}>
-          <Spinner size="xl" />
-          <Text>加载中...</Text>
+        <VStack py={12}>
+          <Spinner size="xl" color="blue.500" thickness="3px" />
+          <Text color="gray.500" fontSize="sm">加载自选基金数据...</Text>
         </VStack>
       )
     }
 
-    const fundList = (fundWatchlistData || []) as FundInfo[]
+    const fundList = (fundWatchlistData || []).filter((f: any) => f !== null && f !== undefined) as FundInfo[]
     const fundRates = fundQuotesData || []
 
     if (fundList.length === 0) {
       return (
-        <VStack py={8}>
-          <Text color="gray.500">暂无自选基金，点击右上角添加</Text>
-          <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={handleAddToWatchlist}>
+        <VStack py={16} spacing={6}>
+          <Icon as={FiStar} w={16} h={16} color="gray.300" />
+          <VStack spacing={2}>
+            <Text color="gray.500" fontSize="lg">暂无自选基金</Text>
+            <Text color="gray.400" fontSize="sm">点击右上角添加您关注的基金</Text>
+          </VStack>
+          <Button 
+            leftIcon={<FiPlus />} 
+            colorScheme="blue" 
+            onClick={handleAddToWatchlist}
+            size="md"
+          >
             添加自选基金
           </Button>
         </VStack>
       )
     }
 
+    // 统计涨跌家数
+    const riseCount = fundList.filter((f: any) => f.change_pct !== null && f.change_pct !== undefined && f.change_pct > 0).length
+    const fallCount = fundList.filter((f: any) => f.change_pct !== null && f.change_pct !== undefined && f.change_pct < 0).length
+
     return (
       <>
-        <HStack mb={4}>
-          <Button leftIcon={<FiPlus />} size="sm" colorScheme="blue" onClick={handleAddToWatchlist}>
-            添加基金
-          </Button>
-        </HStack>
-        <TableContainer>
+        {/* 工具栏 */}
+        <Flex justify="space-between" align="center" mb={4}>
+          <HStack spacing={2}>
+            <Button 
+              leftIcon={<FiPlus />} 
+              size="sm" 
+              colorScheme="blue" 
+              onClick={handleAddToWatchlist}
+              variant="solid"
+            >
+              添加基金
+            </Button>
+          </HStack>
+          
+          {/* 涨跌统计 */}
+          <HStack spacing={3} fontSize="xs">
+            <Badge colorScheme="red" px={2} py={1} borderRadius="md">
+              涨 {riseCount}
+            </Badge>
+            <Badge colorScheme="green" px={2} py={1} borderRadius="md">
+              跌 {fallCount}
+            </Badge>
+          </HStack>
+        </Flex>
+        
+        {/* 表格 */}
+        <TableContainer borderRadius="lg" border="1px" borderColor={borderColor}>
           <Table variant="simple" size="sm">
-            <Thead>
+            <Thead bg={cardBg}>
               <Tr>
-                <Th>代码</Th>
-                <Th>名称</Th>
-                <Th isNumeric>最新净值</Th>
-                <Th isNumeric>日涨跌</Th>
-                <Th isNumeric>估算涨跌幅</Th>
-                <Th>类型</Th>
-                <Th>操作</Th>
+                <Th color="gray.500" fontSize="xs" fontWeight="medium">代码</Th>
+                <Th color="gray.500" fontSize="xs" fontWeight="medium">名称</Th>
+                <Th isNumeric color="gray.500" fontSize="xs" fontWeight="medium">最新净值</Th>
+                <Th isNumeric color="gray.500" fontSize="xs" fontWeight="medium">日涨跌</Th>
+                <Th isNumeric color="gray.500" fontSize="xs" fontWeight="medium">估算涨幅</Th>
+                <Th color="gray.500" fontSize="xs" fontWeight="medium">类型</Th>
+                <Th color="gray.500" fontSize="xs" fontWeight="medium">操作</Th>
               </Tr>
             </Thead>
             <Tbody>
-              {fundList.map((fund: FundInfo) => {
+              {fundList.map((fund: FundInfo, index: number) => {
                 const rate = fundRates.find((r: any) => r.code === fund.code)
+                const isRising = fund.change_pct !== null && fund.change_pct !== undefined && fund.change_pct > 0
+                const isEstimateRising = rate?.estimate_change_pct !== null && rate?.estimate_change_pct !== undefined && rate.estimate_change_pct > 0
+                
                 return (
                   <Tr 
                     key={fund.code} 
-                    _hover={{ bg: 'gray.50' }} 
+                    _hover={{ bg: cardHoverBg }} 
                     cursor="pointer"
                     onClick={() => navigate(`/fund/detail/${fund.code}`)}
+                    bg={index % 2 === 0 ? 'transparent' : useColorModeValue('gray.50', 'gray.750')}
                   >
                     <Td>
-                      <Text fontWeight="bold" color="blue.600">{fund.code}</Text>
-                    </Td>
-                    <Td>{fund.name}</Td>
-                    <Td isNumeric>
-                      <Text fontWeight="bold">{fund.net_asset_value?.toFixed(4) || '--'}</Text>
-                    </Td>
-                    <Td isNumeric>
-                      <Badge colorScheme={fund.change_pct && fund.change_pct > 0 ? 'red' : fund.change_pct && fund.change_pct < 0 ? 'green' : 'gray'}>
-                        {fund.change_pct ? `${fund.change_pct > 0 ? '+' : ''}${fund.change_pct.toFixed(2)}%` : '--'}
-                      </Badge>
-                    </Td>
-                    <Td isNumeric>
-                      <Badge colorScheme={rate?.estimate_change_pct && rate.estimate_change_pct > 0 ? 'red' : rate?.estimate_change_pct && rate.estimate_change_pct < 0 ? 'green' : 'gray'}>
-                        {rate?.estimate_change_pct ? `${rate.estimate_change_pct > 0 ? '+' : ''}${rate.estimate_change_pct.toFixed(2)}%` : '--'}
-                      </Badge>
+                      <VStack align="start" spacing={1}>
+                        <Text fontWeight="bold" color="blue.600" fontSize="sm">{fund.code}</Text>
+                      </VStack>
                     </Td>
                     <Td>
-                      <Badge>{fund.type === 'stock' ? '股票型' : fund.type === 'bond' ? '债券型' : '混合型'}</Badge>
+                      <Text fontSize="sm" fontWeight="medium">{fund.name}</Text>
+                    </Td>
+                    <Td isNumeric>
+                      <Text fontWeight="bold" fontSize="sm">{fund.net_asset_value?.toFixed(4) || '--'}</Text>
+                    </Td>
+                    <Td isNumeric>
+                      {fund.change_pct !== null && fund.change_pct !== undefined ? (
+                        <HStack justify="end" spacing={1}>
+                          <Icon 
+                            as={isRising ? FiTrendingUp : FiTrendingDown} 
+                            color={getMarketColor(fund.change_pct)}
+                            w={4}
+                            h={4}
+                          />
+                          <Badge 
+                            colorScheme={isRising ? 'red' : 'green'}
+                            fontSize="xs"
+                            px={2}
+                            py={1}
+                          >
+                            {isRising ? '+' : ''}{fund.change_pct.toFixed(2)}%
+                          </Badge>
+                        </HStack>
+                      ) : (
+                        <Text fontSize="sm" color="gray.400">--</Text>
+                      )}
+                    </Td>
+                    <Td isNumeric>
+                      {rate?.estimate_change_pct !== null && rate?.estimate_change_pct !== undefined ? (
+                        <HStack justify="end" spacing={1}>
+                          <Icon 
+                            as={isEstimateRising ? FiTrendingUp : FiTrendingDown} 
+                            color={getMarketColor(rate.estimate_change_pct)}
+                            w={4}
+                            h={4}
+                          />
+                          <Badge 
+                            colorScheme={isEstimateRising ? 'red' : 'green'}
+                            fontSize="xs"
+                            px={2}
+                            py={1}
+                          >
+                            {isEstimateRising ? '+' : ''}{rate.estimate_change_pct.toFixed(2)}%
+                          </Badge>
+                        </HStack>
+                      ) : (
+                        <Text fontSize="sm" color="gray.400">--</Text>
+                      )}
+                    </Td>
+                    <Td>
+                      <Badge 
+                        colorScheme={fund.type === 'stock' ? 'red' : fund.type === 'bond' ? 'blue' : 'orange'}
+                        fontSize="xs"
+                        px={2}
+                        py={1}
+                      >
+                        {fund.type === 'stock' ? '股票型' : fund.type === 'bond' ? '债券型' : '混合型'}
+                      </Badge>
                     </Td>
                     <Td>
                       <HStack spacing={2}>
@@ -384,6 +593,7 @@ const Watchlist = () => {
                             e.stopPropagation()
                             handleDelete(fund.code, 'fund')
                           }}
+                          _hover={{ bg: 'red.50' }}
                         />
                       </HStack>
                     </Td>
@@ -402,16 +612,44 @@ const Watchlist = () => {
       <Card>
         <CardBody>
           <VStack spacing={4}>
-            <HStack justify="space-between">
-              <Heading size="lg">我的自选</Heading>
-            </HStack>
+            {/* 头部标题 */}
+            <Flex justify="space-between" align="center" w="full">
+              <HStack spacing={3}>
+                <Box 
+                  p={2} 
+                  bg="blue.500" 
+                  borderRadius="lg"
+                  boxShadow="md"
+                >
+                  <Icon as={FiStar} w={6} h={6} color="white" />
+                </Box>
+                <VStack align="start" spacing={0}>
+                  <Heading size="lg" fontWeight="bold">我的自选</Heading>
+                  <Text fontSize="xs" color="gray.500">实时跟踪您关注的股票和基金</Text>
+                </VStack>
+              </HStack>
+            </Flex>
 
-            <Tabs variant="enclosed-colored" onChange={(index) => {
+            {/* 分隔线 */}
+            <Divider />
+
+            {/* Tab 切换 */}
+            <Tabs variant="enclosed-colored" w="full" onChange={(index) => {
               setSelectedType(index === 0 ? 'stock' : 'fund')
             }}>
               <TabList>
-                <Tab>自选股</Tab>
-                <Tab>自选基金</Tab>
+                <Tab _selected={{ color: 'blue.500', bg: 'blue.50' }}>
+                  <HStack spacing={2}>
+                    <Icon as={FiActivity} w={4} h={4} />
+                    <Text>自选股</Text>
+                  </HStack>
+                </Tab>
+                <Tab _selected={{ color: 'blue.500', bg: 'blue.50' }}>
+                  <HStack spacing={2}>
+                    <Icon as={FiTrendingUp} w={4} h={4} />
+                    <Text>自选基金</Text>
+                  </HStack>
+                </Tab>
               </TabList>
               <TabPanels>
                 <TabPanel p={0} pt={4}>

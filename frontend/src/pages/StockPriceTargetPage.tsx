@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 美港目标价页面
  * 展示美股和港股的机构目标价评级
  */
@@ -156,7 +156,7 @@ const StockPriceTargetPage: React.FC = () => {
                   <Td isNumeric>{formatTarget(item.latest_target)}</Td>
                   <Td isNumeric>
                     {change !== null ? (
-                      <Badge colorScheme={change > 0 ? 'green' : 'red'}>
+                      <Badge colorScheme={change > 0 ? 'red' : 'green'}>
                         {change > 0 ? '+' : ''}{change.toFixed(2)}%
                       </Badge>
                     ) : (

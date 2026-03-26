@@ -10,8 +10,221 @@ from loguru import logger
 from app.models.schemas import ResponseModel, FundInfo
 from app.adapters.factory import data_source_manager
 
-router = APIRouter(prefix="/fund", tags=["基金信息"])
+router = APIRouter(tags=["基金信息"])
 
+
+# ===== 具体路径放在前面 =====
+
+@router.get("/base-info/{fund_code}", response_model=ResponseModel[Union[FundInfo, List[FundInfo]]])
+async def get_fund_base_info(
+    fund_code: str = Path(..., description="基金代码（6 位）或多个基金代码（逗号分隔）")
+):
+    """
+    获取基金基本信息
+    
+    Args:
+        fund_code: 6 位基金代码，支持多个代码（逗号分隔）
+            - 单只基金：'161725'
+            - 多只基金：'161725,005827'
+    
+    Returns:
+        单只基金返回 FundInfo 对象
+        多只基金返回 FundInfo 列表
+        
+    Examples:
+        # 获取单只基金
+        GET /api/v1/fund/base-info/161725
+        
+        # 获取多只基金
+        GET /api/v1/fund/base-info/161725,005827
+    """
+    try:
+        # 判断是单只还是多只
+        if ',' in fund_code:
+            # 多只基金
+            fund_codes = [code.strip() for code in fund_code.split(',') if code.strip()]
+            
+            if not fund_codes:
+                return ResponseModel(
+                    success=False,
+                    code="INVALID_PARAM",
+                    message="基金代码不能为空"
+                )
+            
+            fund_list = await data_source_manager.get_fund_base_info(
+                fund_codes=fund_codes,
+                source_type="efinance"
+            )
+            
+            if not fund_list:
+                return ResponseModel(
+                    success=False,
+                    code="NOT_FOUND",
+                    message="未找到基金信息"
+                )
+            
+            return ResponseModel(data=fund_list)
+        else:
+            # 单只基金
+            fund_info = await data_source_manager.get_fund_base_info(
+                fund_codes=fund_code.strip(),
+                source_type="efinance"
+            )
+            
+            if not fund_info:
+                return ResponseModel(
+                    success=False,
+                    code="NOT_FOUND",
+                    message=f"未找到基金：{fund_code}"
+                )
+            
+            return ResponseModel(data=fund_info)
+    
+    except Exception as e:
+        logger.error(f"获取基金基本信息失败 {fund_code}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/realtime-rate/{fund_codes}", response_model=ResponseModel[Union[dict, List[dict]]])
+async def get_fund_realtime_increase_rate(
+    fund_codes: str = Path(..., description="6 位基金代码或多个基金代码（逗号分隔）")
+):
+    """
+    获取基金实时估算涨跌幅度
+    
+    Args:
+        fund_codes: 6 位基金代码，支持多个代码（逗号分隔）
+            - 单只基金：'161725'
+            - 多只基金：'161725,005827'
+    
+    Returns:
+        单只基金返回 dict 对象
+        多只基金返回 dict 列表
+        每个包含：
+        - code: 基金代码
+        - name: 基金名称
+        - net_value: 最新净值
+        - nav_date: 最新净值公开日期
+        - estimate_time: 估算时间
+        - estimate_change_pct: 估算涨跌幅
+        
+    Examples:
+        # 获取单只基金实时估算涨跌幅
+        GET /api/v1/fund/realtime-rate/161725
+        
+        # 获取多只基金实时估算涨跌幅
+        GET /api/v1/fund/realtime-rate/161725,005827
+    """
+    try:
+        # 判断是单只还是多只
+        if ',' in fund_codes:
+            # 多只基金
+            fund_code_list = [code.strip() for code in fund_codes.split(',') if code.strip()]
+            
+            if not fund_code_list:
+                return ResponseModel(
+                    success=False,
+                    code="INVALID_PARAM",
+                    message="基金代码不能为空"
+                )
+            
+            rate_list = await data_source_manager.get_fund_realtime_increase_rate(
+                fund_codes=fund_code_list,
+                source_type="efinance"
+            )
+            
+            if not rate_list:
+                return ResponseModel(
+                    success=False,
+                    code="NOT_FOUND",
+                    message="未找到基金实时估算数据"
+                )
+            
+            return ResponseModel(data=rate_list)
+        else:
+            # 单只基金
+            fund_code = fund_codes.strip()
+            
+            if not fund_code:
+                return ResponseModel(
+                    success=False,
+                    code="INVALID_PARAM",
+                    message="基金代码不能为空"
+                )
+            
+            rate_info = await data_source_manager.get_fund_realtime_increase_rate(
+                fund_codes=fund_code,
+                source_type="efinance"
+            )
+            
+            if not rate_info:
+                return ResponseModel(
+                    success=False,
+                    code="NOT_FOUND",
+                    message=f"未找到基金实时估算数据：{fund_code}"
+                )
+            
+            return ResponseModel(data=rate_info)
+    
+    except Exception as e:
+        logger.error(f"获取基金实时估算涨跌幅失败 {fund_codes}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/history/batch", response_model=ResponseModel[dict])
+async def get_fund_quote_history_multi(
+    fund_codes: List[str] = Query(..., description="基金代码列表"),
+    pz: int = Query(40000, description="页码，默认 40000 获取全部历史数据")
+):
+    """
+    批量获取多只基金历史净值数据
+    
+    Args:
+        fund_codes: 基金代码列表
+        pz: 页码，默认 40000 获取全部历史数据
+    
+    Returns:
+        字典，key = 基金代码，value = 对应净值数据列表
+        
+    Examples:
+        # 批量获取多只基金历史净值
+        POST /api/v1/fund/history/batch
+        Body: ["161725", "005918"]
+        
+        # 获取最近 100 条
+        POST /api/v1/fund/history/batch?pz=100
+    """
+    try:
+        if not fund_codes:
+            return ResponseModel(
+                success=False,
+                code="INVALID_PARAM",
+                message="基金代码列表不能为空"
+            )
+        
+        history_dict = await data_source_manager.get_fund_quote_history_multi(
+            fund_codes=fund_codes,
+            pz=pz,
+            source_type="efinance"
+        )
+        
+        if not history_dict:
+            return ResponseModel(
+                success=False,
+                code="NOT_FOUND",
+                message="未找到基金历史净值数据"
+            )
+        
+        total_count = sum(len(v) for v in history_dict.values())
+        logger.info(f"批量获取 {len(fund_codes)} 只基金历史净值数据成功：共{total_count}条")
+        return ResponseModel(data=history_dict)
+    
+    except Exception as e:
+        logger.error(f"批量获取基金历史净值数据失败：{e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== 通用路径放在后面 =====
 
 @router.get("/codes", response_model=ResponseModel[List[dict]])
 async def get_fund_codes(
@@ -182,215 +395,6 @@ async def get_fund_quote_history(
     
     except Exception as e:
         logger.error(f"获取基金历史净值数据失败 {fund_code}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/history/batch", response_model=ResponseModel[dict])
-async def get_fund_quote_history_multi(
-    fund_codes: List[str] = Query(..., description="基金代码列表"),
-    pz: int = Query(40000, description="页码，默认 40000 获取全部历史数据")
-):
-    """
-    批量获取多只基金历史净值数据
-    
-    Args:
-        fund_codes: 基金代码列表
-        pz: 页码，默认 40000 获取全部历史数据
-    
-    Returns:
-        字典，key = 基金代码，value = 对应净值数据列表
-        
-    Examples:
-        # 批量获取多只基金历史净值
-        POST /api/v1/fund/history/batch
-        Body: ["161725", "005918"]
-        
-        # 获取最近 100 条
-        POST /api/v1/fund/history/batch?pz=100
-    """
-    try:
-        if not fund_codes:
-            return ResponseModel(
-                success=False,
-                code="INVALID_PARAM",
-                message="基金代码列表不能为空"
-            )
-        
-        history_dict = await data_source_manager.get_fund_quote_history_multi(
-            fund_codes=fund_codes,
-            pz=pz,
-            source_type="efinance"
-        )
-        
-        if not history_dict:
-            return ResponseModel(
-                success=False,
-                code="NOT_FOUND",
-                message="未找到基金历史净值数据"
-            )
-        
-        total_count = sum(len(v) for v in history_dict.values())
-        logger.info(f"批量获取 {len(fund_codes)} 只基金历史净值数据成功：共{total_count}条")
-        return ResponseModel(data=history_dict)
-    
-    except Exception as e:
-        logger.error(f"批量获取基金历史净值数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/base-info/{fund_code}", response_model=ResponseModel[Union[FundInfo, List[FundInfo]]])
-async def get_fund_base_info(
-    fund_code: str = Path(..., description="基金代码（6 位）或多个基金代码（逗号分隔）")
-):
-    """
-    获取基金基本信息
-    
-    Args:
-        fund_code: 6 位基金代码，支持多个代码（逗号分隔）
-            - 单只基金：'161725'
-            - 多只基金：'161725,005827'
-    
-    Returns:
-        单只基金返回 FundInfo 对象
-        多只基金返回 FundInfo 列表
-        
-    Examples:
-        # 获取单只基金
-        GET /api/v1/fund/base-info/161725
-        
-        # 获取多只基金
-        GET /api/v1/fund/base-info/161725,005827
-    """
-    try:
-        # 判断是单只还是多只
-        if ',' in fund_code:
-            # 多只基金
-            fund_codes = [code.strip() for code in fund_code.split(',') if code.strip()]
-            
-            if not fund_codes:
-                return ResponseModel(
-                    success=False,
-                    code="INVALID_PARAM",
-                    message="基金代码不能为空"
-                )
-            
-            fund_list = await data_source_manager.get_fund_base_info(
-                fund_codes=fund_codes,
-                source_type="efinance"
-            )
-            
-            if not fund_list:
-                return ResponseModel(
-                    success=False,
-                    code="NOT_FOUND",
-                    message="未找到基金信息"
-                )
-            
-            return ResponseModel(data=fund_list)
-        else:
-            # 单只基金
-            fund_info = await data_source_manager.get_fund_base_info(
-                fund_codes=fund_code.strip(),
-                source_type="efinance"
-            )
-            
-            if not fund_info:
-                return ResponseModel(
-                    success=False,
-                    code="NOT_FOUND",
-                    message=f"未找到基金：{fund_code}"
-                )
-            
-            return ResponseModel(data=fund_info)
-    
-    except Exception as e:
-        logger.error(f"获取基金基本信息失败 {fund_code}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/realtime-rate/{fund_codes}", response_model=ResponseModel[Union[dict, List[dict]]])
-async def get_fund_realtime_increase_rate(
-    fund_codes: str = Path(..., description="6 位基金代码或多个基金代码（逗号分隔）")
-):
-    """
-    获取基金实时估算涨跌幅度
-    
-    Args:
-        fund_codes: 6 位基金代码，支持多个代码（逗号分隔）
-            - 单只基金：'161725'
-            - 多只基金：'161725,005827'
-    
-    Returns:
-        单只基金返回 dict 对象
-        多只基金返回 dict 列表
-        每个包含：
-        - code: 基金代码
-        - name: 基金名称
-        - net_value: 最新净值
-        - nav_date: 最新净值公开日期
-        - estimate_time: 估算时间
-        - estimate_change_pct: 估算涨跌幅
-        
-    Examples:
-        # 获取单只基金实时估算涨跌幅
-        GET /api/v1/fund/realtime-rate/161725
-        
-        # 获取多只基金实时估算涨跌幅
-        GET /api/v1/fund/realtime-rate/161725,005827
-    """
-    try:
-        # 判断是单只还是多只
-        if ',' in fund_codes:
-            # 多只基金
-            fund_code_list = [code.strip() for code in fund_codes.split(',') if code.strip()]
-            
-            if not fund_code_list:
-                return ResponseModel(
-                    success=False,
-                    code="INVALID_PARAM",
-                    message="基金代码不能为空"
-                )
-            
-            rate_list = await data_source_manager.get_fund_realtime_increase_rate(
-                fund_codes=fund_code_list,
-                source_type="efinance"
-            )
-            
-            if not rate_list:
-                return ResponseModel(
-                    success=False,
-                    code="NOT_FOUND",
-                    message="未找到基金实时估算数据"
-                )
-            
-            return ResponseModel(data=rate_list)
-        else:
-            # 单只基金
-            fund_code = fund_codes.strip()
-            
-            if not fund_code:
-                return ResponseModel(
-                    success=False,
-                    code="INVALID_PARAM",
-                    message="基金代码不能为空"
-                )
-            
-            rate_info = await data_source_manager.get_fund_realtime_increase_rate(
-                fund_codes=fund_code,
-                source_type="efinance"
-            )
-            
-            if not rate_info:
-                return ResponseModel(
-                    success=False,
-                    code="NOT_FOUND",
-                    message=f"未找到基金实时估算数据：{fund_code}"
-                )
-            
-            return ResponseModel(data=rate_info)
-    
-    except Exception as e:
-        logger.error(f"获取基金实时估算涨跌幅失败 {fund_codes}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

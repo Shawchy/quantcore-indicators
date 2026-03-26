@@ -28,7 +28,7 @@ class WorkerPool {
       this.createWorker(i)
     }
     
-    logger.info(`Worker 池初始化完成：${this.size} 个 Worker (CPU 核心数：${cpuCores})`)
+    console.info(`Worker 池初始化完成：${this.size} 个 Worker (CPU 核心数：${cpuCores})`)
   }
 
   private createWorker(index: number) {

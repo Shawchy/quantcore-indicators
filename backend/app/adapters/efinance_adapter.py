@@ -102,6 +102,21 @@ from app.utils.data_validator import validator
 from app.utils.api_cache_stats import api_call_cache
 
 
+def safe_float(value, default=0.0):
+    """安全转换浮点数"""
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        # 处理字符串中的百分号
+        if isinstance(value, str):
+            value = value.strip().replace(',', '').replace('%', '')
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 class MarketQuote(BaseModel):
     """市场实时行情数据"""
     code: str
@@ -1077,7 +1092,7 @@ class EFinanceAdapter(BaseDataAdapter):
             df = ef.stock.get_quote_history(code.zfill(6), **kwargs)
             
             if df.empty:
-                logger.warning(f"K 线数据为空：{code} (period={period})")
+                logger.warning(f"K 线数据为空：{code} (klt={klt})")
                 self.record_request_success()  # 空数据也算成功（非错误）
                 return []
             
@@ -1580,10 +1595,18 @@ class EFinanceAdapter(BaseDataAdapter):
                 code = str(getattr(row, '股票代码', ''))
                 name = getattr(row, '股票名称', '')
                 if code and name:
+                    # 获取涨跌幅和成交量数据
+                    change_pct = safe_float(getattr(row, '涨跌幅', 0), 0.0)
+                    volume = safe_float(getattr(row, '成交量', 0), 0.0)
+                    amount = safe_float(getattr(row, '成交额', 0), 0.0)
+                    
                     sectors.append(SectorInfo(
                         code=code,
                         name=name,
-                        sector_type=sector_type
+                        sector_type=sector_type,
+                        change_pct=change_pct,
+                        volume=volume,
+                        amount=amount
                     ))
             
             logger.info(f"获取板块列表成功：{len(sectors)}个")

@@ -7,4 +7,5 @@ export { useKLineData } from './useKLineData'
 export { useKLineCalc } from './useKLineCalc'
 export { useKLineRender } from './useKLineRender'
 
+import { useKLine } from './useKLine'
 export default useKLine

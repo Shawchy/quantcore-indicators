@@ -1,4 +1,4 @@
-﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
+﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Box, ColorModeScript } from '@chakra-ui/react'
 import { useEffect } from 'react'
 import Layout from './components/Layout'

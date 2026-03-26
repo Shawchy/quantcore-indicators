@@ -43,7 +43,7 @@ export function useKLineData(options: UseKLineDataOptions): UseKLineDataReturn {
   } = options
 
   const [data, setData] = useState<KLineData[] | null>(null)
-  const [indicators, setIndicators] = useState<AllIndicators | null>(null)
+  const [indicatorData, setIndicatorData] = useState<AllIndicators | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [metadata, setMetadata] = useState<any>(null)
@@ -64,15 +64,15 @@ export function useKLineData(options: UseKLineDataOptions): UseKLineDataReturn {
     abortControllerRef.current = new AbortController()
 
     // 检查缓存
-    if (useCache) {
-      const cached = dataCache.get(cacheKey)
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        setData(cached.data.data)
-        setIndicators(cached.data.indicators)
-        setMetadata(cached.data.metadata)
-        return
+      if (useCache) {
+        const cached = dataCache.get(cacheKey)
+        if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+          setData(cached.data.data)
+          setIndicatorData(cached.data.indicators)
+          setMetadata(cached.data.metadata)
+          return
+        }
       }
-    }
 
     setLoading(true)
     setError(null)
@@ -105,7 +105,7 @@ export function useKLineData(options: UseKLineDataOptions): UseKLineDataReturn {
 
       // 更新状态
       setData(result.data)
-      setIndicators(result.indicators)
+      setIndicatorData(result.indicators)
       setMetadata(result.metadata)
 
       // 缓存数据
@@ -146,7 +146,7 @@ export function useKLineData(options: UseKLineDataOptions): UseKLineDataReturn {
 
   return {
     data,
-    indicators,
+    indicators: indicatorData,
     loading,
     error,
     refetch: fetchData,

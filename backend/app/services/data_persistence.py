@@ -30,54 +30,78 @@ class DataPersistence:
         1. 批量查询已存在记录（一次查询代替 N 次查询）
         2. 批量插入（add_all 代替逐条 add）
         3. 一次 commit（减少事务开销）
+        4. 去重处理（避免数据源重复和并发冲突）
         
         性能提升：10-50 倍
         """
         if not klines:
             return 0
         
+        # 0. 去重：同一批次中的重复数据（数据源可能返回重复）
+        seen_dates = set()
+        unique_klines = []
+        for k in klines:
+            if k.date not in seen_dates:
+                seen_dates.add(k.date)
+                unique_klines.append(k)
+        
+        if not unique_klines:
+            return 0
+        
         async with get_session() as session:
-            # 1. 批量查询已存在的记录（一次查询代替 N 次）
-            dates = [k.date for k in klines]
-            existing_query = await session.execute(
-                select(KLineDB.date).where(
-                    and_(
-                        KLineDB.code == code,
-                        KLineDB.date.in_(dates),
-                        KLineDB.adjust_type == adjust
+            try:
+                # 1. 批量查询已存在的记录（一次查询代替 N 次）
+                dates = [k.date for k in unique_klines]
+                existing_query = await session.execute(
+                    select(KLineDB.date).where(
+                        and_(
+                            KLineDB.code == code,
+                            KLineDB.date.in_(dates),
+                            KLineDB.adjust_type == adjust
+                        )
                     )
                 )
-            )
-            existing_dates = set(existing_query.scalars().all())
-            
-            # 2. 过滤出需要插入的记录
-            to_insert = [
-                KLineDB(
-                    code=code,
-                    date=k.date,
-                    open=k.open,
-                    high=k.high,
-                    low=k.low,
-                    close=k.close,
-                    volume=k.volume,
-                    amount=k.amount,
-                    turnover_rate=k.turnover_rate,
-                    pre_close=k.pre_close,  # 添加昨日收盘价
-                    adjust_type=adjust
-                )
-                for k in klines if k.date not in existing_dates
-            ]
-            
-            # 3. 批量插入（一次 commit 代替 N 次）
-            if to_insert:
-                session.add_all(to_insert)
-                await session.commit()
-                logger.info(f"批量保存 {len(to_insert)} 条 K 线数据：{code}")
+                existing_dates = set(existing_query.scalars().all())
                 
-                # 4. 归档到 Parquet
-                await self._save_to_parquet(code, to_insert, adjust)
+                # 2. 过滤出需要插入的记录
+                to_insert = [
+                    KLineDB(
+                        code=code,
+                        date=k.date,
+                        open=k.open,
+                        high=k.high,
+                        low=k.low,
+                        close=k.close,
+                        volume=k.volume,
+                        amount=k.amount,
+                        turnover_rate=k.turnover_rate,
+                        pre_close=k.pre_close,
+                        adjust_type=adjust
+                    )
+                    for k in unique_klines if k.date not in existing_dates
+                ]
                 
-                return len(to_insert)
+                # 3. 批量插入（一次 commit 代替 N 次）
+                if to_insert:
+                    session.add_all(to_insert)
+                    await session.commit()
+                    logger.info(f"批量保存 {len(to_insert)} 条 K 线数据：{code}")
+                    
+                    # 4. 归档到 Parquet
+                    await self._save_to_parquet(code, to_insert, adjust)
+                    
+                    return len(to_insert)
+                else:
+                    logger.debug(f"所有数据已存在，跳过保存：{code}")
+                    
+            except Exception as e:
+                # 捕获唯一约束冲突（并发情况）
+                if "UNIQUE constraint" in str(e) or "IntegrityError" in str(e):
+                    logger.warning(f"数据已存在（并发冲突），跳过：{code}")
+                    await session.rollback()
+                else:
+                    logger.error(f"保存 K 线数据失败：{code}, {e}")
+                    raise
         
         return 0
     

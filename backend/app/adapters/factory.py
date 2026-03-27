@@ -238,6 +238,25 @@ class DataSourceManager:
         adapter = self.get_adapter(source_type)
         return await adapter.get_today_bill(trade_date)
     
+    async def get_history_bill(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        source_type: Optional[str] = None
+    ) -> list:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_history_bill(code, start_date, end_date)
+    
+    async def get_top10_stock_holder_info(
+        self,
+        code: str,
+        top: int = 10,
+        source_type: Optional[str] = None
+    ) -> list:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_top10_stock_holder_info(code, top)
+    
     async def close(self) -> None:
         await self._factory.close_all()
 

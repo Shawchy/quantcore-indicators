@@ -1,13 +1,15 @@
 /**
  * ProKLineChart 组件
- * 基于 KLineChart 库的专业金融 K 线图组件
- * 文档：https://v9.klinecharts.com/
+ * 基于 KLineChart v10 的专业金融 K 线图组件
+ * 文档：https://klinecharts.com/
+ * 
+ * 参考官方示例：https://klinecharts.com/guide/quick-start
  */
 
 import React, { useEffect, useRef, useMemo } from 'react'
-import { init, dispose } from 'klinecharts'
 import { Box, Spinner, Flex, Text } from '@chakra-ui/react'
 import type { KLineData } from '@/types'
+import { init, dispose } from 'klinecharts'
 
 export type KLineType = 'daily' | 'weekly' | 'monthly'
 
@@ -24,7 +26,8 @@ interface ProKLineChartProps {
 export const ProKLineChart: React.FC<ProKLineChartProps> = ({
   data = [],
   loading = false,
-  height = '400px',
+  type = 'daily',
+  height = '500px',
   showVolume = true,
   showIndicators = true,
   indicators = ['MA', 'MACD', 'RSI']
@@ -34,225 +37,168 @@ export const ProKLineChart: React.FC<ProKLineChartProps> = ({
 
   // 转换数据格式为 KLineChart 所需格式
   const klineData = useMemo(() => {
-    if (!data || data.length === 0) return []
+    if (!data || data.length === 0) {
+      console.log('[ProKLineChart] 输入数据为空')
+      return []
+    }
 
-    return data.map((item, index) => ({
-      timestamp: new Date(item.date).getTime(),
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close,
-      volume: item.volume,
-      turnover: item.amount || 0,
-      // 自定义字段
-      _originalIndex: index,
-      _date: item.date
-    }))
+    console.log('[ProKLineChart] 开始转换数据，原始数据量:', data.length)
+    console.log('[ProKLineChart] 前 3 条原始数据:', data.slice(0, 3))
+    
+    const converted = data.map((item) => {
+      // 检查 date 字段是否存在
+      if (!item.date) {
+        console.warn('[ProKLineChart] 缺少 date 字段:', item)
+        return null
+      }
+      
+      // 处理日期格式：后端可能返回 '20021107' 或 '2002-11-07'
+      let dateStr = item.date
+      if (/^\d{8}$/.test(dateStr)) {
+        // YYYYMMDD 格式 -> YYYY-MM-DD
+        dateStr = `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`
+      }
+      
+      const timestamp = new Date(dateStr).getTime()
+      if (isNaN(timestamp)) {
+        console.warn('[ProKLineChart] 无效日期:', item.date, '原始数据:', item)
+        return null
+      }
+
+      return {
+        timestamp,
+        open: Number(item.open) || 0,
+        high: Number(item.high) || 0,
+        low: Number(item.low) || 0,
+        close: Number(item.close) || 0,
+        volume: Number(item.volume) || 0,
+        turnover: Number(item.amount) || 0
+      }
+    }).filter(Boolean)
+    
+    console.log('[ProKLineChart] 转换后数据量:', converted.length)
+    if (converted.length > 0) {
+      console.log('[ProKLineChart] 第一条数据:', converted[0])
+      console.log('[ProKLineChart] 最后一条数据:', converted[converted.length - 1])
+    } else {
+      console.error('[ProKLineChart] 转换后数据为空！请检查原始数据格式')
+    }
+    
+    return converted
   }, [data])
 
-  // 初始化图表
+  // 初始化图表 - 使用自定义布局配置
   useEffect(() => {
-    if (!chartRef.current || klineData.length === 0) return
+    if (!chartRef.current) {
+      console.warn('[ProKLineChart] DOM 未就绪，等待下次渲染')
+      return
+    }
+    
+    // 如果没有数据，等待数据加载完成
+    if (klineData.length === 0) {
+      console.log('[ProKLineChart] 等待数据加载...')
+      return
+    }
 
-    // 初始化图表实例
-    chartInstance.current = init('kline-chart')
+    // 1. 创建图表实例，使用自定义布局
+    const chart = init(chartRef.current, {
+      layout: [
+        {
+          type: 'candle',
+          content: ['MA', { name: 'EMA', calcParams: [10, 30] }],
+          options: { order: Number.MIN_SAFE_INTEGER }
+        },
+        ...(showVolume ? [{
+          type: 'indicator',
+          content: ['VOL'],
+          options: { order: 10 }
+        }] : []),
+        {
+          type: 'xAxis',
+          options: { order: 9 }
+        }
+      ]
+    })
+    chartInstance.current = chart
+    
+    if (!chart) {
+      console.error('[ProKLineChart] 图表初始化失败')
+      return
+    }
 
-    // 应用数据
-    chartInstance.current.applyNewData(klineData)
+    console.log('[ProKLineChart] 图表初始化成功，布局：candle' + (showVolume ? ' + VOL' : ''))
 
-    // 清理函数
+    // 2. 设置标的信息
+    chart.setSymbol({
+      ticker: 'STOCK',
+      name: '股票'
+    })
+
+    // 3. 设置周期
+    const periodMap = {
+      daily: { span: 1, type: 'day' },
+      weekly: { span: 1, type: 'week' },
+      monthly: { span: 1, type: 'month' }
+    }
+    chart.setPeriod(periodMap[type])
+
+    // 4. 设置数据加载器
+    chart.setDataLoader({
+      getBars: ({ callback }) => {
+        // 如果有数据，返回数据
+        if (klineData && klineData.length > 0) {
+          console.log('[ProKLineChart] 加载数据:', klineData.length, '条')
+          callback(klineData)
+        } else {
+          // 否则返回空数组
+          callback([])
+        }
+      }
+    })
+
+    // 5. 清理函数
     return () => {
+      console.log('[ProKLineChart] 销毁图表')
       if (chartInstance.current) {
-        dispose('kline-chart')
+        dispose(chartRef.current!)
         chartInstance.current = null
       }
     }
-  }, [])
+  }, [klineData, type, showVolume]) // 添加依赖项，当数据加载完成或类型变化时重新初始化
 
-  // 更新数据
+  // 更新数据 - 当数据变化时重新加载
   useEffect(() => {
     if (!chartInstance.current || klineData.length === 0) return
-
-    chartInstance.current.applyNewData(klineData)
-  }, [klineData])
-
-  // 配置图表选项
-  useEffect(() => {
-    if (!chartInstance.current) return
-
-    // 设置图表配置
-    chartInstance.current.setOptions({
-      // 主题配置
-      theme: {
-        backgroundColor: '#ffffff',
-        textColor: '#1e293b',
-        gridColor: '#e2e8f0',
-        crossHairColor: '#94a3b8'
-      },
-
-      // K 线柱子配置
-      candle: {
-        bar: {
-          upColor: '#ef4444',      // 上涨红
-          downColor: '#10b981',    // 下跌绿
-          noChangeColor: '#64748b' // 平盘灰
-        },
-        area: {
-          upColor: 'rgba(239, 68, 68, 0.1)',
-          downColor: 'rgba(16, 185, 129, 0.1)'
-        }
-      },
-
-      // 均线配置
-      ma: {
-        lines: [
-          { period: 5, color: '#f59e0b' },   // MA5 - 琥珀色
-          { period: 10, color: '#3b82f6' },  // MA10 - 蓝色
-          { period: 20, color: '#8b5cf6' },  // MA20 - 紫色
-          { period: 60, color: '#795548' }   // MA60 - 棕色
-        ]
-      },
-
-      // 成交量配置
-      volume: {
-        show: showVolume,
-        upColor: 'rgba(239, 68, 68, 0.6)',
-        downColor: 'rgba(16, 185, 129, 0.6)'
-      },
-
-      // 技术指标配置
-      technicalIndicators: {
-        show: showIndicators,
-        indicators: indicators
-      },
-
-      // X 轴配置
-      xAxis: {
-        type: 'category',
-        axisLabel: {
-          formatter: (timestamp: number) => {
-            const date = new Date(timestamp)
-            const month = String(date.getMonth() + 1).padStart(2, '0')
-            const day = String(date.getDate()).padStart(2, '0')
-            return `${month}-${day}`
-          }
-        }
-      },
-
-      // Y 轴配置
-      yAxis: {
-        scale: true,
-        axisLabel: {
-          formatter: (value: number) => value.toFixed(2)
-        }
-      },
-
-      // 工具提示配置
-      tooltip: {
-        show: true,
-        formatter: (data: any) => {
-          const date = new Date(data.timestamp)
-          const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-          
-          const change = data.close - data.open
-          const changePercent = data.open > 0 ? ((change / data.open) * 100).toFixed(2) : '0.00'
-          const isUp = change >= 0
-
-          return `
-            <div style="padding: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-              <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0;">
-                ${dateStr}
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 12px;">
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #64748b;">开盘</span>
-                  <span style="color: ${data.close >= data.open ? '#ef4444' : '#10b981'}; font-weight: 600;">${data.open.toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #64748b;">收盘</span>
-                  <span style="color: ${data.close >= data.open ? '#ef4444' : '#10b981'}; font-weight: 600;">${data.close.toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #64748b;">最高</span>
-                  <span style="color: #ef4444; font-weight: 600;">${data.high.toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #64748b;">最低</span>
-                  <span style="color: #10b981; font-weight: 600;">${data.low.toFixed(2)}</span>
-                </div>
-              </div>
-              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                  <span style="color: #64748b; font-size: 11px;">涨跌额</span>
-                  <span style="color: ${isUp ? '#ef4444' : '#10b981'}; font-weight: 700; font-size: 13px;">
-                    ${change >= 0 ? '+' : ''}${change.toFixed(2)}
-                  </span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #64748b; font-size: 11px;">涨跌幅</span>
-                  <span style="color: ${isUp ? '#ef4444' : '#10b981'}; font-weight: 700; font-size: 13px;">
-                    ${changePercent}%
-                  </span>
-                </div>
-              </div>
-              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #64748b; font-size: 11px;">成交量</span>
-                  <span style="color: #1e293b; font-weight: 600;">
-                    ${data.volume >= 1e8 ? (data.volume / 1e8).toFixed(2) + '亿' : data.volume >= 1e4 ? (data.volume / 1e4).toFixed(2) + '万' : data.volume.toFixed(0)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          `
-        }
-      },
-
-      // 缩放和平移配置
-      zoom: {
-        enabled: true,
-        minScale: 0.2,
-        maxScale: 5
-      },
-
-      // 十字光标配置
-      crosshair: {
-        show: true,
-        mode: 'cross'
+    
+    console.log('[ProKLineChart] 更新数据:', klineData.length, '条')
+    
+    // 重新加载数据
+    chartInstance.current.setDataLoader({
+      getBars: ({ callback }) => {
+        callback(klineData)
       }
     })
-  }, [showVolume, showIndicators, indicators])
+  }, [klineData])
 
+  // Loading 状态
   if (loading) {
     return (
-      <Flex justify="center" align="center" h={height}>
-        <Spinner size="xl" color="blue.500" thickness="3px" />
+      <Flex justify="center" align="center" h={height} w="100%">
+        <Spinner size="xl" color="brand.500" />
       </Flex>
     )
   }
 
-  if (!data || data.length === 0) {
+  // 无数据状态
+  if (klineData.length === 0) {
     return (
-      <Flex justify="center" align="center" h={height} bg="white" borderRadius="lg" border="1px solid #e2e8f0">
-        <Text color="gray.400" fontSize="lg">暂无 K 线数据</Text>
+      <Flex justify="center" align="center" h={height} w="100%" bg="gray.50">
+        <Text color="gray.500">暂无数据</Text>
       </Flex>
     )
   }
 
-  return (
-    <Box w="100%" h={height} position="relative">
-      <div
-        id="kline-chart"
-        style={{
-          width: '100%',
-          height: '100%',
-          borderRadius: '8px',
-          overflow: 'hidden'
-        }}
-        ref={chartRef}
-      />
-    </Box>
-  )
+  return <Box ref={chartRef} h={height} w="100%" />
 }
 
 export default ProKLineChart

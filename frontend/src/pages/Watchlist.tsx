@@ -51,6 +51,7 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { watchlistApi } from '../services/api'
 import { fundApi } from '../services/fund'
+import fundStorage from '../services/fundStorage'
 import { FundInfo } from '../services/fund'
 import { getMarketColor } from '../utils/marketColors'
 
@@ -78,9 +79,8 @@ const Watchlist = () => {
   const { data: fundWatchlistData, isLoading: fundLoading, refetch: refetchFundWatchlist } = useQuery({
     queryKey: ['fundWatchlist'],
     queryFn: async () => {
-      // 从本地存储获取基金自选代码
-      const stored = localStorage.getItem('fundWatchlist')
-      const codes = stored ? JSON.parse(stored) : []
+      // 从本地存储获取基金自选代码（使用 fundStorage 的验证方法）
+      const codes = fundStorage.getWatchlist()
       
       if (codes.length === 0) {
         return []
@@ -102,8 +102,8 @@ const Watchlist = () => {
   const { data: fundQuotesData, isLoading: fundQuotesLoading, refetch: refetchFundQuotes } = useQuery({
     queryKey: ['fundWatchlistQuotes'],
     queryFn: async () => {
-      const stored = localStorage.getItem('fundWatchlist')
-      const codes = stored ? JSON.parse(stored) : []
+      // 从本地存储获取基金自选代码（使用 fundStorage 的验证方法）
+      const codes = fundStorage.getWatchlist()
       if (codes.length === 0) return []
       
       // 批量获取实时估算涨跌幅
@@ -140,10 +140,8 @@ const Watchlist = () => {
   // 删除基金
   const deleteFundMutation = useMutation({
     mutationFn: (code: string) => {
-      const stored = localStorage.getItem('fundWatchlist')
-      const codes = stored ? JSON.parse(stored) : []
-      const newCodes = codes.filter((c: string) => c !== code)
-      localStorage.setItem('fundWatchlist', JSON.stringify(newCodes))
+      // 使用 fundStorage 的删除方法
+      fundStorage.removeFromWatchlist(code)
       return Promise.resolve()
     },
     onSuccess: () => {
@@ -205,35 +203,37 @@ const Watchlist = () => {
           })
         })
     } else {
-      // 基金添加到自选
-      const stored = localStorage.getItem('fundWatchlist')
-      const codes = stored ? JSON.parse(stored) : []
-      if (!codes.includes(addCode)) {
-        codes.push(addCode)
-        localStorage.setItem('fundWatchlist', JSON.stringify(codes))
-        
-        // 手动刷新基金列表和行情数据
-        refetchFundWatchlist()
-        refetchFundQuotes()
-        
-        toast({
-          title: '添加成功',
-          description: `已添加基金 ${addCode}`,
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        })
-        setAddCode('')
-        onAddClose()
-      } else {
+      // 基金添加到自选 - 使用 fundStorage 的验证方法
+      const fundCode = addCode.trim()
+      
+      // 先验证代码格式
+      if (!/^\d{6}$/.test(fundCode)) {
         toast({
           title: '添加失败',
-          description: '该基金已在自选列表中',
+          description: '请输入 6 位数字的基金代码',
           status: 'error',
           duration: 3000,
           isClosable: true,
         })
+        return
       }
+      
+      // 使用 fundStorage 的添加方法（会自动验证）
+      fundStorage.addToWatchlist(fundCode)
+      
+      // 手动刷新基金列表和行情数据
+      refetchFundWatchlist()
+      refetchFundQuotes()
+      
+      toast({
+        title: '添加成功',
+        description: `已添加基金 ${fundCode}`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      })
+      setAddCode('')
+      onAddClose()
     }
   }
 

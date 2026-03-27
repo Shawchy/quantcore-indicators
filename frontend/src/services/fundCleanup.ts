@@ -187,15 +187,64 @@ class FundDataUpdater {
       console.log('[数据更新] 自选列表为空，跳过更新');
       return;
     }
+    
+    try {
+      // 先从后端获取全部有效基金代码
+      const { data } = await import('./fund');
+      const allValidCodes = await data.fundApi.getAllFundCodes();
+      
+      if (allValidCodes.length === 0) {
+        console.warn('[数据更新] 未能从后端获取有效基金代码，使用传入的列表');
+        // 降级处理：使用传入的列表（但会过滤无效代码）
+        await this.updateWithValidation(fundCodes, onUpdate);
+        return;
+      }
+      
+      // 使用从后端获取的有效代码列表
+      console.log(`[数据更新] 使用后端获取的 ${allValidCodes.length} 只有效基金代码`);
+      await this.updateWithValidation(allValidCodes, onUpdate);
+    } catch (error) {
+      console.error('[数据更新] 更新失败:', error);
+    }
+  }
+  
+  /**
+   * 执行数据更新（带验证）
+   * @param fundCodes 基金代码列表
+   * @param onUpdate 更新回调
+   */
+  private async updateWithValidation(
+    fundCodes: string[],
+    onUpdate?: (code: string, data: any) => void
+  ): Promise<void> {
+    // 过滤掉无效的基金代码
+    const validCodes = fundCodes.filter((code) => {
+      // 必须是字符串
+      if (typeof code !== 'string') return false;
+      // 不能包含 'nan'（不区分大小写）
+      if (code.toLowerCase().includes('nan')) return false;
+      // 必须是 6 位数字
+      if (!/^\d{6}$/.test(code)) return false;
+      return true;
+    });
+    
+    if (validCodes.length === 0) {
+      console.log('[数据更新] 没有有效的基金代码，跳过更新');
+      return;
+    }
+    
+    if (validCodes.length < fundCodes.length) {
+      console.warn(`[数据更新] 过滤了 ${fundCodes.length - validCodes.length} 只无效基金代码`);
+    }
 
-    console.log(`[数据更新] 更新 ${fundCodes.length} 只自选基金的实时数据`);
+    console.log(`[数据更新] 更新 ${validCodes.length} 只自选基金的实时数据`);
 
     try {
       // 分批更新，每批 50 只
       const batchSize = 50;
-      for (let i = 0; i < fundCodes.length; i += batchSize) {
-        const batch = fundCodes.slice(i, i + batchSize);
-        console.log(`[数据更新] 更新批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(fundCodes.length / batchSize)}`);
+      for (let i = 0; i < validCodes.length; i += batchSize) {
+        const batch = validCodes.slice(i, i + batchSize);
+        console.log(`[数据更新] 更新批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(validCodes.length / batchSize)}`);
         
         // 强制刷新缓存
         const { data } = await import('./fund');
@@ -225,15 +274,29 @@ class FundDataUpdater {
     console.log('[数据更新] 开始后台静默更新...');
 
     try {
+      // 先从后端获取全部有效基金代码
+      const { data } = await import('./fund');
+      const allValidCodes = await data.fundApi.getAllFundCodes();
+      
+      if (allValidCodes.length === 0) {
+        console.warn('[数据更新] 未能从后端获取有效基金代码，使用传入的列表');
+        // 降级处理：使用传入的列表（但会过滤无效代码）
+        await this.performBackgroundUpdate(fundCodes);
+        return;
+      }
+      
+      // 使用从后端获取的有效代码列表
+      console.log(`[数据更新] 使用后端获取的 ${allValidCodes.length} 只有效基金代码`);
+      
       // 使用 requestIdleCallback 在浏览器空闲时执行
       if ('requestIdleCallback' in window) {
         (window as any).requestIdleCallback(() => {
-          this.performBackgroundUpdate(fundCodes);
+          this.performBackgroundUpdate(allValidCodes);
         });
       } else {
         // 降级处理
         setTimeout(() => {
-          this.performBackgroundUpdate(fundCodes);
+          this.performBackgroundUpdate(allValidCodes);
         }, 1000);
       }
     } catch (error) {
@@ -247,11 +310,25 @@ class FundDataUpdater {
   private async performBackgroundUpdate(fundCodes: string[]): Promise<void> {
     const { data } = await import('./fund');
     
-    // 更新基本信息（30 天有效期，不需要频繁更新）
-    // 更新历史净值（7 天有效期）
-    // 更新阶段涨跌幅（7 天有效期）
+    // 过滤掉无效的基金代码
+    const validCodes = fundCodes.filter((code) => {
+      // 必须是字符串
+      if (typeof code !== 'string') return false;
+      // 不能包含 'nan'（不区分大小写）
+      if (code.toLowerCase().includes('nan')) return false;
+      // 必须是 6 位数字
+      if (!/^\d{6}$/.test(code)) return false;
+      return true;
+    });
     
-    const updatePromises = fundCodes.map(async (code) => {
+    if (validCodes.length === 0) {
+      console.log('[数据更新] 没有有效的基金代码，跳过更新');
+      return;
+    }
+    
+    console.log(`[数据更新] 更新 ${validCodes.length} 只有效基金（过滤了 ${fundCodes.length - validCodes.length} 只无效）`);
+    
+    const updatePromises = validCodes.map(async (code) => {
       try {
         // 并行更新不同类型的数据
         await Promise.all([

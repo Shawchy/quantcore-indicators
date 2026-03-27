@@ -354,6 +354,42 @@ export const fundApi = {
   },
   
   /**
+   * 获取全部有效基金代码列表
+   * 从后端获取并验证所有基金代码
+   */
+  getAllFundCodes: async (): Promise<string[]> => {
+    try {
+      const response = await api.get<FundCodeInfo[]>('/fund/list', {
+        params: { fund_type: 'all' }
+      });
+      
+      if (!response.data || !Array.isArray(response.data)) {
+        console.warn('[fundApi] 获取基金代码列表返回空数据');
+        return [];
+      }
+      
+      // 提取并验证所有基金代码
+      const validCodes = response.data
+        .map(item => item.code)
+        .filter(code => {
+          // 必须是字符串
+          if (typeof code !== 'string') return false;
+          // 不能包含 'nan'（不区分大小写）
+          if (code.toLowerCase().includes('nan')) return false;
+          // 必须是 6 位数字
+          if (!/^\d{6}$/.test(code)) return false;
+          return true;
+        });
+      
+      console.log(`[fundApi] 获取到 ${validCodes.length} 只有效基金（共 ${response.data.length} 只）`);
+      return validCodes;
+    } catch (error) {
+      console.error('[fundApi] 获取基金代码列表失败:', error);
+      return [];
+    }
+  },
+  
+  /**
    * 获取基金列表（待实现）
    * 
    * @param params 查询参数

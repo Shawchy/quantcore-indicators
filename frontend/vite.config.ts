@@ -7,6 +7,11 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,  // 允许外部访问
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost',
+      port: 5173,
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',  // 修复后端端口

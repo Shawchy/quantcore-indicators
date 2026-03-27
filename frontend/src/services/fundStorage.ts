@@ -379,14 +379,48 @@ class FundStorageService {
    */
   getWatchlist(): string[] {
     const stored = localStorage.getItem(STORAGE_PREFIXES.WATCHLIST);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    
+    try {
+      const list = JSON.parse(stored);
+      if (!Array.isArray(list)) return [];
+      
+      // 过滤掉无效的基金代码
+      return list.filter((code: string) => {
+        // 必须是字符串
+        if (typeof code !== 'string') return false;
+        // 不能包含 'nan'（不区分大小写）
+        if (code.toLowerCase().includes('nan')) return false;
+        // 必须是 6 位数字或有效的基金代码格式
+        if (!/^\d{6}$/.test(code)) return false;
+        return true;
+      });
+    } catch (e) {
+      console.error('[fundStorage] 解析自选列表失败:', e);
+      return [];
+    }
   }
 
   addToWatchlist(fundCode: string): void {
+    // 验证基金代码有效性
+    if (typeof fundCode !== 'string') {
+      console.warn('[fundStorage] 无效的基金代码类型:', fundCode);
+      return;
+    }
+    if (fundCode.toLowerCase().includes('nan')) {
+      console.warn('[fundStorage] 无效的基金代码（包含 nan）:', fundCode);
+      return;
+    }
+    if (!/^\d{6}$/.test(fundCode)) {
+      console.warn('[fundStorage] 无效的基金代码格式（需要 6 位数字）:', fundCode);
+      return;
+    }
+    
     const watchlist = this.getWatchlist();
     if (!watchlist.includes(fundCode)) {
       watchlist.push(fundCode);
       localStorage.setItem(STORAGE_PREFIXES.WATCHLIST, JSON.stringify(watchlist));
+      console.log('[fundStorage] 已添加到自选列表:', fundCode);
     }
   }
 

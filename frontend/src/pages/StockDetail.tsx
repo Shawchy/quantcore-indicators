@@ -149,14 +149,85 @@ const StockDetail = () => {
 
   const stock = (basicData as { data?: StockBasic } | undefined)?.data
   const quote = (realtimeData as { data?: RealtimeQuote } | undefined)?.data
-  // 后端返回格式：{status: "complete", data: [...]}
-  const klines = ((klineData as { data?: {data?: KLineData[]} } | undefined)?.data?.data) || []
-  const weeklyKlines = ((weeklyKlineData as { data?: {data?: KLineData[]} } | undefined)?.data?.data) || []
-  const monthlyKlines = ((monthlyKlineData as { data?: {data?: KLineData[]} } | undefined)?.data?.data) || []
-  const indicators = ((indicatorData as { data?: TechnicalIndicator[] } | undefined)?.data) || []
-  const boards = ((boardData as { data?: any[] } | undefined)?.data) || []
-  const capitalFlows = ((capitalFlowData as { data?: any[] } | undefined)?.data) || []
-  const shareholders = ((shareholderData as { data?: any[] } | undefined)?.data) || []
+  
+  // 后端返回格式：{success: true, data: {code, name, klines: [...]}}
+  const klines = (() => {
+    if (!klineData) {
+      console.log('[StockDetail] klineData 为空')
+      return []
+    }
+    
+    console.log('[StockDetail] klineData:', klineData)
+    
+    // 检查是否有 success 字段（ResponseModel 格式）
+    if ((klineData as any).success && (klineData as any).data) {
+      const innerData = (klineData as any).data
+      console.log('[StockDetail] innerData:', innerData)
+      
+      // 检查 klines 字段
+      if (innerData.klines && Array.isArray(innerData.klines)) {
+        console.log('[StockDetail] 使用结构：{success: true, data: {klines: [...]}}')
+        console.log('[StockDetail] klines 长度:', innerData.klines.length)
+        return innerData.klines
+      }
+      
+      // 检查 data.data 字段
+      if (innerData.data && Array.isArray(innerData.data)) {
+        console.log('[StockDetail] 使用结构：{success: true, data: {data: [...]}}')
+        return innerData.data
+      }
+      
+      // 检查 data 本身是数组
+      if (Array.isArray(innerData)) {
+        console.log('[StockDetail] 使用结构：{success: true, data: [...]}')
+        return innerData
+      }
+    }
+    
+    // 检查是否有 data 字段
+    if ((klineData as any).data) {
+      const innerData = (klineData as any).data
+      if (innerData.klines && Array.isArray(innerData.klines)) {
+        console.log('[StockDetail] 使用结构：{data: {klines: [...]}}')
+        return innerData.klines
+      }
+      if (Array.isArray(innerData)) {
+        return innerData
+      }
+    }
+    
+    console.log('[StockDetail] 未识别的数据结构，返回空数组')
+    return []
+  })()
+  
+  const weeklyKlines = (() => {
+    if (!weeklyKlineData) return []
+    const innerData = (weeklyKlineData as any).data
+    if (Array.isArray(innerData)) return innerData
+    if (innerData?.data && Array.isArray(innerData.data)) return innerData.data
+    return []
+  })()
+  
+  const monthlyKlines = (() => {
+    if (!monthlyKlineData) return []
+    const innerData = (monthlyKlineData as any).data
+    if (Array.isArray(innerData)) return innerData
+    if (innerData?.data && Array.isArray(innerData.data)) return innerData.data
+    return []
+  })()
+  
+  const indicators = ((indicatorData as any)?.data) || []
+  const boards = ((boardData as any)?.data) || []
+  const capitalFlows = ((capitalFlowData as any)?.data) || []
+  const shareholders = ((shareholderData as any)?.data) || []
+
+  // 调试日志
+  useEffect(() => {
+    console.log('[StockDetail] klines 长度:', klines.length)
+    if (klines.length > 0) {
+      console.log('[StockDetail] 第一条 kline:', klines[0])
+    }
+  }, [klines])
 
   const getKlineOption = () => {
     if (!klines.length) {
@@ -529,7 +600,7 @@ const StockDetail = () => {
 
       <Card>
         <CardBody>
-          <Tabs variant="line">
+          <Tabs variant="line" lazyBehavior="keepMounted">
             <TabList borderColor="light.border">
               <Tab color="light.textSecondary">日 K 线</Tab>
               <Tab color="light.textSecondary">周 K 线</Tab>

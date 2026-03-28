@@ -28,9 +28,51 @@ class AkShareAdapter(BaseDataAdapter):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
+        self._cache = {}
+        self._cache_timestamp = {}
+        self._cache_ttl = {
+            'default': 300,
+            'stock_list': 600,
+            'stock_info': 600,
+            'quote': 30,
+            'kline': 300,
+            'sector': 300,
+            'fund_info': 600
+        }
+        self._last_request_time = 0
+        self._min_request_interval = 1.5  # akshare 需要更保守
         
         # 反风控设置
         self._request_delay_range = (1.0, 2.0)  # 请求间隔（秒）
+    
+    def _get_cache_key(self, prefix: str, **kwargs) -> str:
+        """生成缓存 key"""
+        key_parts = [prefix]
+        for k, v in sorted(kwargs.items()):
+            key_parts.append(f"{k}={v}")
+        return "_".join(key_parts)
+    
+    def _get_from_cache(self, key: str, ttl_type: str = 'default') -> Optional[Any]:
+        """从缓存获取数据"""
+        import time
+        if key not in self._cache:
+            return None
+        
+        timestamp = self._cache_timestamp.get(key, 0)
+        ttl = self._cache_ttl.get(ttl_type, self._cache_ttl['default'])
+        
+        if time.time() - timestamp > ttl:
+            del self._cache[key]
+            del self._cache_timestamp[key]
+            return None
+        
+        return self._cache[key]
+    
+    def _set_to_cache(self, key: str, value: Any, ttl_type: str = 'default'):
+        """设置缓存"""
+        import time
+        self._cache[key] = value
+        self._cache_timestamp[key] = time.time()
         self._retry_base_delay = 2.0  # 重试基础延迟（秒）
         self._max_retries = 3  # 最大重试次数
         self._consecutive_failures = 0  # 连续失败次数
@@ -303,13 +345,21 @@ class AkShareAdapter(BaseDataAdapter):
             }
             adjust_type = adjust_map.get(adjust, "qfq")
             
+            # 处理日期格式为整数（YYYYMMDD）
+            start_date_int = int(start_date.replace("-", "")) if start_date else 19900101
+            end_date_int = int(end_date.replace("-", "")) if end_date else 20991231
+            
             df = ak.stock_zh_a_hist(
                 symbol=code,
                 period="daily",
-                start_date=start_date.replace("-", "") if start_date else "19900101",
-                end_date=end_date.replace("-", "") if end_date else "20991231",
+                start_date=start_date_int,
+                end_date=end_date_int,
                 adjust=adjust_type
             )
+            
+            if df is None or df.empty:
+                logger.warning(f"K 线数据为空：{code}")
+                return []
             
             klines = []
             for _, row in df.iterrows():
@@ -324,6 +374,8 @@ class AkShareAdapter(BaseDataAdapter):
                     amount=float(row["成交额"]) if "成交额" in row else None,
                     turnover_rate=float(row["换手率"]) if "换手率" in row else None
                 ))
+            
+            logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条")
             return klines
         except Exception as e:
             logger.error(f"获取 K 线数据失败 {code}: {e}")
@@ -348,8 +400,8 @@ class AkShareAdapter(BaseDataAdapter):
         try:
             await self._rate_limit()
             
-            # 使用 akshare 获取指数历史行情
-            df = ak.stock_zh_index_hist(
+            # 使用 akshare 获取指数历史行情（正确的 API 是 index_zh_a_hist）
+            df = ak.index_zh_a_hist(
                 symbol=index_code,
                 period="daily",
                 start_date=start_date.replace("-", "") if start_date else "19900101",
@@ -511,6 +563,82 @@ class AkShareAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"获取筹码数据失败 {code}: {e}")
             return []
+    
+    async def get_market_moneyflow_dc(
+        self,
+        market_type: str = 'all',
+        trade_date: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """获取大盘资金流向
+        
+        Args:
+            market_type: 市场类型
+                - 'all': 沪深两市合计
+                - 'sh': 沪市
+                - 'sz': 深市
+                - 'cyb': 创业板
+                - 'zxb': 中小板
+            trade_date: 交易日期（未使用，保留兼容性）
+            start_date: 开始日期（未使用，保留兼容性）
+            end_date: 结束日期（未使用，保留兼容性）
+            
+        Returns:
+            大盘资金流向数据，包含：
+            - market_type: 市场类型
+            - main_net_amount: 主力净流入（元）
+            - buy_elg_amount: 超大单净流入（元）
+            - buy_big_amount: 大单净流入（元）
+            - sell_medium_amount: 中单净流入（元）
+            - sell_small_amount: 小单净流入（元）
+            - rise_count: 上涨家数
+            - fall_count: 下跌家数
+        """
+        try:
+            cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
+            cached = self._get_from_cache(cache_key, 'quote')
+            if cached:
+                return cached
+            
+            # 使用 akshare 获取全市场资金流向
+            loop = asyncio.get_event_loop()
+            df = await loop.run_in_executor(None, lambda: ak.stock_individual_fund_flow())
+            
+            if df is None or df.empty:
+                logger.warning(f"获取大盘资金流向数据为空：{market_type}")
+                return {}
+            
+            # 计算主力资金流向
+            main_net = float(df['主力净流入'].sum()) if '主力净流入' in df.columns else 0
+            buy_elg = float(df['超大单净流入'].sum()) if '超大单净流入' in df.columns else 0
+            buy_big = float(df['大单净流入'].sum()) if '大单净流入' in df.columns else 0
+            sell_medium = float(df['中单净流入'].sum()) if '中单净流入' in df.columns else 0
+            sell_small = float(df['小单净流入'].sum()) if '小单净流入' in df.columns else 0
+            
+            # 统计涨跌家数
+            rise_count = len(df[df['涨跌幅'] > 0]) if '涨跌幅' in df.columns else 0
+            fall_count = len(df[df['涨跌幅'] < 0]) if '涨跌幅' in df.columns else 0
+            
+            result = {
+                'market_type': market_type,
+                'main_net_amount': main_net,
+                'buy_elg_amount': buy_elg,
+                'buy_big_amount': buy_big,
+                'sell_medium_amount': sell_medium,
+                'sell_small_amount': sell_small,
+                'rise_count': int(rise_count),
+                'fall_count': int(fall_count),
+                'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
+            logger.info(f"获取大盘资金流向成功：{market_type}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取大盘资金流向失败 {market_type}: {e}")
+            return {}
     
     async def get_stock_financial(self, code: str) -> Dict[str, Any]:
         try:

@@ -1,0 +1,160 @@
+# Prometheus 告警规则
+
+groups:
+  # 数据源告警规则
+  - name: data_source_alerts
+    interval: 30s
+    rules:
+      # 数据源响应时间过长
+      - alert: DataSourceSlowResponse
+        expr: histogram_quantile(0.95, rate(data_source_request_duration_seconds_bucket[5m])) > 2
+        for: 2m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "数据源响应时间过长"
+          description: "数据源 {{ $labels.source }} 的 P95 响应时间超过 2 秒，当前值: {{ $value }}s"
+
+      # 数据源失败率过高
+      - alert: DataSourceHighFailureRate
+        expr: |
+          sum(rate(data_source_requests_total{status="failure"}[5m])) by (source) /
+          sum(rate(data_source_requests_total[5m])) by (source) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "数据源失败率过高"
+          description: "数据源 {{ $labels.source }} 的失败率超过 10%，当前值: {{ $value | humanizePercentage }}"
+
+      # 断路器打开
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "断路器已打开"
+          description: "数据源 {{ $labels.source }} 的断路器已打开，请求被拒绝"
+
+      # 限流器频繁拒绝
+      - alert: RateLimiterHighRejection
+        expr: |
+          sum(rate(rate_limiter_rejection_total[5m])) by (source) > 10
+        for: 2m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "限流器频繁拒绝请求"
+          description: "数据源 {{ $labels.source }} 的限流器在 5 分钟内拒绝了超过 10 个请求"
+
+  # 数据质量告警规则
+  - name: data_quality_alerts
+    interval: 60s
+    rules:
+      # 数据质量评分过低
+      - alert: DataQualityLow
+        expr: data_quality_score < 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: quality
+        annotations:
+          summary: "数据质量评分过低"
+          description: "数据源 {{ $labels.source }} 的 {{ $labels.data_type }} 数据质量评分低于 0.8，当前值: {{ $value }}"
+
+      # 数据完整性问题
+      - alert: DataIntegrityIssue
+        expr: data_quality_score < 0.5
+        for: 3m
+        labels:
+          severity: critical
+          category: quality
+        annotations:
+          summary: "数据完整性问题"
+          description: "数据源 {{ $labels.source }} 的 {{ $labels.data_type }} 数据完整性严重不足，当前值: {{ $value }}"
+
+  # 缓存告警规则
+  - name: cache_alerts
+    interval: 30s
+    rules:
+      # 缓存命中率过低
+      - alert: CacheHitRateLow
+        expr: cache_hit_rate < 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "缓存命中率过低"
+          description: "缓存 {{ $labels.cache_type }} 的命中率低于 50%，当前值: {{ $value | humanizePercentage }}"
+
+      # 缓存空间不足（如果有相关指标）
+      - alert: CacheSpaceLow
+        expr: cache_size_bytes / cache_max_size_bytes > 0.9
+        for: 2m
+        labels:
+          severity: warning
+          category: capacity
+        annotations:
+          summary: "缓存空间不足"
+          description: "缓存 {{ $labels.cache_type }} 的使用率超过 90%，当前值: {{ $value | humanizePercentage }}"
+
+  # 系统资源告警规则
+  - name: system_resource_alerts
+    interval: 30s
+    rules:
+      # 内存使用率过高（如果有相关指标）
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / process_virtual_memory_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          category: capacity
+        annotations:
+          summary: "内存使用率过高"
+          description: "进程内存使用率超过 90%，当前值: {{ $value | humanizePercentage }}"
+
+      # CPU 使用率过高（如果有相关指标）
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: capacity
+        annotations:
+          summary: "CPU 使用率过高"
+          description: "进程 CPU 使用率超过 80%，当前值: {{ $value | humanizePercentage }}"
+
+  # 业务指标告警规则
+  - name: business_alerts
+    interval: 60s
+    rules:
+      # 请求数量异常下降
+      - alert: RequestRateDrop
+        expr: |
+          sum(rate(data_source_requests_total[10m])) < 
+          sum(rate(data_source_requests_total[10m] offset 1h)) * 0.5
+        for: 10m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "请求量异常下降"
+          description: "请求量相比 1 小时前下降了超过 50%，可能存在问题"
+
+      # 无数据更新
+      - alert: NoDataUpdate
+        expr: |
+          time() - data_last_update_timestamp > 3600
+        for: 5m
+        labels:
+          severity: critical
+          category: business
+        annotations:
+          summary: "数据长时间未更新"
+          description: "数据源 {{ $labels.source }} 的数据已超过 1 小时未更新"

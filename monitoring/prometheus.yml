@@ -1,0 +1,64 @@
+# Prometheus 配置文件
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'quant-monitor'
+
+# 告警规则文件
+rule_files:
+  - 'alert_rules.yml'
+
+# 告警管理器配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# 抓取配置
+scrape_configs:
+  # Prometheus 自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'prometheus'
+
+  # Quant 后端应用监控
+  - job_name: 'quant-backend'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          instance: 'quant-backend'
+          environment: 'development'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # 数据源监控
+  - job_name: 'data-sources'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          instance: 'data-sources'
+    metrics_path: '/metrics/data-sources'
+    scrape_interval: 30s
+
+  # 缓存监控
+  - job_name: 'cache'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          instance: 'cache'
+    metrics_path: '/metrics/cache'
+    scrape_interval: 30s
+
+  # 存储监控
+  - job_name: 'storage'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          instance: 'storage'
+    metrics_path: '/metrics/storage'
+    scrape_interval: 60s

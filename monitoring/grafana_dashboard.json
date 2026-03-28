@@ -1,0 +1,280 @@
+{
+  "dashboard": {
+    "title": "Quant 数据中台监控仪表盘",
+    "tags": ["quant", "data-platform", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "数据源请求概览",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(data_source_requests_total[5m])) by (source)",
+            "legendFormat": "{{source}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "请求数/秒"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "数据源响应时间 (P95)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(data_source_request_duration_seconds_bucket[5m])) by (source, le))",
+            "legendFormat": "{{source}} P95",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "响应时间"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "数据源成功率",
+        "type": "gauge",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(data_source_requests_total{status=\"success\"}[5m])) by (source) / sum(rate(data_source_requests_total[5m])) by (source)",
+            "legendFormat": "{{source}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.8},
+                {"color": "green", "value": 0.95}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "断路器状态",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 6,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "circuit_breaker_state",
+            "legendFormat": "{{source}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {"text": "CLOSED", "color": "green"},
+                  "1": {"text": "OPEN", "color": "red"},
+                  "2": {"text": "HALF_OPEN", "color": "yellow"}
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "缓存命中率",
+        "type": "gauge",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 12,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "cache_hit_rate",
+            "legendFormat": "{{cache_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.7},
+                {"color": "green", "value": 0.9}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "数据质量评分",
+        "type": "gauge",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 18,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "data_quality_score",
+            "legendFormat": "{{source}}/{{data_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.8},
+                {"color": "green", "value": 0.95}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "限流器拒绝统计",
+        "type": "graph",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 0,
+          "y": 14
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(rate_limiter_rejection_total[5m])) by (source)",
+            "legendFormat": "{{source}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "拒绝数/秒"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "请求失败统计",
+        "type": "graph",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 14
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(data_source_requests_total{status=\"failure\"}[5m])) by (source, endpoint)",
+            "legendFormat": "{{source}}/{{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "失败数/秒"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "系统资源使用",
+        "type": "graph",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 0,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes",
+            "legendFormat": "内存使用",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(process_cpu_seconds_total[5m])",
+            "legendFormat": "CPU 使用率",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "告警概览",
+        "type": "alertlist",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 20
+        },
+        "options": {
+          "stateFilter": {
+            "firing": true,
+            "pending": true,
+            "normal": false
+          }
+        }
+      }
+    ]
+  }
+}

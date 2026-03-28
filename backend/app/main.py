@@ -83,6 +83,11 @@ async def lifespan(app: FastAPI):
     # 数据加载器已初始化为按需模式（不自动预加载）
     logger.info("数据加载模式：按需加载（用户请求时才拉取数据）")
     
+    # 初始化中间件（限流器、断路器）
+    from app.middleware import init_middleware
+    init_middleware()
+    logger.info("中间件初始化完成")
+    
     # 启动定期性能报告任务
     import asyncio
     from app.middleware.performance import periodic_performance_report
@@ -93,6 +98,14 @@ async def lifespan(app: FastAPI):
     from app.websocket import start_pusher_service
     await start_pusher_service()
     logger.info("WebSocket 推送服务已启动")
+    
+    # 启动生命周期管理定时任务
+    from app.tasks.lifecycle_tasks import start_lifecycle_tasks
+    start_lifecycle_tasks()
+    
+    # 启动备份定时任务
+    from app.tasks.backup_tasks import start_backup_tasks
+    start_backup_tasks()
     
     Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)
@@ -115,11 +128,108 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
-        description="个人股票量化分析系统 - 支持技术分析、板块分析、筹码选股、策略回测",
+        description="""
+## 个人股票量化分析系统 API 文档
+
+本系统提供完整的股票量化分析功能，包括：
+
+### 📊 核心功能
+- **技术分析**: K 线图表、技术指标 (MA/MACD/RSI/KDJ 等)
+- **板块分析**: 行业板块、概念板块、板块异动
+- **筹码选股**: 筹码分布、股东人数、筹码集中度
+- **资金流向**: 个股资金流、市场资金流、板块资金流
+- **策略回测**: 策略管理、回测系统、性能分析
+- **自选股**: 自选股管理、实时监控股
+
+### 🏗️ 数据中台架构
+系统采用轻量化数据中台架构：
+- **多数据源接入**: EFinance、AkShare、Baostock、TickFlow
+- **智能路由**: 自动选择最优数据源，支持故障降级
+- **统一数据模型**: 标准化数据清洗和验证
+- **分层存储**: SQLite (热数据) + Parquet (温数据) + LRU 缓存
+
+### 🔐 认证说明
+大部分 API 需要 JWT Token 认证，请先调用 `/api/v1/auth/login` 获取 Token。
+
+### 📈 数据源支持
+- **EFinance** (主力): 东方财富数据，完全免费，速度快
+- **AkShare** (主力): 开源数据源，接口丰富
+- **Baostock** (主力): 证券宝数据，稳定可靠
+- **TickFlow** (可选): 专业数据源，需要 API Key
+
+---
+
+**技术栈**:
+- Backend: FastAPI + Python 3.12
+- Frontend: React + TypeScript + Redux
+- Database: SQLite + Parquet
+- Cache: LRU Async Cache
+        """,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
-        lifespan=lifespan  # 使用新的 lifespan 方式
+        lifespan=lifespan,  # 使用新的 lifespan 方式
+        openapi_tags=[
+            {"name": "认证", "description": "用户认证相关 API"},
+            {"name": "个股信息", "description": "股票基本信息、财务数据、股东信息等"},
+            {"name": "板块分析", "description": "行业板块、概念板块、板块异动分析"},
+            {"name": "筹码选股", "description": "筹码分布、股东人数、筹码集中度分析"},
+            {"name": "选股筛选", "description": "股票筛选器、条件选股"},
+            {"name": "策略管理", "description": "交易策略创建、编辑、删除"},
+            {"name": "回测系统", "description": "策略回测、性能分析、交易记录"},
+            {"name": "自选股", "description": "自选股管理、实时监控"},
+            {"name": "市场行情", "description": "市场整体行情、市场统计"},
+            {"name": "实时盘口", "description": "实时报价、盘口数据"},
+            {"name": "资金流向", "description": "资金流向分析、主力净流入"},
+            {"name": "数据源管理", "description": "数据源健康检查、性能统计、切换配置"},
+            {"name": "数据源控制", "description": "数据源优先级配置、故障转移"},
+            {"name": "加载进度", "description": "数据加载进度追踪"},
+            {"name": "龙虎榜", "description": "龙虎榜数据、营业部排行"},
+            {"name": "资本流向", "description": "资金流向监控、大单追踪"},
+            {"name": "板块信息", "description": "板块详情、成分股"},
+            {"name": "指数成分", "description": "指数数据、成分股"},
+            {"name": "股东信息", "description": "股东人数、十大股东"},
+            {"name": "市场实时行情", "description": "市场实时报价、涨跌排行"},
+            {"name": "基金信息", "description": "基金列表、净值、持仓"},
+            {"name": "个股详细信息", "description": "个股详细资料、财务指标"},
+            {"name": "市场情绪监控", "description": "市场情绪指标、恐慌指数"},
+            {"name": "财务深度分析", "description": "财务报表、财务指标深度分析"},
+            {"name": "限售解禁", "description": "限售股解禁信息"},
+            {"name": "盘口异动", "description": "实时盘口异动、火箭发射"},
+            {"name": "筹码分布", "description": "筹码分布图、成本分析"},
+            {"name": "股票市场总貌", "description": "市场整体概况、交易统计"},
+            {"name": "地区交易排序", "description": "按地区统计交易活跃度"},
+            {"name": "行业成交与概况", "description": "行业成交统计、行业概况"},
+            {"name": "沪深京 A 股实时行情", "description": "A 股实时报价"},
+            {"name": "创业板实时行情", "description": "创业板实时报价"},
+            {"name": "科创板实时行情", "description": "科创板实时报价"},
+            {"name": "新浪财经实时行情", "description": "新浪财经实时数据"},
+            {"name": "历史行情数据", "description": "历史 K 线数据"},
+            {"name": "分时数据", "description": "分时图数据"},
+            {"name": "日内分时数据", "description": "日内逐笔成交数据"},
+            {"name": "盘前分钟数据", "description": "盘前集合竞价数据"},
+            {"name": "同行比较", "description": "同行业股票对比"},
+            {"name": "美股历史行情", "description": "美股历史数据"},
+            {"name": "港股历史行情", "description": "港股历史数据"},
+            {"name": "业绩报表", "description": "业绩快报、业绩预告"},
+            {"name": "行业分类数据", "description": "行业分类、行业代码"},
+            {"name": "财务报表", "description": "三大财务报表"},
+            {"name": "股东增减持", "description": "股东增持、减持信息"},
+            {"name": "资金流向", "description": "个股资金流向"},
+            {"name": "大单追踪", "description": "大单成交追踪"},
+            {"name": "东方财富个股资金流", "description": "东方财富个股资金流向"},
+            {"name": "东方财富大盘资金流", "description": "东方财富大盘资金流向"},
+            {"name": "东方财富板块资金流", "description": "东方财富板块资金流向排行"},
+            {"name": "东方财富主力净流入", "description": "东方财富主力净流入数据"},
+            {"name": "东方财富行业个股资金流", "description": "东方财富行业个股资金流"},
+            {"name": "东方财富行业/概念历史资金流", "description": "东方财富行业/概念历史资金流"},
+            {"name": "东方财富基金持股", "description": "东方财富基金持股数据"},
+            {"name": "东方财富龙虎榜", "description": "东方财富龙虎榜数据"},
+            {"name": "机构推荐", "description": "机构推荐股票"},
+            {"name": "技术指标", "description": "技术指标计算 (MA/MACD/RSI/KDJ 等)"},
+            {"name": "K 线图表", "description": "K 线数据获取和图表展示"},
+            {"name": "WebSocket", "description": "WebSocket 实时推送"},
+        ]
     )
     
     # 添加性能监控中间件

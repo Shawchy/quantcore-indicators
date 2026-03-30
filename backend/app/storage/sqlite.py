@@ -237,31 +237,43 @@ class MarketRanking(Base):
     __tablename__ = "market_ranking"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ranking_date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # 日期 YYYY-MM-DD
-    ranking_time: Mapped[str] = mapped_column(String(20), nullable=False)  # 时间 HH:MM:SS
-    ts_code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # 股票代码
-    name: Mapped[str] = mapped_column(String(50), nullable=False)  # 股票名称
-    price: Mapped[float] = mapped_column(Float)  # 最新价
-    change: Mapped[float] = mapped_column(Float)  # 涨跌额
-    change_pct: Mapped[float] = mapped_column(Float, index=True)  # 涨跌幅
-    volume: Mapped[float] = mapped_column(Float)  # 成交量
-    amount: Mapped[float] = mapped_column(Float)  # 成交额
-    open: Mapped[float] = mapped_column(Float)  # 今开
-    high: Mapped[float] = mapped_column(Float)  # 最高价
-    low: Mapped[float] = mapped_column(Float)  # 最低价
-    prev_close: Mapped[float] = mapped_column(Float)  # 昨收
-    turnover_rate: Mapped[Optional[float]] = mapped_column(Float)  # 换手率
-    ranking_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # 排行类型：gainers/losers/amount/turnover
-    rank_position: Mapped[int] = mapped_column(Integer, index=True)  # 排名位置
-    data_source: Mapped[str] = mapped_column(String(20))  # 数据源
+    ranking_date: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    ranking_time: Mapped[str] = mapped_column(String(20), nullable=False)
+    ts_code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    price: Mapped[float] = mapped_column(Float)
+    change: Mapped[float] = mapped_column(Float)
+    change_pct: Mapped[float] = mapped_column(Float, index=True)
+    volume: Mapped[float] = mapped_column(Float)
+    amount: Mapped[float] = mapped_column(Float)
+    open: Mapped[float] = mapped_column(Float)
+    high: Mapped[float] = mapped_column(Float)
+    low: Mapped[float] = mapped_column(Float)
+    prev_close: Mapped[float] = mapped_column(Float)
+    turnover_rate: Mapped[Optional[float]] = mapped_column(Float)
+    ranking_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    rank_position: Mapped[int] = mapped_column(Integer, index=True)
+    data_source: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     
     __table_args__ = (
-        # 复合索引优化查询性能
         Index("idx_ranking_date_type", "ranking_date", "ranking_type"),
         Index("idx_ranking_date_position", "ranking_date", "rank_position"),
         Index("idx_ranking_code_date", "ts_code", "ranking_date"),
     )
+
+
+class MarketTurnover(Base):
+    __tablename__ = "market_turnover"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    trade_date: Mapped[str] = mapped_column(String(8), unique=True, nullable=False, index=True)
+    sh_turnover: Mapped[float] = mapped_column(Float, nullable=False)
+    sz_turnover: Mapped[float] = mapped_column(Float, nullable=False)
+    total_turnover: Mapped[float] = mapped_column(Float, nullable=False)
+    stock_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 engine = None

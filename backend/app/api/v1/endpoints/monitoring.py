@@ -172,3 +172,34 @@ async def get_metrics_summary():
         }
     
     return summary
+
+
+@router.get("/trading-calendar")
+async def get_trading_calendar_status():
+    """获取交易日历状态"""
+    from app.services.trading_calendar import trading_calendar
+    
+    status = trading_calendar.get_cache_status()
+    
+    latest_day = await trading_calendar.get_latest_trading_day()
+    recent_days = await trading_calendar.get_recent_trading_days(5)
+    
+    return {
+        "cache_status": status,
+        "latest_trading_day": latest_day,
+        "recent_trading_days": recent_days
+    }
+
+
+@router.post("/trading-calendar/refresh")
+async def refresh_trading_calendar():
+    """强制刷新交易日历数据"""
+    from app.services.trading_calendar import trading_calendar
+    
+    success = await trading_calendar.force_refresh()
+    
+    return {
+        "success": success,
+        "message": "交易日历刷新成功" if success else "交易日历刷新失败",
+        "status": trading_calendar.get_cache_status()
+    }

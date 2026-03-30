@@ -72,6 +72,10 @@ async def lifespan(app: FastAPI):
     await init_database()
     logger.info("数据库初始化完成")
     
+    from app.services.trading_calendar import trading_calendar
+    await trading_calendar.initialize()
+    logger.info("交易日历服务初始化完成")
+    
     # 初始化数据源（仅初始化，不预加载数据）
     from app.adapters import data_source_manager
     try:

@@ -1,140 +1,291 @@
 """
-交易日历服务
-提供交易日查询、最新交易日判断、开盘状态检测等功能
+交易日历服务 - 优化版
+
+优化策略：
+1. SQLite 持久化 - 替代 JSON 文件，支持高效查询
+2. 多级缓存 - 内存缓存 -> SQLite -> 远程 API
+3. 启动时预加载 - 应用启动时异步预加载交易日数据
+4. 快速响应 - 优先返回缓存数据，后台异步更新
+5. 健康检查 - 定期检查数据是否需要更新
 """
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 from loguru import logger
-import akshare as ak
+import asyncio
 import time
-import json
-import os
+from pathlib import Path
+
+from sqlalchemy import String, Integer, DateTime, Boolean, Index, select, delete
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.storage.sqlite import Base, get_session, engine
+
+
+class TradingDay(Base):
+    __tablename__ = "trading_days"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[str] = mapped_column(String(8), unique=True, nullable=False, index=True)
+    is_trading_day: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    __table_args__ = (
+        Index("idx_trading_day_date", "date"),
+    )
 
 
 class TradingCalendarService:
-    """交易日历服务"""
+    """交易日历服务 - 优化版"""
+    
+    CACHE_TTL = 86400
+    REFRESH_INTERVAL = 3600
+    API_TIMEOUT = 5.0
     
     def __init__(self):
-        self._cache: Dict[str, Any] = {}
-        self._cache_timeout = 3600  # 缓存 1 小时
-        self._all_trading_days_cache: Optional[List[str]] = None
-        self._all_trading_days_cache_time: float = 0
-        self._all_trading_days_cache_ttl = 86400  # 24 小时缓存
-        self._local_cache_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "trading_days_cache.json")
+        self._memory_cache: Optional[Set[str]] = None
+        self._sorted_list_cache: Optional[List[str]] = None
+        self._cache_time: float = 0
+        self._last_refresh_time: float = 0
+        self._is_initialized: bool = False
+        self._init_lock: asyncio.Lock = asyncio.Lock()
+        self._refresh_task: Optional[asyncio.Task] = None
     
-    def _load_from_local_cache(self) -> Optional[List[str]]:
-        """从本地文件加载交易日历"""
-        try:
-            if os.path.exists(self._local_cache_file):
-                with open(self._local_cache_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if 'trading_days' in data and 'timestamp' in data:
-                        # 检查是否过期（24 小时）
-                        if datetime.now().timestamp() - data['timestamp'] < 86400:
-                            return data['trading_days']
-        except Exception as e:
-            logger.warning(f"读取本地缓存失败：{e}")
-        return None
-    
-    def _save_to_local_cache(self, trading_days: List[str]):
-        """保存到本地文件"""
-        try:
-            os.makedirs(os.path.dirname(self._local_cache_file), exist_ok=True)
-            with open(self._local_cache_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    'trading_days': trading_days,
-                    'timestamp': datetime.now().timestamp()
-                }, f, ensure_ascii=False)
-            logger.debug(f"交易日历已保存到本地：{self._local_cache_file}")
-        except Exception as e:
-            logger.warning(f"保存本地缓存失败：{e}")
-    
-    async def _get_all_trading_days(self) -> List[str]:
-        """
-        获取所有交易日（缓存）
-        
-        Returns:
-            所有交易日列表
-        """
-        # 检查内存缓存
-        if (self._all_trading_days_cache and 
-            datetime.now().timestamp() - self._all_trading_days_cache_time < self._all_trading_days_cache_ttl):
-            return self._all_trading_days_cache
-        
-        # 检查本地文件缓存
-        local_cache = self._load_from_local_cache()
-        if local_cache:
-            logger.debug("从本地文件缓存加载交易日历")
-            self._all_trading_days_cache = local_cache
-            self._all_trading_days_cache_time = datetime.now().timestamp()
-            return local_cache
-        
-        try:
-            start_time = time.time()
+    async def initialize(self) -> bool:
+        """初始化交易日历服务"""
+        async with self._init_lock:
+            if self._is_initialized:
+                return True
             
-            # 优先使用 Baostock（更可靠），添加超时保护
             try:
-                import asyncio
-                import baostock as bs
+                start_time = time.time()
                 
-                # 使用超时保护
-                async def fetch_baostock():
+                await self._ensure_table_exists()
+                
+                loaded = await self._load_from_db()
+                
+                if loaded:
+                    logger.info(f"交易日历从数据库加载完成，共 {len(self._memory_cache)} 个交易日，耗时 {time.time() - start_time:.3f}s")
+                else:
+                    logger.info("数据库无交易日数据，开始从远程获取...")
+                    await self._fetch_and_save_from_remote()
+                
+                self._is_initialized = True
+                
+                self._start_background_refresh()
+                
+                return True
+                
+            except Exception as e:
+                logger.error(f"交易日历初始化失败: {e}")
+                self._memory_cache = self._generate_estimate_cache()
+                self._sorted_list_cache = sorted(self._memory_cache)
+                self._is_initialized = True
+                return False
+    
+    async def _ensure_table_exists(self):
+        """确保数据库表存在"""
+        from app.storage.sqlite import init_database
+        try:
+            if engine is None:
+                await init_database()
+            async with engine.begin() as conn:
+                await conn.run_sync(TradingDay.__table__.create, checkfirst=True)
+        except Exception as e:
+            logger.warning(f"确保数据库表存在失败: {e}")
+    
+    async def _load_from_db(self) -> bool:
+        """从数据库加载交易日数据"""
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(TradingDay.date).where(TradingDay.is_trading_day == True)
+                )
+                dates = [row[0] for row in result.fetchall()]
+                
+                if dates:
+                    self._memory_cache = set(dates)
+                    self._sorted_list_cache = sorted(dates)
+                    self._cache_time = time.time()
+                    return True
+                return False
+                
+        except Exception as e:
+            logger.warning(f"从数据库加载交易日失败: {e}")
+            return False
+    
+    async def _save_to_db(self, trading_days: List[str]) -> bool:
+        """保存交易日数据到数据库"""
+        try:
+            async with get_session() as session:
+                await session.execute(delete(TradingDay))
+                
+                now = datetime.now()
+                records = [
+                    TradingDay(date=date, is_trading_day=True, updated_at=now)
+                    for date in trading_days
+                ]
+                session.add_all(records)
+                await session.commit()
+                
+                logger.info(f"交易日数据已保存到数据库，共 {len(trading_days)} 条")
+                return True
+                
+        except Exception as e:
+            logger.error(f"保存交易日到数据库失败: {e}")
+            return False
+    
+    async def _fetch_and_save_from_remote(self) -> bool:
+        """从远程 API 获取交易日数据并保存"""
+        try:
+            trading_days = await self._fetch_from_baostock()
+            
+            if not trading_days:
+                trading_days = await self._fetch_from_akshare()
+            
+            if trading_days:
+                await self._save_to_db(trading_days)
+                self._memory_cache = set(trading_days)
+                self._sorted_list_cache = sorted(trading_days)
+                self._cache_time = time.time()
+                self._last_refresh_time = time.time()
+                logger.info(f"从远程获取交易日数据成功，共 {len(trading_days)} 天")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"从远程获取交易日失败: {e}")
+            return False
+    
+    async def _fetch_from_baostock(self) -> Optional[List[str]]:
+        """从 Baostock 获取交易日数据"""
+        try:
+            import baostock as bs
+            
+            def fetch_sync():
+                try:
                     bs.login()
                     rs = bs.query_trade_dates()
                     bs.logout()
                     return rs
-                
-                # 设置 10 秒超时
-                rs = await asyncio.wait_for(
-                    asyncio.to_thread(lambda: self._fetch_baostock_sync()),
-                    timeout=10.0
-                )
-                
-                if rs:
-                    # Baostock 返回的是 ResultData 对象，需要转换为 DataFrame
-                    import pandas as pd
-                    df = pd.DataFrame(rs.get_data())
-                    
-                    trading_days = []
-                    for row in df.itertuples(index=False):
-                        # DataFrame 列名：calendar_date, is_trading_day
-                        if hasattr(row, 'is_trading_day') and row.is_trading_day == '1':
-                            date = str(getattr(row, 'calendar_date', '')).replace('-', '')
-                            if date and len(date) == 8:
-                                trading_days.append(date)
-                    
-                    if trading_days:
-                        # 缓存
-                        self._all_trading_days_cache = trading_days
-                        self._all_trading_days_cache_time = time.time()
-                        self._save_to_local_cache(trading_days)
-                        logger.debug(f"从 Baostock 获取交易日数据耗时：{time.time() - start_time:.2f}秒，共{len(trading_days)}天")
-                        return trading_days
-            except asyncio.TimeoutError:
-                logger.warning("Baostock 获取超时（10秒），使用估算方法")
-            except Exception as bs_error:
-                logger.warning(f"Baostock 获取失败，切换到估算: {bs_error}")
+                except Exception as e:
+                    logger.warning(f"Baostock 同步获取失败: {e}")
+                    return None
             
-            # 如果都失败，使用估算方法
-            logger.info("使用估算方法生成交易日历")
-            return self._estimate_all_trading_days()
+            rs = await asyncio.wait_for(
+                asyncio.to_thread(fetch_sync),
+                timeout=self.API_TIMEOUT
+            )
             
+            if rs:
+                import pandas as pd
+                df = pd.DataFrame(rs.get_data())
+                
+                trading_days = []
+                for row in df.itertuples(index=False):
+                    if hasattr(row, 'is_trading_day') and row.is_trading_day == '1':
+                        date = str(getattr(row, 'calendar_date', '')).replace('-', '')
+                        if date and len(date) == 8:
+                            trading_days.append(date)
+                
+                if trading_days:
+                    logger.debug(f"Baostock 获取交易日成功: {len(trading_days)} 天")
+                    return trading_days
+                    
+        except asyncio.TimeoutError:
+            logger.warning("Baostock 获取超时")
         except Exception as e:
-            logger.error(f"获取交易日失败：{e}")
-            # 返回估算数据
-            return self._estimate_all_trading_days()
+            logger.warning(f"Baostock 获取失败: {e}")
+        
+        return None
     
-    def _fetch_baostock_sync(self):
-        """同步方式获取 Baostock 数据"""
+    async def _fetch_from_akshare(self) -> Optional[List[str]]:
+        """从 AkShare 获取交易日数据"""
         try:
-            import baostock as bs
-            bs.login()
-            rs = bs.query_trade_dates()
-            bs.logout()
-            return rs
+            import akshare as ak
+            
+            def fetch_sync():
+                try:
+                    df = ak.tool_trade_date_hist_sina()
+                    return df['trade_date'].tolist()
+                except Exception as e:
+                    logger.warning(f"AkShare 同步获取失败: {e}")
+                    return None
+            
+            dates = await asyncio.wait_for(
+                asyncio.to_thread(fetch_sync),
+                timeout=self.API_TIMEOUT
+            )
+            
+            if dates:
+                trading_days = [str(d).replace('-', '') for d in dates if d]
+                logger.debug(f"AkShare 获取交易日成功: {len(trading_days)} 天")
+                return trading_days
+                
+        except asyncio.TimeoutError:
+            logger.warning("AkShare 获取超时")
         except Exception as e:
-            logger.error(f"Baostock 同步获取失败：{e}")
-            return None
+            logger.warning(f"AkShare 获取失败: {e}")
+        
+        return None
+    
+    def _generate_estimate_cache(self) -> Set[str]:
+        """生成估算的交易日缓存（降级方案）"""
+        trading_days = set()
+        current = datetime(2020, 1, 1)
+        end = datetime.now() + timedelta(days=365)
+        
+        while current <= end:
+            if current.weekday() < 5:
+                trading_days.add(current.strftime("%Y%m%d"))
+            current += timedelta(days=1)
+        
+        logger.info(f"生成估算交易日数据: {len(trading_days)} 天")
+        return trading_days
+    
+    def _start_background_refresh(self):
+        """启动后台刷新任务"""
+        if self._refresh_task is None or self._refresh_task.done():
+            self._refresh_task = asyncio.create_task(self._background_refresh_loop())
+            logger.debug("交易日历后台刷新任务已启动")
+    
+    async def _background_refresh_loop(self):
+        """后台刷新循环"""
+        while True:
+            try:
+                await asyncio.sleep(self.REFRESH_INTERVAL)
+                
+                if self._should_refresh():
+                    logger.debug("开始后台刷新交易日数据...")
+                    await self._fetch_and_save_from_remote()
+                    
+            except asyncio.CancelledError:
+                logger.debug("交易日历后台刷新任务已取消")
+                break
+            except Exception as e:
+                logger.error(f"后台刷新交易日失败: {e}")
+    
+    def _should_refresh(self) -> bool:
+        """判断是否需要刷新数据"""
+        if not self._memory_cache:
+            return True
+        
+        if time.time() - self._last_refresh_time > self.CACHE_TTL:
+            return True
+        
+        today = datetime.now().strftime("%Y%m%d")
+        if today not in self._memory_cache:
+            today_weekday = datetime.now().weekday()
+            if today_weekday < 5:
+                return True
+        
+        return False
+    
+    async def ensure_initialized(self):
+        """确保服务已初始化"""
+        if not self._is_initialized:
+            await self.initialize()
     
     async def get_trading_days(
         self,
@@ -146,120 +297,87 @@ class TradingCalendarService:
         获取交易日列表
         
         Args:
-            start_date: 开始日期，格式 YYYYMMDD，默认 60 天前
-            end_date: 结束日期，格式 YYYYMMDD，默认今天
+            start_date: 开始日期，格式 YYYYMMDD
+            end_date: 结束日期，格式 YYYYMMDD
             limit: 最多返回的交易日数量
         
         Returns:
-            交易日列表，格式 ['20260311', '20260310', ...]（降序）
+            交易日列表（降序，从新到旧）
         """
-        # 优先使用缓存的完整数据
-        try:
-            all_days = await self._get_all_trading_days()
-            
-            if not all_days:
-                # 如果获取失败，使用估算
-                return self._estimate_trading_days(limit)
-            
-            # 计算日期范围
-            if not end_date:
-                end_date = datetime.now().strftime("%Y%m%d")
-            
-            if not start_date:
-                start_date = (datetime.now() - timedelta(days=limit*2)).strftime("%Y%m%d")
-            
-            # 筛选日期范围（从新到旧）
-            trading_days = []
-            # 倒序遍历，获取最新的交易日
-            for date in reversed(all_days):
-                if start_date <= date <= end_date:
-                    trading_days.append(date)
-                if len(trading_days) >= limit:
-                    break
-            
-            # 倒序已经是降序的（从新到旧）
-            return trading_days
-            
-        except Exception as e:
-            logger.error(f"获取交易日失败：{e}")
+        await self.ensure_initialized()
+        
+        if not self._sorted_list_cache:
             return self._estimate_trading_days(limit)
-    
-    def _estimate_trading_days(self, limit: int = 60) -> List[str]:
-        """估算交易日（当无法获取真实数据时使用）"""
-        trading_days = []
-        current = datetime.now()
         
-        while len(trading_days) < limit:
-            # 排除周末
-            if current.weekday() < 5:
-                trading_days.append(current.strftime("%Y%m%d"))
-            current -= timedelta(days=1)
+        if not end_date:
+            end_date = datetime.now().strftime("%Y%m%d")
         
-        return trading_days
-    
-    def _estimate_all_trading_days(self) -> List[str]:
-        """估算所有交易日（完整列表）"""
-        trading_days = []
-        current = datetime(2000, 1, 1)  # 从 2000 年开始
-        end = datetime.now() + timedelta(days=365)  # 到明年今天
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=limit * 3)).strftime("%Y%m%d")
         
-        while current <= end:
-            date_str = current.strftime("%Y%m%d")
-            # 排除周末（5=周六，6=周日）
-            if current.weekday() < 5:
-                trading_days.append(date_str)
-            current += timedelta(days=1)
+        result = []
+        for date in reversed(self._sorted_list_cache):
+            if start_date <= date <= end_date:
+                result.append(date)
+                if len(result) >= limit:
+                    break
         
-        logger.info(f"估算交易日数据完成，共{len(trading_days)}天")
-        return trading_days
+        return result
     
     async def get_latest_trading_day(self) -> str:
-        """
-        获取最新交易日
+        """获取最新交易日"""
+        await self.ensure_initialized()
         
-        Returns:
-            最新交易日，格式 YYYYMMDD
-        """
-        trading_days = await self.get_trading_days(limit=1)
-        return trading_days[0] if trading_days else datetime.now().strftime("%Y%m%d")
+        if self._sorted_list_cache:
+            today = datetime.now().strftime("%Y%m%d")
+            for date in reversed(self._sorted_list_cache):
+                if date <= today:
+                    return date
+        
+        return datetime.now().strftime("%Y%m%d")
     
     async def get_previous_trading_day(self, date: str) -> str:
-        """
-        获取前一个交易日
+        """获取前一个交易日"""
+        await self.ensure_initialized()
         
-        Args:
-            date: 日期，格式 YYYYMMDD
+        if self._sorted_list_cache:
+            try:
+                idx = self._sorted_list_cache.index(date)
+                if idx > 0:
+                    return self._sorted_list_cache[idx - 1]
+            except ValueError:
+                pass
         
-        Returns:
-            前一个交易日
-        """
-        trading_days = await self.get_trading_days(end_date=date, limit=2)
-        return trading_days[1] if len(trading_days) > 1 else trading_days[0] if trading_days else date
+        dt = datetime.strptime(date, "%Y%m%d")
+        while True:
+            dt -= timedelta(days=1)
+            if dt.weekday() < 5:
+                return dt.strftime("%Y%m%d")
+    
+    async def is_trading_day(self, date: Optional[str] = None) -> bool:
+        """判断是否是交易日"""
+        await self.ensure_initialized()
+        
+        if not date:
+            date = datetime.now().strftime("%Y%m%d")
+        
+        if self._memory_cache:
+            return date in self._memory_cache
+        
+        dt = datetime.strptime(date, "%Y%m%d")
+        return dt.weekday() < 5
     
     async def is_market_open(self) -> bool:
-        """
-        判断当前是否已开盘
-        
-        判断逻辑：
-        1. 必须是交易日
-        2. 当前时间在开盘时间之后（9:30）
-        
-        Returns:
-            True 表示已开盘，False 表示未开盘
-        """
+        """判断当前是否已开盘"""
         now = datetime.now()
         
-        # 检查是否是周末
         if now.weekday() >= 5:
             return False
         
-        # 检查是否是交易日
         today = now.strftime("%Y%m%d")
-        trading_days = await self.get_trading_days(limit=1)
-        if not trading_days or trading_days[0] != today:
+        if not await self.is_trading_day(today):
             return False
         
-        # 检查时间（A 股开盘时间 9:30）
         market_open_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
         if now < market_open_time:
             return False
@@ -267,61 +385,27 @@ class TradingCalendarService:
         return True
     
     async def get_effective_date(self) -> Dict[str, Any]:
-        """
-        获取有效日期（智能判断应该显示哪天的数据）
+        """获取有效日期"""
+        await self.ensure_initialized()
         
-        逻辑：
-        - 如果已开盘：显示今天（正在交易中）
-        - 如果未开盘：显示最新交易日（最近有数据的交易日）
+        now = datetime.now()
+        today = now.strftime("%Y%m%d")
         
-        Returns:
-            {
-                "effective_date": "20260311",  # 应该显示的日期
-                "is_today": True,              # 是否是今天
-                "is_market_open": False,       # 是否已开盘
-                "latest_trading_day": "20260311",  # 最新交易日
-                "previous_trading_day": "20260310"  # 前一个交易日
-            }
-        """
         try:
-            now = datetime.now()
-            today = now.strftime("%Y%m%d")
-            
-            # 获取最新交易日（带超时保护）
-            try:
-                latest_trading_day = await self.get_latest_trading_day()
-            except Exception as e:
-                logger.warning(f"获取最新交易日失败，使用估算：{e}")
-                latest_trading_day = today
-            
-            # 判断是否已开盘（简化判断，避免网络请求）
+            latest_trading_day = await self.get_latest_trading_day()
+            previous_trading_day = await self.get_previous_trading_day(latest_trading_day)
             is_open = self._is_market_open_simple(now, today, latest_trading_day)
             
-            # 获取前一个交易日
-            try:
-                previous_trading_day = await self.get_previous_trading_day(latest_trading_day)
-            except Exception as e:
-                logger.warning(f"获取前一个交易日失败，使用估算：{e}")
-                previous_trading_day = self._estimate_previous_day(latest_trading_day)
-            
-            # 确定有效日期
-            # 如果已开盘：显示最新交易日（正在交易中）
-            # 如果未开盘：显示最新交易日（最近有数据的交易日）
-            effective_date = latest_trading_day
-            
             return {
-                "effective_date": effective_date,
-                "is_today": effective_date == today,
+                "effective_date": latest_trading_day,
+                "is_today": latest_trading_day == today,
                 "is_market_open": is_open,
                 "latest_trading_day": latest_trading_day,
                 "previous_trading_day": previous_trading_day,
                 "current_time": now.strftime("%H:%M:%S")
             }
         except Exception as e:
-            logger.error(f"获取有效日期失败：{e}")
-            # 返回默认值
-            now = datetime.now()
-            today = now.strftime("%Y%m%d")
+            logger.error(f"获取有效日期失败: {e}")
             return {
                 "effective_date": today,
                 "is_today": True,
@@ -332,64 +416,55 @@ class TradingCalendarService:
             }
     
     async def get_recent_trading_days(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """
-        获取最近 N 个交易日的详细信息
+        """获取最近 N 个交易日的详细信息"""
+        await self.ensure_initialized()
         
-        Returns:
-            [
-                {
-                    "date": "20260311",
-                    "display": "3 月 11 日",
-                    "is_today": True,
-                    "is_latest": True
-                },
-                ...
-            ]
-        """
-        try:
-            trading_days = await self.get_trading_days(limit=limit)
-            today = datetime.now().strftime("%Y%m%d")
-            latest = trading_days[0] if trading_days else today
-            
-            result = []
-            for i, date in enumerate(trading_days):
-                result.append({
-                    "date": date,
-                    "display": self._format_date_display(date),
-                    "is_today": date == today,
-                    "is_latest": date == latest,
-                    "is_selected": i == 0
-                })
-            
-            return result
-        except Exception as e:
-            logger.error(f"获取最近交易日失败：{e}")
-            # 返回估算数据
-            return self._estimate_recent_trading_days(limit)
+        trading_days = await self.get_trading_days(limit=limit)
+        today = datetime.now().strftime("%Y%m%d")
+        latest = trading_days[0] if trading_days else today
+        
+        result = []
+        for i, date in enumerate(trading_days):
+            result.append({
+                "date": date,
+                "display": self._format_date_display(date),
+                "is_today": date == today,
+                "is_latest": date == latest,
+                "is_selected": i == 0
+            })
+        
+        return result
     
-    def _estimate_recent_trading_days(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """估算最近交易日（降级方案）"""
-        try:
-            result = []
-            current = datetime.now()
-            today = current.strftime("%Y%m%d")
-            
-            while len(result) < limit:
-                if current.weekday() < 5:  # 周一到周五
-                    date = current.strftime("%Y%m%d")
-                    result.append({
-                        "date": date,
-                        "display": self._format_date_display(date),
-                        "is_today": date == today,
-                        "is_latest": len(result) == 0,
-                        "is_selected": len(result) == 0
-                    })
-                current -= timedelta(days=1)
-            
-            return result
-        except Exception as e:
-            logger.error(f"估算交易日失败：{e}")
-            return []
+    def _is_market_open_simple(self, now: datetime, today: str, latest_trading_day: str) -> bool:
+        """简化版开盘判断"""
+        if now.weekday() >= 5:
+            return False
+        
+        if today != latest_trading_day:
+            return False
+        
+        market_open_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        return now >= market_open_time
+    
+    def _estimate_trading_days(self, limit: int = 60) -> List[str]:
+        """估算交易日"""
+        trading_days = []
+        current = datetime.now()
+        
+        while len(trading_days) < limit:
+            if current.weekday() < 5:
+                trading_days.append(current.strftime("%Y%m%d"))
+            current -= timedelta(days=1)
+        
+        return trading_days
+    
+    def _estimate_previous_day(self, date: str) -> str:
+        """估算前一个交易日"""
+        dt = datetime.strptime(date, "%Y%m%d")
+        while True:
+            dt -= timedelta(days=1)
+            if dt.weekday() < 5:
+                return dt.strftime("%Y%m%d")
     
     def _format_date_display(self, date: str) -> str:
         """格式化日期显示"""
@@ -399,59 +474,20 @@ class TradingCalendarService:
         except:
             return date
     
-    def _is_market_open_simple(self, now: datetime, today: str, latest_trading_day: str) -> bool:
-        """
-        简化版开盘判断（不需要网络请求）
-        
-        Args:
-            now: 当前时间
-            today: 今天日期
-            latest_trading_day: 最新交易日
-            
-        Returns:
-            True 表示已开盘，False 表示未开盘
-        """
-        try:
-            # 检查是否是周末
-            if now.weekday() >= 5:
-                return False
-            
-            # 检查是否是交易日
-            if today != latest_trading_day:
-                return False
-            
-            # 检查时间（A 股开盘时间 9:30）
-            market_open_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
-            if now < market_open_time:
-                return False
-            
-            return True
-        except Exception as e:
-            logger.warning(f"简化开盘判断失败：{e}")
-            return False
+    async def force_refresh(self) -> bool:
+        """强制刷新交易日数据"""
+        logger.info("强制刷新交易日数据...")
+        return await self._fetch_and_save_from_remote()
     
-    def _estimate_previous_day(self, date: str) -> str:
-        """
-        估算前一个交易日（不考虑节假日）
-        
-        Args:
-            date: 日期，格式 YYYYMMDD
-            
-        Returns:
-            前一个交易日
-        """
-        try:
-            dt = datetime.strptime(date, "%Y%m%d")
-            # 向前找，直到找到工作日
-            while True:
-                dt -= timedelta(days=1)
-                if dt.weekday() < 5:  # 周一到周五
-                    return dt.strftime("%Y%m%d")
-        except Exception as e:
-            logger.warning(f"估算前一个交易日失败：{e}")
-            # 简单返回前一天
-            return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+    def get_cache_status(self) -> Dict[str, Any]:
+        """获取缓存状态"""
+        return {
+            "is_initialized": self._is_initialized,
+            "cache_count": len(self._memory_cache) if self._memory_cache else 0,
+            "cache_time": datetime.fromtimestamp(self._cache_time).isoformat() if self._cache_time else None,
+            "last_refresh_time": datetime.fromtimestamp(self._last_refresh_time).isoformat() if self._last_refresh_time else None,
+            "should_refresh": self._should_refresh(),
+        }
 
 
-# 全局实例
 trading_calendar = TradingCalendarService()

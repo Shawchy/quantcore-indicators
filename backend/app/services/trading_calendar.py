@@ -72,52 +72,69 @@ class TradingCalendarService:
         try:
             start_time = time.time()
             
-            # 优先使用 Baostock（更可靠）
+            # 优先使用 Baostock（更可靠），添加超时保护
             try:
+                import asyncio
                 import baostock as bs
-                bs.login()
-                rs = bs.query_trade_dates()
-                bs.logout()
                 
-                # Baostock 返回的是 ResultData 对象，需要转换为 DataFrame
-                import pandas as pd
-                df = pd.DataFrame(rs.get_data())
+                # 使用超时保护
+                async def fetch_baostock():
+                    bs.login()
+                    rs = bs.query_trade_dates()
+                    bs.logout()
+                    return rs
                 
-                trading_days = []
-                for row in df.itertuples(index=False):
-                    # DataFrame 列名：calendar_date, is_trading_day
-                    if hasattr(row, 'is_trading_day') and row.is_trading_day == '1':
-                        date = str(getattr(row, 'calendar_date', '')).replace('-', '')
-                        if date and len(date) == 8:
-                            trading_days.append(date)
+                # 设置 10 秒超时
+                rs = await asyncio.wait_for(
+                    asyncio.to_thread(lambda: self._fetch_baostock_sync()),
+                    timeout=10.0
+                )
                 
-                if trading_days:
-                    # 缓存
-                    self._all_trading_days_cache = trading_days
-                    self._all_trading_days_cache_time = time.time()
-                    self._save_to_local_cache(trading_days)
-                    logger.debug(f"从 Baostock 获取交易日数据耗时：{time.time() - start_time:.2f}秒，共{len(trading_days)}天")
-                    return trading_days
-            except Exception as bs_error:
-                logger.warning(f"Baostock 获取失败，切换到 AkShare: {bs_error}")
-            
-            # 使用 AkShare 的另一个 API（中国节假日列表）
-            try:
-                # 获取中国节假日数据（使用正确的接口）
-                # ak.holiday_info() 不存在，改用 ak.stock_info_a_code_name() 或其他方法
-                # 这里使用简单方法：直接估算，因为获取准确的调休数据很复杂
-                logger.debug("AkShare 节假日接口不可用，使用估算方法（排除周末）")
-                return self._estimate_all_trading_days()
+                if rs:
+                    # Baostock 返回的是 ResultData 对象，需要转换为 DataFrame
+                    import pandas as pd
+                    df = pd.DataFrame(rs.get_data())
                     
-            except Exception as ak_error:
-                logger.warning(f"AkShare 节假日数据获取失败：{ak_error}")
-                # 如果都失败，使用估算方法
-                return self._estimate_all_trading_days()
+                    trading_days = []
+                    for row in df.itertuples(index=False):
+                        # DataFrame 列名：calendar_date, is_trading_day
+                        if hasattr(row, 'is_trading_day') and row.is_trading_day == '1':
+                            date = str(getattr(row, 'calendar_date', '')).replace('-', '')
+                            if date and len(date) == 8:
+                                trading_days.append(date)
+                    
+                    if trading_days:
+                        # 缓存
+                        self._all_trading_days_cache = trading_days
+                        self._all_trading_days_cache_time = time.time()
+                        self._save_to_local_cache(trading_days)
+                        logger.debug(f"从 Baostock 获取交易日数据耗时：{time.time() - start_time:.2f}秒，共{len(trading_days)}天")
+                        return trading_days
+            except asyncio.TimeoutError:
+                logger.warning("Baostock 获取超时（10秒），使用估算方法")
+            except Exception as bs_error:
+                logger.warning(f"Baostock 获取失败，切换到估算: {bs_error}")
+            
+            # 如果都失败，使用估算方法
+            logger.info("使用估算方法生成交易日历")
+            return self._estimate_all_trading_days()
             
         except Exception as e:
             logger.error(f"获取交易日失败：{e}")
-            # 返回空列表，使用估算
-            return []
+            # 返回估算数据
+            return self._estimate_all_trading_days()
+    
+    def _fetch_baostock_sync(self):
+        """同步方式获取 Baostock 数据"""
+        try:
+            import baostock as bs
+            bs.login()
+            rs = bs.query_trade_dates()
+            bs.logout()
+            return rs
+        except Exception as e:
+            logger.error(f"Baostock 同步获取失败：{e}")
+            return None
     
     async def get_trading_days(
         self,
@@ -254,8 +271,8 @@ class TradingCalendarService:
         获取有效日期（智能判断应该显示哪天的数据）
         
         逻辑：
-        - 如果已开盘：显示今天
-        - 如果未开盘：显示前一个交易日
+        - 如果已开盘：显示今天（正在交易中）
+        - 如果未开盘：显示最新交易日（最近有数据的交易日）
         
         Returns:
             {
@@ -288,10 +305,9 @@ class TradingCalendarService:
                 previous_trading_day = self._estimate_previous_day(latest_trading_day)
             
             # 确定有效日期
-            if is_open:
-                effective_date = latest_trading_day
-            else:
-                effective_date = previous_trading_day
+            # 如果已开盘：显示最新交易日（正在交易中）
+            # 如果未开盘：显示最新交易日（最近有数据的交易日）
+            effective_date = latest_trading_day
             
             return {
                 "effective_date": effective_date,

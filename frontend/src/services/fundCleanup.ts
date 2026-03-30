@@ -181,7 +181,7 @@ class FundDataUpdater {
    */
   async updateWatchlistRealtimeData(
     fundCodes: string[],
-    onUpdate?: (code: string, data: any) => void
+    onUpdate: (data: any[]) => void
   ): Promise<void> {
     if (fundCodes.length === 0) {
       console.log('[数据更新] 自选列表为空，跳过更新');
@@ -190,8 +190,8 @@ class FundDataUpdater {
     
     try {
       // 先从后端获取全部有效基金代码
-      const { data } = await import('./fund');
-      const allValidCodes = await data.fundApi.getAllFundCodes();
+      const fundModule = await import('./fund');
+      const allValidCodes = await fundModule.fundApi.getAllFundCodes();
       
       if (allValidCodes.length === 0) {
         console.warn('[数据更新] 未能从后端获取有效基金代码，使用传入的列表');

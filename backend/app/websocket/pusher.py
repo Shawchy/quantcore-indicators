@@ -241,23 +241,21 @@ class RealtimeDataPusher:
             行情数据列表
         """
         try:
-            # 获取沪深 A 股行情
-            data = await data_source_manager.get_market_realtime_quotes(
-                market_types=["沪深 A 股"],
-                source_type="efinance"
-            )
+            # 获取沪深 A 股行情（默认参数）
+            data = await data_source_manager.get_market_realtime_quotes()
             
             if data:
                 # 简化数据，只保留关键字段
                 simplified = []
                 for quote in data[:100]:  # 限制前 100 只
+                    # MarketQuote 是对象，使用 getattr 获取属性
                     simplified.append({
-                        "ts_code": quote.get("ts_code", ""),
-                        "name": quote.get("name", ""),
-                        "price": quote.get("price", 0),
-                        "change_pct": quote.get("change_pct", 0),
-                        "volume": quote.get("volume", 0),
-                        "amount": quote.get("amount", 0),
+                        "ts_code": getattr(quote, 'ts_code', ""),
+                        "name": getattr(quote, 'name', ""),
+                        "price": getattr(quote, 'price', 0),
+                        "change_pct": getattr(quote, 'change_pct', 0),
+                        "volume": getattr(quote, 'volume', 0),
+                        "amount": getattr(quote, 'amount', 0),
                     })
                 return simplified
             

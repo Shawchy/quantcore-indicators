@@ -4,6 +4,8 @@ from app.services import stock_service, sector_service, chip_service
 from app.services.trading_calendar import trading_calendar
 from app.api.deps import CurrentUser, OptionalCurrentUser
 from typing import Optional
+from loguru import logger
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -52,6 +54,14 @@ async def get_market_statistics(
     """获取市场统计数据"""
     from sqlalchemy import select, func
     from app.storage.sqlite import get_session, StockInfo
+    from app.services.market_turnover_service import market_turnover_service
+    from app.utils.api_cache_stats import api_cache
+    
+    # 使用缓存，避免每次都调用 akshare（太慢了）
+    cache_key = {'date': trade_date}
+    cached_data = await api_cache.get('api_stats', cache_key)
+    if cached_data:
+        return ResponseModel(data=cached_data)
     
     # 直接从数据库查询，而不是从数据源获取
     async with get_session() as session:
@@ -64,13 +74,55 @@ async def get_market_statistics(
             select(StockInfo.industry, func.count()).group_by(StockInfo.industry)
         )
         industries = {ind: cnt for ind, cnt in result.all() if ind}
+        
+        # 计算市场总成交额：优先从数据库获取历史数据
+        try:
+            # 尝试从数据库获取
+            turnover_data = await market_turnover_service.fetch_and_save_latest(session)
+            
+            if turnover_data:
+                total_turnover = turnover_data['total_turnover']
+                logger.info(f"从数据库获取成交额：{total_turnover/100000000:.2f}亿")
+            else:
+                # 如果数据库没有，直接从 akshare 获取（备用方案）
+                logger.warning("数据库无数据，从 akshare 获取...")
+                import akshare as ak
+                df_sh = ak.stock_sh_a_spot_em()
+                df_sz = ak.stock_sz_a_spot_em()
+                total_turnover = df_sh['成交额'].sum() + df_sz['成交额'].sum()
+                
+        except Exception as e:
+            logger.error(f"获取成交额失败：{e}")
+            total_turnover = 0.0
     
-    return ResponseModel(data={
+    # 获取交易日期（带超时保护）
+    try:
+        import asyncio
+        effective_trade_date = await asyncio.wait_for(
+            trading_calendar.get_latest_trading_day(),
+            timeout=5.0  # 5 秒超时
+        )
+    except asyncio.TimeoutError:
+        logger.warning("获取交易日期超时，使用今天日期")
+        from datetime import datetime
+        effective_trade_date = datetime.now().strftime("%Y%m%d")
+    except Exception as e:
+        logger.warning(f"获取交易日期失败：{e}，使用今天日期")
+        from datetime import datetime
+        effective_trade_date = datetime.now().strftime("%Y%m%d")
+    
+    result_data = {
         "total_stocks": total_count or 0,
         "industry_distribution": industries,
         "top_industries": sorted(industries.items(), key=lambda x: x[1], reverse=True)[:10],
-        "trade_date": trade_date or (await trading_calendar.get_latest_trading_day())
-    })
+        "turnover": total_turnover,  # 市场总成交额（元）
+        "trade_date": trade_date or effective_trade_date
+    }
+    
+    # 缓存 5 分钟（300 秒）
+    await api_cache.set('api_stats', cache_key, result_data, ttl=300)
+    
+    return ResponseModel(data=result_data)
 
 
 @router.get("/sector-stats/{sector_code}", response_model=ResponseModel[dict])
@@ -112,7 +164,47 @@ async def get_preset_conditions(current_user: CurrentUser = Depends):
 @router.get("/effective-date", response_model=ResponseModel[dict])
 async def get_effective_date(current_user: OptionalCurrentUser = None):
     """获取智能判断的有效日期"""
-    effective_info = await trading_calendar.get_effective_date()
+    from app.utils.api_cache_stats import api_cache
+    import asyncio
+    
+    # 检查缓存
+    cache_key = {'type': 'effective_date'}
+    cached_data = await api_cache.get('trading_calendar', cache_key)
+    if cached_data:
+        return ResponseModel(data=cached_data)
+    
+    # 获取有效日期（带超时保护）
+    try:
+        effective_info = await asyncio.wait_for(
+            trading_calendar.get_effective_date(),
+            timeout=5.0  # 5 秒超时
+        )
+    except asyncio.TimeoutError:
+        logger.warning("获取有效日期超时，使用默认值")
+        today = datetime.now().strftime("%Y%m%d")
+        effective_info = {
+            "effective_date": today,
+            "is_today": True,
+            "is_market_open": False,
+            "latest_trading_day": today,
+            "previous_trading_day": (datetime.now() - timedelta(days=1)).strftime("%Y%m%d"),
+            "current_time": datetime.now().strftime("%H:%M:%S")
+        }
+    except Exception as e:
+        logger.error(f"获取有效日期失败：{e}")
+        today = datetime.now().strftime("%Y%m%d")
+        effective_info = {
+            "effective_date": today,
+            "is_today": True,
+            "is_market_open": False,
+            "latest_trading_day": today,
+            "previous_trading_day": (datetime.now() - timedelta(days=1)).strftime("%Y%m%d"),
+            "current_time": datetime.now().strftime("%H:%M:%S")
+        }
+    
+    # 缓存 5 分钟
+    await api_cache.set('trading_calendar', cache_key, effective_info, ttl=300)
+    
     return ResponseModel(data=effective_info)
 
 
@@ -122,5 +214,41 @@ async def get_trading_days(
     current_user: OptionalCurrentUser = None
 ):
     """获取交易日列表"""
-    trading_days = await trading_calendar.get_recent_trading_days(limit)
+    from app.utils.api_cache_stats import api_cache
+    import asyncio
+    
+    # 检查缓存
+    cache_key = {'type': 'trading_days', 'limit': limit}
+    cached_data = await api_cache.get('trading_calendar', cache_key)
+    if cached_data:
+        return ResponseModel(data=cached_data)
+    
+    # 获取交易日列表（带超时保护）
+    try:
+        trading_days = await asyncio.wait_for(
+            trading_calendar.get_recent_trading_days(limit),
+            timeout=5.0  # 5 秒超时
+        )
+    except asyncio.TimeoutError:
+        logger.warning("获取交易日列表超时，使用估算值")
+        # 使用估算方法
+        trading_days = []
+        current = datetime.now()
+        while len(trading_days) < limit:
+            if current.weekday() < 5:  # 排除周末
+                trading_days.append({
+                    "date": current.strftime("%Y%m%d"),
+                    "display": f"{current.month}月{current.day}日",
+                    "is_today": len(trading_days) == 0,
+                    "is_latest": len(trading_days) == 0,
+                    "is_selected": len(trading_days) == 0
+                })
+            current -= timedelta(days=1)
+    except Exception as e:
+        logger.error(f"获取交易日列表失败：{e}")
+        trading_days = []
+    
+    # 缓存 5 分钟
+    await api_cache.set('trading_calendar', cache_key, trading_days, ttl=300)
+    
     return ResponseModel(data=trading_days)

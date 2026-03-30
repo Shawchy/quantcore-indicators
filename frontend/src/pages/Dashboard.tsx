@@ -54,12 +54,18 @@ const Dashboard = () => {
   const { data: marketStats, isLoading: statsLoading } = useQuery({
     queryKey: ['marketStats', selectedDate],
     queryFn: () => screenerApi.getMarketStats(selectedDate),
+    refetchInterval: false, // 禁用自动轮询
+    staleTime: 5 * 60 * 1000, // 5 分钟内使用缓存
+    gcTime: 10 * 60 * 1000, // 缓存 10 分钟
   })
 
   // 获取板块排行
   const { data: sectorRanking, isLoading: sectorLoading } = useQuery({
     queryKey: ['sectorRanking', selectedDate],
     queryFn: () => sectorApi.getRanking('industry', 'change_pct', 10, selectedDate),
+    refetchInterval: false, // 禁用自动轮询
+    staleTime: 5 * 60 * 1000, // 5 分钟内使用缓存
+    gcTime: 10 * 60 * 1000, // 缓存 10 分钟
   })
 
   // 获取大盘指数实时数据
@@ -83,6 +89,9 @@ const Dashboard = () => {
       return result.data
     },
     enabled: true,
+    refetchInterval: false, // 禁用自动轮询
+    staleTime: 5 * 60 * 1000, // 5 分钟内使用缓存
+    gcTime: 10 * 60 * 1000, // 缓存 10 分钟
   })
 
   const handleDateChange = (newDate: string) => {

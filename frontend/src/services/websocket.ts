@@ -39,9 +39,16 @@ class WebSocketService {
   private readonly connectionTimeout = 10000; // 连接超时（毫秒）
 
   constructor(baseUrl?: string) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = baseUrl || window.location.host;
-    this.url = `${protocol}//${host}/api/v1/ws`;
+    if (baseUrl) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.url = `${protocol}//${baseUrl}/api/v1/ws`;
+    } else if (import.meta.env.VITE_WS_URL) {
+      this.url = import.meta.env.VITE_WS_URL;
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      this.url = `${protocol}//${host}/api/v1/ws`;
+    }
   }
 
   /**

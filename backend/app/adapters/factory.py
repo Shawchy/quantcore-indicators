@@ -134,6 +134,14 @@ class DataSourceManager:
         adapter = self.get_adapter(source_type)
         return await adapter.get_realtime_quote(code)
     
+    async def get_market_realtime_quotes(
+        self,
+        market_types: Optional[list] = None,
+        source_type: Optional[str] = None
+    ) -> list:
+        adapter = self.get_adapter(source_type)
+        return await adapter.get_market_realtime_quotes(market_types)
+    
     async def get_sector_list(self, sector_type: str = "industry", source_type: Optional[str] = None) -> list[SectorInfo]:
         adapter = self.get_adapter(source_type)
         return await adapter.get_sector_list(sector_type)

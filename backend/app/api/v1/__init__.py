@@ -90,4 +90,4 @@ api_router.include_router(performance.router, tags=["性能优化"])
 api_router.include_router(audit.router, tags=["审计日志"])
 
 # WebSocket 端点（不需要认证）
-api_router.include_router(websocket_router.router, prefix="/ws", tags=["WebSocket"])
+api_router.include_router(websocket_router.router, tags=["WebSocket"])

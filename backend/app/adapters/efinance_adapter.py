@@ -977,17 +977,29 @@ class EFinanceAdapter(BaseDataAdapter):
                 logger.warning(f"获取指数 K 线数据为空 {index_code}")
                 return []
             
+            # akshare 返回的列名是中文，需要映射
+            column_map = {
+                '日期': 'date',
+                '开盘': 'open',
+                '收盘': 'close',
+                '最高': 'high',
+                '最低': 'low',
+                '成交量': 'volume',
+                '成交额': 'amount',
+            }
+            df = df.rename(columns=column_map)
+            
             klines = []
             for _, row in df.iterrows():
                 klines.append(KLineData(
                     code=index_code,
                     date=self.format_date(str(row.get('date', ''))),
-                    open=float(row.get('open', 0)),
-                    high=float(row.get('high', 0)),
-                    low=float(row.get('low', 0)),
-                    close=float(row.get('close', 0)),
-                    volume=float(row.get('volume', 0)) if 'volume' in row else 0,
-                    amount=0  # 指数通常没有成交额数据
+                    open=float(row.get('open', 0) or 0),
+                    high=float(row.get('high', 0) or 0),
+                    low=float(row.get('low', 0) or 0),
+                    close=float(row.get('close', 0) or 0),
+                    volume=float(row.get('volume', 0) or 0),
+                    amount=float(row.get('amount', 0) or 0),
                 ))
             
             logger.info(f"获取指数 K 线成功 {index_code}: {len(klines)}条")
@@ -1374,7 +1386,7 @@ class EFinanceAdapter(BaseDataAdapter):
         获取沪深市场股票最新行情快照
         
         Args:
-            code: 股票代码，如 '600519'
+            code: 股票代码，如 '600519' 或指数代码 '000001'
             
         Returns:
             实时行情数据字典，包含以下字段：
@@ -1405,6 +1417,87 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> print(f"贵州茅台最新价：{quote['price']}元，涨跌幅：{quote['change_pct']}%")
         """
         try:
+            # 检测是否为指数代码（000001=上证指数，399001=深证成指等）
+            # efinance 不支持指数实时行情，使用 akshare 替代
+            if code in ['000001', '399001', '399006', '000016', '000300']:
+                try:
+                    import akshare as ak
+                    # 使用 akshare 获取指数实时行情（使用 stock_zh_index_daily 获取最新数据）
+                    symbol_map = {
+                        '000001': 'sh000001',  # 上证指数
+                        '399001': 'sz399001',  # 深证成指
+                        '399006': 'sz399006',  # 创业板指
+                        '000016': 'sh000016',  # 上证 50
+                        '000300': 'sh000300',  # 沪深 300
+                    }
+                    name_map = {
+                        '000001': '上证指数',
+                        '399001': '深证成指',
+                        '399006': '创业板指',
+                        '000016': '上证 50',
+                        '000300': '沪深 300',
+                    }
+                    ak_symbol = symbol_map.get(code, f'sh{code}')
+                    df = ak.stock_zh_index_daily(symbol=ak_symbol)
+                    if df is not None and len(df) >= 2:
+                        row = df.iloc[-1]  # 取最新一行
+                        prev_row = df.iloc[-2]  # 取前一交易日
+                        # 计算涨跌额和涨跌幅
+                        close = float(row.get('close', 0))
+                        prev_close = float(prev_row.get('close', 0))
+                        change = close - prev_close
+                        change_pct = (change / prev_close) * 100 if prev_close != 0 else 0.0
+                        
+                        # 获取准确的成交额数据
+                        # 使用 ak.stock_sh_a_spot_em() 和 ak.stock_sz_a_spot_em() 获取市场总成交额
+                        # 上证指数使用沪市总成交额，深证成指使用深市总成交额
+                        try:
+                            if code == '000001':  # 上证指数 - 沪市
+                                df_market = ak.stock_sh_a_spot_em()
+                                amount = df_market['成交额'].sum()
+                            elif code in ['399001', '399006']:  # 深证成指、创业板指 - 深市
+                                df_market = ak.stock_sz_a_spot_em()
+                                amount = df_market['成交额'].sum()
+                            else:  # 其他指数（上证 50、沪深 300）使用估算值
+                                # 使用 stock_zh_index_daily 的 volume 字段作为参考
+                                amount = float(row.get('volume', 0))
+                        except Exception as e:
+                            logger.warning(f"获取市场成交额失败 {code}: {e}")
+                            amount = 0.0
+                        
+                        # 成交量无法准确获取，设置为 0
+                        volume = 0
+                        
+                        return {
+                            'code': code,
+                            'name': name_map.get(code, f"指数{code}"),
+                            'price': close,
+                            'change': change,
+                            'change_pct': change_pct,
+                            'high': float(row.get('high', 0)),
+                            'low': float(row.get('low', 0)),
+                            'open': float(row.get('open', 0)),
+                            'prev_close': prev_close,
+                            'volume': volume,
+                            'amount': amount,
+                            'turnover_rate': 0.0,
+                            'avg_price': close,  # 使用收盘价作为均价
+                            'limit_up': 0.0,
+                            'limit_down': 0.0,
+                            'quote_time': str(row.get('date', '')),
+                            'bid_prices': [0.0] * 5,
+                            'ask_prices': [0.0] * 5,
+                            'bid_volumes': [0] * 5,
+                            'ask_volumes': [0] * 5,
+                            'bid1_price': None,
+                            'bid1_volume': None,
+                            'ask1_price': None,
+                            'ask1_volume': None
+                        }
+                except Exception as e:
+                    logger.warning(f"使用 akshare 获取指数行情失败 {code}: {e}")
+                return {}
+            
             if not EF_AVAILABLE:
                 return {}
             

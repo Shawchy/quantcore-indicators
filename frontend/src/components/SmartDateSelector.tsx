@@ -29,6 +29,7 @@ interface SmartDateSelectorProps {
 const CACHE_KEY = 'trading_days_cache'
 const CACHE_TIMESTAMP_KEY = 'trading_days_cache_timestamp'
 const CACHE_EXPIRY = 5 * 60 * 1000 // 5 分钟缓存过期
+const API_TIMEOUT = 8000 // 8 秒超时（后端 5 秒 + 网络延迟）
 
 export const SmartDateSelector = ({ 
   onDateChange,
@@ -105,23 +106,28 @@ export const SmartDateSelector = ({
         return
       }
       
-      // 从服务器加载（带超时处理）
+      // 从服务器加载（并行请求，带超时处理）
       try {
-        const effectiveResult = await Promise.race([
-          screenerApi.getEffectiveDate(),
+        const [effectiveResult, tradingDaysResult] = await Promise.race([
+          Promise.allSettled([
+            screenerApi.getEffectiveDate(),
+            screenerApi.getTradingDays(20)
+          ]),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('请求超时')), 30000)
+            setTimeout(() => reject(new Error('请求超时')), API_TIMEOUT)
           )
-        ]) as { data: { date: string; is_trading_day: boolean } }
-        const effectiveData = effectiveResult.data
-
-        const tradingDaysResult = await Promise.race([
-          screenerApi.getTradingDays(20),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('请求超时')), 30000)
-          )
-        ]) as { data: TradingDay[] }
-        const tradingDaysData = tradingDaysResult.data
+        ]) as [PromiseSettledResult<{ data: EffectiveDateInfo }>, PromiseSettledResult<{ data: TradingDay[] }>]
+        
+        const effectiveData = effectiveResult.status === 'fulfilled' 
+          ? effectiveResult.value.data 
+          : null
+        const tradingDaysData = tradingDaysResult.status === 'fulfilled' 
+          ? tradingDaysResult.value.data 
+          : []
+        
+        if (!effectiveData && tradingDaysData.length === 0) {
+          throw new Error('所有 API 请求失败')
+        }
         
         // 标记选中的日期
         const updatedDays = tradingDaysData.map((day: TradingDay, index: number) => ({
@@ -129,20 +135,30 @@ export const SmartDateSelector = ({
           is_selected: index === 0
         }))
         
+        const finalEffectiveDate = effectiveData?.effective_date || 
+          (tradingDaysData.length > 0 ? tradingDaysData[0].date : new Date().toISOString().slice(0, 10).replace(/-/g, ''))
+        
         setTradingDays(updatedDays)
-        setSelectedDate(effectiveData.effective_date)
+        setSelectedDate(finalEffectiveDate)
         setSliderValue(0)
         
         // 保存到缓存
         saveToCache({
           tradingDays: updatedDays,
-          effectiveInfo: effectiveData,
-          selectedDate: effectiveData.effective_date
+          effectiveInfo: effectiveData || {
+            effective_date: finalEffectiveDate,
+            is_today: true,
+            is_market_open: false,
+            latest_trading_day: finalEffectiveDate,
+            previous_trading_day: finalEffectiveDate,
+            current_time: new Date().toLocaleTimeString()
+          },
+          selectedDate: finalEffectiveDate
         })
         
         // 通知父组件
         if (onDateChange) {
-          onDateChange(effectiveData.effective_date)
+          onDateChange(finalEffectiveDate)
         }
         
         if (forceRefresh) {
@@ -162,7 +178,7 @@ export const SmartDateSelector = ({
         
         toast({
           title: '数据加载失败',
-          description: `无法获取交易日数据：${apiError.message || '请求超时'}`,
+          description: `无法获取交易日数据：${errorMessage}`,
           status: 'error',
           duration: 5000,
           position: 'top-right',

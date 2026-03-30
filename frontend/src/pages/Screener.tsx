@@ -49,6 +49,9 @@ const Screener = () => {
   const { data: marketStatsData } = useQuery({
     queryKey: ['marketStats'],
     queryFn: () => screenerApi.getMarketStats(),
+    refetchInterval: false, // 禁用自动轮询
+    staleTime: 5 * 60 * 1000, // 5 分钟内使用缓存
+    gcTime: 10 * 60 * 1000, // 缓存 10 分钟
   })
 
   const { data: resultsData, isLoading, refetch } = useQuery({

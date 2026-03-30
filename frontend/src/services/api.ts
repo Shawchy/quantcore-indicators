@@ -391,12 +391,12 @@ export const shareholderApi = {
     api.get(`/shareholder/stock/${code}/shareholders`),
 }
 
-// 市场实时行情 API
-export const marketQuotesApi = {
-  getMarketQuotes: (marketTypes?: string) =>
-    api.get('/market-quotes/market-quotes', { params: { market_types: marketTypes } }),
-  getSpecificMarketQuotes: (marketType: string, limit?: number) =>
-    api.get(`/market-quotes/market-quotes/${marketType}`, { params: { limit } }),
-}
+// 市场实时行情 API（已禁用）
+// export const marketQuotesApi = {
+//   getMarketQuotes: (marketTypes?: string) =>
+//     api.get('/market-quotes/market-quotes', { params: { market_types: marketTypes } }),
+//   getSpecificMarketQuotes: (marketType: string, limit?: number) =>
+//     api.get(`/market-quotes/market-quotes/${marketType}`, { params: { limit } }),
+// }
 
 export default api

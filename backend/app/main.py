@@ -103,6 +103,16 @@ async def lifespan(app: FastAPI):
     await start_pusher_service()
     logger.info("WebSocket 推送服务已启动")
     
+    # 初始化本地数据库服务
+    from app.services.local_database import local_db_service
+    await local_db_service.initialize()
+    logger.info("本地数据库服务已启动")
+    
+    # 启动数据同步定时任务
+    from app.services.data_sync_scheduler import data_sync_scheduler
+    await data_sync_scheduler.start()
+    logger.info("数据同步定时任务已启动")
+    
     # 启动生命周期管理定时任务
     from app.tasks.lifecycle_tasks import start_lifecycle_tasks
     start_lifecycle_tasks()
@@ -119,6 +129,12 @@ async def lifespan(app: FastAPI):
     
     # 关闭事件
     logger.info(f"{settings.APP_NAME} 关闭中...")
+    
+    # 停止数据同步任务
+    await data_sync_scheduler.stop()
+    
+    # 关闭本地数据库服务
+    await local_db_service.close()
     
     # 停止 WebSocket 推送服务
     from app.websocket import stop_pusher_service

@@ -6,6 +6,8 @@ from app.api.deps import CurrentUser, OptionalCurrentUser
 from typing import Optional
 from loguru import logger
 from datetime import datetime, timedelta
+import asyncio
+import random
 
 router = APIRouter()
 
@@ -87,9 +89,23 @@ async def get_market_statistics(
                 # 如果数据库没有，直接从 akshare 获取（备用方案）
                 logger.warning("数据库无数据，从 akshare 获取...")
                 import akshare as ak
-                df_sh = ak.stock_sh_a_spot_em()
-                df_sz = ak.stock_sz_a_spot_em()
-                total_turnover = df_sh['成交额'].sum() + df_sz['成交额'].sum()
+                
+                max_retries = 3
+                total_turnover = 0.0
+                
+                for retry_attempt in range(max_retries):
+                    try:
+                        df_sh = ak.stock_sh_a_spot_em()
+                        df_sz = ak.stock_sz_a_spot_em()
+                        total_turnover = df_sh['成交额'].sum() + df_sz['成交额'].sum()
+                        break
+                    except Exception as retry_e:
+                        if retry_attempt < max_retries - 1:
+                            delay = (2 ** retry_attempt) * 1.0 + random.uniform(0, 0.5)
+                            logger.warning(f"获取成交额失败，{delay:.1f}秒后重试（{retry_attempt+1}/{max_retries}）: {retry_e}")
+                            await asyncio.sleep(delay)
+                        else:
+                            raise retry_e
                 
         except Exception as e:
             logger.error(f"获取成交额失败：{e}")
@@ -97,18 +113,15 @@ async def get_market_statistics(
     
     # 获取交易日期（带超时保护）
     try:
-        import asyncio
         effective_trade_date = await asyncio.wait_for(
             trading_calendar.get_latest_trading_day(),
             timeout=5.0  # 5 秒超时
         )
     except asyncio.TimeoutError:
         logger.warning("获取交易日期超时，使用今天日期")
-        from datetime import datetime
         effective_trade_date = datetime.now().strftime("%Y%m%d")
     except Exception as e:
         logger.warning(f"获取交易日期失败：{e}，使用今天日期")
-        from datetime import datetime
         effective_trade_date = datetime.now().strftime("%Y%m%d")
     
     result_data = {

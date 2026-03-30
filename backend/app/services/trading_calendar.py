@@ -19,7 +19,8 @@ from sqlalchemy import String, Integer, DateTime, Boolean, Index, select, delete
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.storage.sqlite import Base, get_session, engine
+from app.storage.sqlite import Base, get_session
+from app.storage import sqlite as sqlite_module
 
 
 class TradingDay(Base):
@@ -87,9 +88,12 @@ class TradingCalendarService:
         """确保数据库表存在"""
         from app.storage.sqlite import init_database
         try:
-            if engine is None:
+            if sqlite_module.engine is None:
                 await init_database()
-            async with engine.begin() as conn:
+            if sqlite_module.engine is None:
+                logger.warning("数据库引擎初始化失败，跳过表创建")
+                return
+            async with sqlite_module.engine.begin() as conn:
                 await conn.run_sync(TradingDay.__table__.create, checkfirst=True)
         except Exception as e:
             logger.warning(f"确保数据库表存在失败: {e}")

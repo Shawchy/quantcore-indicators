@@ -98,13 +98,47 @@ class DataSourceManager:
     def get_adapter(self, source_type: Optional[str] = None) -> BaseDataAdapter:
         return self._factory.get_adapter(source_type)
     
+    def _get_source_priority(self, data_type: str) -> List[str]:
+        """获取指定数据类型的数据源优先级列表"""
+        type_priority = getattr(settings, 'DATA_SOURCE_BY_TYPE', {}).get(data_type)
+        if type_priority:
+            available = self._factory.get_available_sources()
+            return [s for s in type_priority if s in available]
+        return [s for s in settings.DATA_SOURCE_PRIORITY if s in self._factory.get_available_sources()]
+    
+    async def _try_sources(self, data_type: str, method_name: str, *args, **kwargs) -> Any:
+        """按优先级尝试多个数据源"""
+        source_priority = self._get_source_priority(data_type)
+        last_error = None
+        
+        for source in source_priority:
+            try:
+                adapter = self.get_adapter(source)
+                method = getattr(adapter, method_name)
+                result = await method(*args, **kwargs)
+                if result is not None:
+                    return result
+            except Exception as e:
+                last_error = e
+                logger.warning(f"数据源 {source} {method_name} 失败: {e}")
+                continue
+        
+        if last_error:
+            logger.error(f"所有数据源 {method_name} 失败")
+        return None
+    
     async def get_stock_list(self, source_type: Optional[str] = None) -> list[StockBasicInfo]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_stock_list()
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_stock_list()
+        result = await self._try_sources("stock_list", "get_stock_list")
+        return result or []
     
     async def get_stock_info(self, code: str, source_type: Optional[str] = None) -> Optional[StockBasicInfo]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_stock_info(code)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_stock_info(code)
+        return await self._try_sources("stock_info", "get_stock_info", code)
     
     async def get_kline(
         self,
@@ -114,11 +148,15 @@ class DataSourceManager:
         adjust: str = "qfk",
         source_type: Optional[str] = None
     ) -> list[KLineData]:
-        adapter = self.get_adapter(source_type)
-        # 将 adjust 转换为 fqt 参数传递给适配器
         fqt_map = {'qfk': 1, 'qfq': 1, 'hfq': 2, '': 0}
         fqt = fqt_map.get(adjust, 1)
-        return await adapter.get_kline(code, start_date, end_date, fqt=fqt)
+        
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_kline(code, start_date, end_date, fqt=fqt)
+        
+        result = await self._try_sources("kline", "get_kline", code, start_date, end_date, fqt=fqt)
+        return result or []
     
     async def get_market_index_kline(
         self,
@@ -127,28 +165,48 @@ class DataSourceManager:
         end_date: Optional[str] = None,
         source_type: Optional[str] = None
     ) -> list[KLineData]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_market_index_kline(index_code, start_date, end_date)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_market_index_kline(index_code, start_date, end_date)
+        
+        result = await self._try_sources("index_kline", "get_market_index_kline", index_code, start_date, end_date)
+        return result or []
     
     async def get_realtime_quote(self, code: str, source_type: Optional[str] = None) -> Dict[str, Any]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_realtime_quote(code)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_realtime_quote(code)
+        
+        result = await self._try_sources("realtime_quote", "get_realtime_quote", code)
+        return result or {}
     
     async def get_market_realtime_quotes(
         self,
         market_types: Optional[list] = None,
         source_type: Optional[str] = None
     ) -> list:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_market_realtime_quotes(market_types)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_market_realtime_quotes(market_types)
+        
+        result = await self._try_sources("market_quotes", "get_market_realtime_quotes", market_types)
+        return result or []
     
     async def get_sector_list(self, sector_type: str = "industry", source_type: Optional[str] = None) -> list[SectorInfo]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_sector_list(sector_type)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_sector_list(sector_type)
+        
+        result = await self._try_sources("sector", "get_sector_list", sector_type)
+        return result or []
     
     async def get_sector_components(self, sector_code: str, source_type: Optional[str] = None) -> list[str]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_sector_components(sector_code)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_sector_components(sector_code)
+        
+        result = await self._try_sources("sector", "get_sector_components", sector_code)
+        return result or []
     
     async def get_chip_data(
         self,
@@ -157,8 +215,12 @@ class DataSourceManager:
         end_date: Optional[str] = None,
         source_type: Optional[str] = None
     ) -> list[ChipData]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_chip_data(code, start_date, end_date)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_chip_data(code, start_date, end_date)
+        
+        result = await self._try_sources("chip", "get_chip_data", code, start_date, end_date)
+        return result or []
     
     # ===== 基金相关方法 =====
     
@@ -167,24 +229,36 @@ class DataSourceManager:
         fund_type: Optional[str] = None,
         source_type: Optional[str] = None
     ) -> list[dict]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_codes(fund_type)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_codes(fund_type)
+        
+        result = await self._try_sources("fund", "get_fund_codes", fund_type)
+        return result or []
     
     async def get_fund_base_info(
         self,
         fund_codes: Union[str, list[str]],
         source_type: Optional[str] = None
     ) -> Union[FundInfo, list[FundInfo]]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_base_info(fund_codes)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_base_info(fund_codes)
+        
+        result = await self._try_sources("fund", "get_fund_base_info", fund_codes)
+        return result
     
     async def get_fund_realtime_increase_rate(
         self,
         fund_codes: Union[str, list[str]],
         source_type: Optional[str] = None
     ) -> Union[dict, list[dict]]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_realtime_increase_rate(fund_codes)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_realtime_increase_rate(fund_codes)
+        
+        result = await self._try_sources("fund", "get_fund_realtime_increase_rate", fund_codes)
+        return result or {}
     
     async def get_fund_quote_history(
         self,
@@ -192,8 +266,12 @@ class DataSourceManager:
         pz: int = 40000,
         source_type: Optional[str] = None
     ) -> list[dict]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_quote_history(fund_code, pz)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_quote_history(fund_code, pz)
+        
+        result = await self._try_sources("fund", "get_fund_quote_history", fund_code, pz)
+        return result or []
     
     async def get_fund_quote_history_multi(
         self,
@@ -201,8 +279,12 @@ class DataSourceManager:
         pz: int = 40000,
         source_type: Optional[str] = None
     ) -> dict:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_quote_history_multi(fund_codes, pz)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_quote_history_multi(fund_codes, pz)
+        
+        result = await self._try_sources("fund", "get_fund_quote_history_multi", fund_codes, pz)
+        return result or {}
     
     async def get_fund_invest_position(
         self,
@@ -210,16 +292,24 @@ class DataSourceManager:
         dates: Optional[Union[str, list[str]]] = None,
         source_type: Optional[str] = None
     ) -> list[dict]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_invest_position(fund_code, dates)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_invest_position(fund_code, dates)
+        
+        result = await self._try_sources("fund", "get_fund_invest_position", fund_code, dates)
+        return result or []
     
     async def get_fund_period_change(
         self,
         fund_code: str,
         source_type: Optional[str] = None
     ) -> list[dict]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_period_change(fund_code)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_period_change(fund_code)
+        
+        result = await self._try_sources("fund", "get_fund_period_change", fund_code)
+        return result or []
     
     async def get_fund_types_percentage(
         self,
@@ -227,24 +317,36 @@ class DataSourceManager:
         dates: Optional[Union[str, list[str]]] = None,
         source_type: Optional[str] = None
     ) -> list[dict]:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_fund_types_percentage(fund_code, dates)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_fund_types_percentage(fund_code, dates)
+        
+        result = await self._try_sources("fund", "get_fund_types_percentage", fund_code, dates)
+        return result or []
     
     async def get_belong_board(
         self,
         code: str,
         source_type: Optional[str] = None
     ) -> list:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_belong_board(code)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_belong_board(code)
+        
+        result = await self._try_sources("billboard", "get_belong_board", code)
+        return result or []
     
     async def get_today_bill(
         self,
         trade_date: Optional[str] = None,
         source_type: Optional[str] = None
     ) -> list:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_today_bill(trade_date)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_today_bill(trade_date)
+        
+        result = await self._try_sources("moneyflow", "get_today_bill", trade_date)
+        return result or []
     
     async def get_history_bill(
         self,
@@ -253,8 +355,12 @@ class DataSourceManager:
         end_date: Optional[str] = None,
         source_type: Optional[str] = None
     ) -> list:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_history_bill(code, start_date, end_date)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_history_bill(code, start_date, end_date)
+        
+        result = await self._try_sources("moneyflow", "get_history_bill", code, start_date, end_date)
+        return result or []
     
     async def get_top10_stock_holder_info(
         self,
@@ -262,8 +368,12 @@ class DataSourceManager:
         top: int = 10,
         source_type: Optional[str] = None
     ) -> list:
-        adapter = self.get_adapter(source_type)
-        return await adapter.get_top10_stock_holder_info(code, top)
+        if source_type:
+            adapter = self.get_adapter(source_type)
+            return await adapter.get_top10_stock_holder_info(code, top)
+        
+        result = await self._try_sources("financial", "get_top10_stock_holder_info", code, top)
+        return result or []
     
     async def close(self) -> None:
         await self._factory.close_all()

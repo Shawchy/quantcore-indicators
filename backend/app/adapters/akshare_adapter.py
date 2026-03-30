@@ -13,7 +13,8 @@ from .base import (
     StockBasicInfo,
     KLineData,
     SectorInfo,
-    ChipData
+    ChipData,
+    MarketQuote
 )
 
 
@@ -28,56 +29,21 @@ class AkShareAdapter(BaseDataAdapter):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
-        self._cache = {}
-        self._cache_timestamp = {}
-        self._cache_ttl = {
-            'default': 300,
-            'stock_list': 600,
-            'stock_info': 600,
-            'quote': 30,
-            'kline': 300,
-            'sector': 300,
-            'fund_info': 600
-        }
         self._last_request_time = 0
         self._min_request_interval = 1.5  # akshare 需要更保守
         
         # 反风控设置
-        self._request_delay_range = (1.0, 2.0)  # 请求间隔（秒）
-    
-    def _get_cache_key(self, prefix: str, **kwargs) -> str:
-        """生成缓存 key"""
-        key_parts = [prefix]
-        for k, v in sorted(kwargs.items()):
-            key_parts.append(f"{k}={v}")
-        return "_".join(key_parts)
-    
-    def _get_from_cache(self, key: str, ttl_type: str = 'default') -> Optional[Any]:
-        """从缓存获取数据"""
-        import time
-        if key not in self._cache:
-            return None
-        
-        timestamp = self._cache_timestamp.get(key, 0)
-        ttl = self._cache_ttl.get(ttl_type, self._cache_ttl['default'])
-        
-        if time.time() - timestamp > ttl:
-            del self._cache[key]
-            del self._cache_timestamp[key]
-            return None
-        
-        return self._cache[key]
-    
-    def _set_to_cache(self, key: str, value: Any, ttl_type: str = 'default'):
-        """设置缓存"""
-        import time
-        self._cache[key] = value
-        self._cache_timestamp[key] = time.time()
-        self._retry_base_delay = 2.0  # 重试基础延迟（秒）
-        self._max_retries = 3  # 最大重试次数
+        self._request_delay_range = (2.0, 4.0)  # 请求间隔（秒），默认更保守
+        self._retry_base_delay = 3.0  # 重试基础延迟（秒）
+        self._max_retries = 5  # 最大重试次数
         self._consecutive_failures = 0  # 连续失败次数
         self._adaptive_delay_enabled = True  # 启用自适应延迟
         self._is_initialized = False
+        
+        # 限流检测
+        self._rate_limit_detected = False
+        self._rate_limit_count = 0
+        self._last_rate_limit_time = 0
         
         # User-Agent 轮换池（伪装成不同浏览器）
         self._user_agents = [
@@ -85,7 +51,9 @@ class AkShareAdapter(BaseDataAdapter):
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (iPad; CPU OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36"
         ]
         self._current_user_agent = random.choice(self._user_agents)
     
@@ -128,9 +96,15 @@ class AkShareAdapter(BaseDataAdapter):
         if self._adaptive_delay_enabled:
             min_delay, max_delay = self._get_time_based_delay()
             
+            # 如果检测到限流，大幅增加延迟
+            if self._rate_limit_detected:
+                min_delay *= 3
+                max_delay *= 3
+                logger.warning(f"检测到限流，使用 3 倍延迟：{min_delay:.1f}-{max_delay:.1f}秒")
+            
             # 根据连续失败次数增加额外延迟
             if self._consecutive_failures > 0:
-                extra_delay = min(self._consecutive_failures, 5)
+                extra_delay = min(self._consecutive_failures * 2, 10)
                 min_delay += extra_delay
                 max_delay += extra_delay
             
@@ -140,6 +114,43 @@ class AkShareAdapter(BaseDataAdapter):
         
         logger.debug(f"AkShare 请求限流：延迟 {delay:.2f}秒")
         await asyncio.sleep(delay)
+    
+    def _detect_rate_limit(self, error: Exception) -> bool:
+        """检测是否被限流
+        
+        Args:
+            error: 捕获的异常
+            
+        Returns:
+            bool: 是否检测到限流
+        """
+        error_msg = str(error).lower()
+        rate_limit_keywords = [
+            'connection aborted',
+            'remote end closed',
+            'too many requests',
+            'rate limit',
+            'frequency limit',
+            'access denied',
+            'ip blocked',
+            'request rejected'
+        ]
+        
+        is_rate_limit = any(keyword in error_msg for keyword in rate_limit_keywords)
+        
+        if is_rate_limit:
+            current_time = time.time()
+            # 5 分钟内多次限流才确认
+            if current_time - self._last_rate_limit_time < 300:
+                self._rate_limit_count += 1
+                if self._rate_limit_count >= 3:
+                    self._rate_limit_detected = True
+                    logger.warning(f"确认被限流！5 分钟内{self._rate_limit_count}次触发")
+            else:
+                self._rate_limit_count = 1
+                self._last_rate_limit_time = current_time
+        
+        return is_rate_limit
     
     def _rate_limit_sync(self):
         """同步请求限流"""
@@ -168,6 +179,14 @@ class AkShareAdapter(BaseDataAdapter):
         self._adaptive_delay_enabled = enabled
         status = "已启用" if enabled else "已禁用"
         logger.info(f"AkShare 自适应延迟：{status}")
+    
+    def reset_rate_limit_status(self):
+        """重置限流状态（在成功请求后调用）"""
+        if self._rate_limit_detected:
+            self._rate_limit_detected = False
+            self._rate_limit_count = 0
+            self._last_rate_limit_time = 0
+            logger.info("限流状态已重置")
     
     def set_custom_delay(self, min_delay: float, max_delay: float):
         """设置自定义延迟范围
@@ -270,9 +289,20 @@ class AkShareAdapter(BaseDataAdapter):
                         if hasattr(self, '_consecutive_failures'):
                             self._consecutive_failures += 1
                         
+                        # 检测是否被限流
+                        if hasattr(self, '_detect_rate_limit'):
+                            if self._detect_rate_limit(e):
+                                # 轮换 User-Agent
+                                if hasattr(self, '_rotate_user_agent'):
+                                    self._rotate_user_agent()
+                        
                         if attempt < retries - 1:
-                            # 指数退避
-                            delay = (2 ** attempt) * min_delay + random.uniform(0, 1)
+                            # 指数退避 + 限流惩罚
+                            base_delay = (2 ** attempt) * min_delay
+                            if hasattr(self, '_rate_limit_detected') and self._rate_limit_detected:
+                                base_delay *= 2  # 限流时延迟翻倍
+                            
+                            delay = base_delay + random.uniform(0, 1)
                             logger.debug(f"{func.__name__} 请求失败，{delay:.1f}秒后重试（{attempt+1}/{retries}）: {e}")
                             await asyncio.sleep(delay)
                         else:
@@ -453,6 +483,82 @@ class AkShareAdapter(BaseDataAdapter):
             logger.error(f"获取实时行情失败 {code}: {e}")
             return {}
     
+    async def get_market_realtime_quotes(
+        self,
+        market_types: Optional[List[str]] = None
+    ) -> List[MarketQuote]:
+        try:
+            # 缓存已移除，统一使用 storage_manager
+            # cache_key = self._get_cache_key('market_quotes', types=','.join(market_types or []))
+            # cached = self._get_from_cache(cache_key, 'quote')
+            # if cached:
+            #     return cached
+            
+            max_retries = 3
+            df = None
+            
+            for attempt in range(max_retries):
+                try:
+                    df = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: ak.stock_zh_a_spot_em()
+                    )
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        delay = (2 ** attempt) * 2.0 + random.uniform(0, 1)
+                        logger.warning(f"akshare 获取市场行情失败，{delay:.1f}秒后重试（{attempt+1}/{max_retries}）: {e}")
+                        await asyncio.sleep(delay)
+                    else:
+                        raise e
+            
+            if df is None or df.empty:
+                logger.warning("akshare 返回空数据")
+                return []
+            
+            quotes = []
+            for _, row in df.iterrows():
+                def safe_float(value, default=None):
+                    try:
+                        if value is None or value == '' or value == '-':
+                            return default
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                code = str(row.get("代码", "")).zfill(6)
+                if not code:
+                    continue
+                
+                quotes.append(MarketQuote(
+                    code=code,
+                    name=str(row.get("名称", "")),
+                    change_pct=safe_float(row.get("涨跌幅")),
+                    price=safe_float(row.get("最新价")),
+                    high=safe_float(row.get("最高")),
+                    low=safe_float(row.get("最低")),
+                    open=safe_float(row.get("今开")),
+                    change=safe_float(row.get("涨跌额")),
+                    turnover_rate=safe_float(row.get("换手率")),
+                    volume_ratio=safe_float(row.get("量比")),
+                    pe_ratio=safe_float(row.get("市盈率 - 动态")),
+                    volume=safe_float(row.get("成交量")),
+                    amount=safe_float(row.get("成交额")),
+                    prev_close=safe_float(row.get("昨收")),
+                    total_market_cap=safe_float(row.get("总市值")),
+                    float_market_cap=safe_float(row.get("流通市值")),
+                    market_type="A 股"
+                ))
+            
+            # 缓存已移除，统一使用 storage_manager
+            # self._set_to_cache(cache_key, quotes, 'quote')
+            logger.info(f"akshare 获取市场实时行情成功：{len(quotes)}条")
+            return quotes
+            
+        except Exception as e:
+            logger.error(f"akshare 获取市场实时行情失败：{e}")
+            return []
+    
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
         try:
             if sector_type == "industry":
@@ -596,10 +702,11 @@ class AkShareAdapter(BaseDataAdapter):
             - fall_count: 下跌家数
         """
         try:
-            cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
-            cached = self._get_from_cache(cache_key, 'quote')
-            if cached:
-                return cached
+            # 缓存已移除，统一使用 storage_manager
+            # cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
+            # cached = self._get_from_cache(cache_key, 'quote')
+            # if cached:
+            #     return cached
             
             # 使用 akshare 获取全市场资金流向
             loop = asyncio.get_event_loop()
@@ -632,7 +739,8 @@ class AkShareAdapter(BaseDataAdapter):
                 'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
+            # 缓存已移除，统一使用 storage_manager
+            # self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
             logger.info(f"获取大盘资金流向成功：{market_type}")
             return result
             

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
+﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Box, ColorModeScript, Spinner, Flex, Text } from '@chakra-ui/react'
 import { useEffect, Suspense, lazy } from 'react'
 import Layout from './components/Layout'
@@ -22,7 +22,6 @@ const MarketRanking = lazy(() => import('./pages/MarketRanking'))
 const DailyMarket = lazy(() => import('./pages/DailyMarket'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Billboard = lazy(() => import('./pages/Billboard'))
-const MarketQuotes = lazy(() => import('./pages/MarketQuotes'))
 
 // 东方财富模块 - 懒加载
 const EastMoneyChangesPage = lazy(() => import('./pages/EastMoneyChangesPage'))
@@ -148,11 +147,6 @@ function App() {
             <Route path="billboard" element={
               <Suspense fallback={<PageLoading />}>
                 <Billboard />
-              </Suspense>
-            } />
-            <Route path="market-quotes" element={
-              <Suspense fallback={<PageLoading />}>
-                <MarketQuotes />
               </Suspense>
             } />
             <Route path="settings" element={

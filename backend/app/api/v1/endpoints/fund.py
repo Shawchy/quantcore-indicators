@@ -9,6 +9,7 @@ from loguru import logger
 
 from app.models.schemas import ResponseModel, FundInfo
 from app.adapters.factory import data_source_manager
+from app.services.smart_loader import smart_loader
 
 router = APIRouter(tags=["基金信息"])
 
@@ -51,6 +52,7 @@ async def get_fund_base_info(
                     message="基金代码不能为空"
                 )
             
+            # 批量获取 - 直接使用数据源（批量操作不适合缓存）
             fund_list = await data_source_manager.get_fund_base_info(
                 fund_codes=fund_codes,
                 source_type="efinance"
@@ -65,7 +67,7 @@ async def get_fund_base_info(
             
             return ResponseModel(data=fund_list)
         else:
-            # 单只基金
+            # 单只基金 - 使用智能加载器（带缓存）
             fund_info = await data_source_manager.get_fund_base_info(
                 fund_codes=fund_code.strip(),
                 source_type="efinance"
@@ -118,7 +120,7 @@ async def get_fund_realtime_increase_rate(
     try:
         # 判断是单只还是多只
         if ',' in fund_codes:
-            # 多只基金
+            # 多只基金 - 批量获取直接使用数据源
             fund_code_list = [code.strip() for code in fund_codes.split(',') if code.strip()]
             
             if not fund_code_list:
@@ -142,7 +144,7 @@ async def get_fund_realtime_increase_rate(
             
             return ResponseModel(data=rate_list)
         else:
-            # 单只基金
+            # 单只基金 - 实时数据不使用缓存（变化频繁）
             fund_code = fund_codes.strip()
             
             if not fund_code:
@@ -202,6 +204,7 @@ async def get_fund_quote_history_multi(
                 message="基金代码列表不能为空"
             )
         
+        # 批量获取历史数据 - 直接使用数据源（批量操作）
         history_dict = await data_source_manager.get_fund_quote_history_multi(
             fund_codes=fund_codes,
             pz=pz,
@@ -261,6 +264,7 @@ async def get_fund_codes(
         GET /api/v1/fund/codes?fund_type=etf
     """
     try:
+        # 基金代码列表变化不频繁，适合缓存（每日更新）
         fund_list = await data_source_manager.get_fund_codes(
             fund_type=fund_type,
             source_type="efinance"
@@ -328,6 +332,7 @@ async def get_fund_invest_position(
             else:
                 dates_param = date_list
         
+        # 基金持仓数据变化不频繁（季度更新），适合缓存
         position_list = await data_source_manager.get_fund_invest_position(
             fund_code=fund_code,
             dates=dates_param,
@@ -377,11 +382,19 @@ async def get_fund_quote_history(
         GET /api/v1/fund/161725/history?pz=100
     """
     try:
-        history_list = await data_source_manager.get_fund_quote_history(
-            fund_code=fund_code,
-            pz=pz,
-            source_type="efinance"
+        # 使用智能加载器获取基金历史净值（带缓存）
+        history_list = await smart_loader.get_fund_nav(
+            code=fund_code,
+            use_cache=True
         )
+        
+        # 如果缓存未命中或数据为空，从 API 获取
+        if not history_list:
+            history_list = await data_source_manager.get_fund_quote_history(
+                fund_code=fund_code,
+                pz=pz,
+                source_type="efinance"
+            )
         
         if not history_list:
             return ResponseModel(
@@ -426,6 +439,7 @@ async def get_fund_period_change(
         # 返回数据中包含近一年、近三年等不同时间段的收益率和排名
     """
     try:
+        # 基金阶段涨跌幅每日更新，适合缓存
         period_list = await data_source_manager.get_fund_period_change(
             fund_code=fund_code,
             source_type="efinance"
@@ -494,6 +508,7 @@ async def get_fund_assets_allocation(
             else:
                 dates_param = date_list
         
+        # 基金资产配置数据季度更新，适合缓存
         assets_list = await data_source_manager.get_fund_types_percentage(
             fund_code=fund_code,
             dates=dates_param,
@@ -529,7 +544,7 @@ async def get_fund_list(
         基金代码列表，每项包含 code 和 name
     """
     try:
-        # 调用数据源管理器获取基金代码列表
+        # 基金列表变化不频繁，适合缓存
         result = await data_source_manager.get_fund_codes(fund_type=fund_type)
         
         return ResponseModel(

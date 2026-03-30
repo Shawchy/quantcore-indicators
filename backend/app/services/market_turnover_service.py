@@ -7,6 +7,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, Dict, Any
 from datetime import datetime
+import asyncio
+import random
 import akshare as ak
 from loguru import logger
 
@@ -116,8 +118,23 @@ class MarketTurnoverService:
                 return existing
             
             logger.info(f"从 akshare 获取 {trade_date} 成交额数据...")
-            df_sh = ak.stock_sh_a_spot_em()
-            df_sz = ak.stock_sz_a_spot_em()
+            
+            max_retries = 3
+            df_sh = None
+            df_sz = None
+            
+            for retry_attempt in range(max_retries):
+                try:
+                    df_sh = ak.stock_sh_a_spot_em()
+                    df_sz = ak.stock_sz_a_spot_em()
+                    break
+                except Exception as e:
+                    if retry_attempt < max_retries - 1:
+                        delay = (2 ** retry_attempt) * 1.0 + random.uniform(0, 0.5)
+                        logger.warning(f"获取成交额数据失败，{delay:.1f}秒后重试（{retry_attempt+1}/{max_retries}）: {e}")
+                        await asyncio.sleep(delay)
+                    else:
+                        raise e
             
             sh_turnover = df_sh['成交额'].sum()
             sz_turnover = df_sz['成交额'].sum()

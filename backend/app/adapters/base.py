@@ -1378,26 +1378,30 @@ class BaseDataAdapter(ABC):
         logger.warning(f"{self.source_type.value} 未实现 get_monthly_kline 方法")
         return []
     
-    @abstractmethod
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
-        pass
+        """获取实时行情（默认实现，返回空字典）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_realtime_quote 方法")
+        return {}
     
-    @abstractmethod
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
-        pass
+        """获取板块列表（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_sector_list 方法")
+        return []
     
-    @abstractmethod
     async def get_sector_components(self, sector_code: str) -> List[str]:
-        pass
+        """获取板块成分股（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_sector_components 方法")
+        return []
     
-    @abstractmethod
     async def get_chip_data(
         self,
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[ChipData]:
-        pass
+        """获取筹码数据（默认实现，返回空列表）"""
+        logger.warning(f"{self.source_type.value} 未实现 get_chip_data 方法")
+        return []
     
     async def get_daily_billboard(self, trade_date: Optional[str] = None) -> List[BillboardEntry]:
         """获取龙虎榜数据（默认实现，返回空列表）"""

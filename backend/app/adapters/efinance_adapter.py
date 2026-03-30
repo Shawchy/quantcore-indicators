@@ -100,6 +100,7 @@ class FinancialPerformance(BaseModel):
 
 from app.utils.data_validator import validator
 from app.utils.api_cache_stats import api_call_cache
+from app.storage.unified_storage import storage_manager, DataCategory
 
 
 def safe_float(value, default=0.0):
@@ -161,19 +162,6 @@ class EFinanceAdapter(BaseDataAdapter):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         self._is_initialized = False
-        
-        # 内存缓存
-        self._cache: Dict[str, Any] = {}
-        self._cache_timestamp: Dict[str, float] = {}
-        # 不同数据的缓存时间（秒）
-        self._cache_ttl = {
-            'kline': 300,        # K 线：5 分钟
-            'stock_list': 1800,  # 股票列表：30 分钟
-            'stock_info': 600,   # 股票信息：10 分钟
-            'quote': 60,         # 实时行情：1 分钟
-            'sector': 300,       # 板块：5 分钟
-            'default': 300       # 默认：5 分钟
-        }
         
         # 反风控设置
         self._request_delay_range = (1.0, 2.0)  # 请求间隔（秒）
@@ -493,38 +481,7 @@ class EFinanceAdapter(BaseDataAdapter):
     async def close(self):
         """关闭连接"""
         self._is_initialized = False
-        self._cache.clear()
-        self._cache_timestamp.clear()
         logger.info("efinance 适配器已关闭")
-    
-    def _get_cache_key(self, prefix: str, **kwargs) -> str:
-        """生成缓存 key"""
-        key_parts = [prefix]
-        for k, v in sorted(kwargs.items()):
-            key_parts.append(f"{k}={v}")
-        return "_".join(key_parts)
-    
-    def _get_from_cache(self, key: str, ttl_type: str = 'default') -> Optional[Any]:
-        """从缓存获取数据"""
-        import time
-        if key not in self._cache:
-            return None
-        
-        timestamp = self._cache_timestamp.get(key, 0)
-        ttl = self._cache_ttl.get(ttl_type, self._cache_ttl['default'])
-        
-        if time.time() - timestamp > ttl:
-            del self._cache[key]
-            del self._cache_timestamp[key]
-            return None
-        
-        return self._cache[key]
-    
-    def _set_to_cache(self, key: str, value: Any, ttl_type: str = 'default'):
-        """设置缓存"""
-        import time
-        self._cache[key] = value
-        self._cache_timestamp[key] = time.time()
     
     def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3):
         """请求频率控制装饰器（带重试机制）
@@ -1451,19 +1408,27 @@ class EFinanceAdapter(BaseDataAdapter):
                         # 获取准确的成交额数据
                         # 使用 ak.stock_sh_a_spot_em() 和 ak.stock_sz_a_spot_em() 获取市场总成交额
                         # 上证指数使用沪市总成交额，深证成指使用深市总成交额
-                        try:
-                            if code == '000001':  # 上证指数 - 沪市
-                                df_market = ak.stock_sh_a_spot_em()
-                                amount = df_market['成交额'].sum()
-                            elif code in ['399001', '399006']:  # 深证成指、创业板指 - 深市
-                                df_market = ak.stock_sz_a_spot_em()
-                                amount = df_market['成交额'].sum()
-                            else:  # 其他指数（上证 50、沪深 300）使用估算值
-                                # 使用 stock_zh_index_daily 的 volume 字段作为参考
-                                amount = float(row.get('volume', 0))
-                        except Exception as e:
-                            logger.warning(f"获取市场成交额失败 {code}: {e}")
-                            amount = 0.0
+                        amount = 0.0
+                        max_retries = 3
+                        for retry_attempt in range(max_retries):
+                            try:
+                                if code == '000001':  # 上证指数 - 沪市
+                                    df_market = ak.stock_sh_a_spot_em()
+                                    amount = df_market['成交额'].sum()
+                                elif code in ['399001', '399006']:  # 深证成指、创业板指 - 深市
+                                    df_market = ak.stock_sz_a_spot_em()
+                                    amount = df_market['成交额'].sum()
+                                else:  # 其他指数（上证 50、沪深 300）使用估算值
+                                    # 使用 stock_zh_index_daily 的 volume 字段作为参考
+                                    amount = float(row.get('volume', 0))
+                                break  # 成功则跳出重试循环
+                            except Exception as e:
+                                if retry_attempt < max_retries - 1:
+                                    delay = (2 ** retry_attempt) * 1.0 + random.uniform(0, 0.5)
+                                    logger.warning(f"获取市场成交额失败 {code}，{delay:.1f}秒后重试（{retry_attempt+1}/{max_retries}）: {e}")
+                                    await asyncio.sleep(delay)
+                                else:
+                                    logger.warning(f"获取市场成交额失败 {code}，已重试{max_retries}次: {e}")
                         
                         # 成交量无法准确获取，设置为 0
                         volume = 0
@@ -1718,21 +1683,6 @@ class EFinanceAdapter(BaseDataAdapter):
             
         except Exception as e:
             logger.error(f"获取板块列表失败：{e}")
-            return []
-    
-    async def get_sector_components(self, sector_code: str) -> List[str]:
-        """获取板块成分股"""
-        try:
-            if not EF_AVAILABLE:
-                return []
-            
-            # 使用 get_belong_board 反向查询成分股
-            # efinance 没有直接的板块成分股接口，这里返回空列表
-            logger.warning(f"efinance 暂不支持获取板块成分股 {sector_code}")
-            return []
-            
-        except Exception as e:
-            logger.error(f"获取板块成分股失败 {sector_code}: {e}")
             return []
     
     async def get_chip_data(
@@ -2238,10 +2188,11 @@ class EFinanceAdapter(BaseDataAdapter):
             if not EF_AVAILABLE:
                 return {}
             
-            cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
-            cached = self._get_from_cache(cache_key, 'quote')
-            if cached:
-                return cached
+            # 缓存已移除，统一使用 storage_manager
+            # cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
+            # cached = self._get_from_cache(cache_key, 'quote')
+            # if cached:
+            #     return cached
             
             # 频率控制
             await self._rate_limit()
@@ -2288,7 +2239,8 @@ class EFinanceAdapter(BaseDataAdapter):
                 'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
+            # 缓存已移除，统一使用 storage_manager
+            # self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
             logger.info(f"获取大盘资金流向成功：{market_type}")
             return result
             
@@ -2582,8 +2534,8 @@ class EFinanceAdapter(BaseDataAdapter):
         market_types: Optional[List[str]] = None,
         fs: Optional[str] = None,
         fields: Optional[List[str]] = None,
-        retry: int = 3,
-        timeout: int = 15
+        retry: int = 5,
+        timeout: int = 20
     ) -> List[MarketQuote]:
         """
         获取市场实时行情数据
@@ -2605,8 +2557,8 @@ class EFinanceAdapter(BaseDataAdapter):
                          '总市值'、'流通市值'、'行情 ID'、'市场类型'
                 默认：None（返回全部字段）
             
-            retry: 重试次数，默认 3 次
-            timeout: 超时时间（秒），默认 15 秒
+            retry: 重试次数，默认 5 次
+            timeout: 超时时间（秒），默认 20 秒
             
         Returns:
             List[MarketQuote]: 市场实时行情列表
@@ -2703,15 +2655,17 @@ class EFinanceAdapter(BaseDataAdapter):
                     )
                     break
                 except asyncio.TimeoutError:
-                    logger.warning(f"获取市场实时行情超时（{timeout}秒），重试 {attempt + 1}/{retry}")
                     if attempt < retry - 1:
-                        await asyncio.sleep(2)
+                        delay = (2 ** attempt) * 2.0 + random.uniform(0, 1)
+                        logger.warning(f"获取市场实时行情超时（{timeout}秒），{delay:.1f}秒后重试 {attempt + 1}/{retry}")
+                        await asyncio.sleep(delay)
                     else:
                         raise
                 except Exception as e:
                     if attempt < retry - 1:
-                        logger.warning(f"获取市场实时行情失败，重试 {attempt + 1}/{retry}: {e}")
-                        await asyncio.sleep(1)
+                        delay = (2 ** attempt) * 2.0 + random.uniform(0, 1)
+                        logger.warning(f"获取市场实时行情失败，{delay:.1f}秒后重试 {attempt + 1}/{retry}: {e}")
+                        await asyncio.sleep(delay)
                     else:
                         raise
             
@@ -3107,11 +3061,11 @@ class EFinanceAdapter(BaseDataAdapter):
             if not EF_AVAILABLE:
                 return []
             
-            # 构建缓存 key
-            cache_key = self._get_cache_key('fund_codes', fund_type=fund_type or 'all')
-            cached = self._get_from_cache(cache_key, 'fund_info')
-            if cached:
-                return cached
+            # 缓存已移除，统一使用 storage_manager
+            # cache_key = self._get_cache_key('fund_codes', fund_type=fund_type or 'all')
+            # cached = self._get_from_cache(cache_key, 'fund_info')
+            # if cached:
+            #     return cached
             
             # 频率控制
             await self._rate_limit()
@@ -3133,8 +3087,8 @@ class EFinanceAdapter(BaseDataAdapter):
                 if fund_info['code']:
                     fund_list.append(fund_info)
             
-            # 保存到缓存（30 分钟）
-            self._set_to_cache(cache_key, fund_list, 'fund_info')
+            # 缓存已移除，统一使用 storage_manager
+            # self._set_to_cache(cache_key, fund_list, 'fund_info')
             logger.info(f"获取基金代码列表成功：{len(fund_list)}条，类型：{fund_type or '全部'}")
             return fund_list
             

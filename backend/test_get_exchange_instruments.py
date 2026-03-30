@@ -16,7 +16,7 @@ import os
 os.environ['QUANT_SKIP_APP_INIT'] = '1'
 
 from app.adapters.tickflow_adapter import TickFlowAdapter
-from app.adapters.exchange_storage import ExchangeStorage
+from app.storage.unified_storage import storage_manager
 
 
 async def test_get_instruments():
@@ -144,19 +144,27 @@ async def test_get_instruments():
     print(f"  - SHFE: {len(instruments_shfe) if instruments_shfe else 0}")
     
     # 8. 检查存储文件
-    print("\n[测试 8] 检查存储文件")
+    print("\n[测试 8] 检查存储文件（新架构）")
     print("-" * 60)
     
-    from exchange_storage import ExchangeStorage
-    storage = ExchangeStorage()
+    from pathlib import Path
+    from app.config import settings
+    import json
     
-    print(f"存储目录：{storage.data_dir}")
-    files = list(storage.data_dir.glob("instruments_*.json"))
-    print(f"标的文件数量：{len(files)}")
+    data_dir = Path(settings.PARQUET_DIR)
+    exchanges_file = data_dir / "exchanges.json"
     
-    for file in files:
-        size = file.stat().st_size
-        print(f"   📄 {file.name} ({size} 字节)")
+    print(f"存储目录：{data_dir}")
+    print(f"交易所数据文件：{exchanges_file}")
+    
+    if exchanges_file.exists():
+        with open(exchanges_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        print(f"✅ 文件存在，包含 {len(data) if isinstance(data, list) else 'unknown'} 项")
+        size = exchanges_file.stat().st_size
+        print(f"   📄 exchanges.json ({size} 字节)")
+    else:
+        print("⚠️ 文件不存在（数据可能在缓存中）")
     
     # 关闭适配器
     await adapter.close()

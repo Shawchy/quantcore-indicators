@@ -136,9 +136,6 @@ class BaostockAdapter(BaseDataAdapter):
             logger.error(f"获取K线数据失败 {code}: {e}")
             return []
     
-    async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
-        return {}
-    
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
         try:
             rs = bs.query_stock_industry()
@@ -169,11 +166,3 @@ class BaostockAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"获取板块成分股失败 {sector_code}: {e}")
             return []
-    
-    async def get_chip_data(
-        self,
-        code: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ) -> List[ChipData]:
-        return []

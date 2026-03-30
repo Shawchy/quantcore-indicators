@@ -35,7 +35,6 @@ const menuItems = [
   { name: '自选股', icon: FiStar, path: '/watchlist' },
   { name: '基金中心', icon: FiDollarSign, path: '/fund' },
   { name: '市场排行', icon: FiTrendingUp, path: '/market' },
-  { name: '市场板块', icon: FiGrid, path: '/market-quotes' },
   { name: '龙虎榜', icon: FiList, path: '/billboard' },
   { name: '日线行情', icon: FiBarChart, path: '/daily' },
   { name: '板块分析', icon: FiGrid, path: '/sector' },

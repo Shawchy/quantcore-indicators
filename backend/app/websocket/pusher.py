@@ -47,10 +47,10 @@ class RealtimeDataPusher:
         self._running = True
         logger.info("实时数据推送服务已启动")
         
-        # 启动各类数据推送任务
-        self.tasks["market_pusher"] = asyncio.create_task(
-            self._push_market_quotes()
-        )
+        # 市场板块行情推送已禁用（暂无价值）
+        # self.tasks["market_pusher"] = asyncio.create_task(
+        #     self._push_market_quotes()
+        # )
         
         # 监控订阅变化并启动个股推送
         self.tasks["stock_monitor"] = asyncio.create_task(

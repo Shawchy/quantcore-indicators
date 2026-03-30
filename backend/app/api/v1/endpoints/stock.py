@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query, Depends
 from app.models.schemas import ResponseModel, KLineData, StockBasic, TechnicalIndicator
 from app.services import stock_service
+from app.services.smart_loader import smart_loader
 from app.api.deps import CurrentUser, OptionalCurrentUser
 from typing import Optional
 from loguru import logger
@@ -40,12 +41,20 @@ async def get_stock_list(
     """
     from app.adapters.factory import data_source_manager
     
-    stocks = await data_source_manager.get_stock_list(
-        source_type=None if source == "auto" else source,
-        source_priority=source_priority if source_priority else None,
-        source_exclude=source_exclude if source_exclude else None,
-        fallback=fallback
-    )
+    if source == "auto" and not source_priority and not source_exclude:
+        stocks = await data_source_manager.get_stock_list(
+            source_type=None,
+            source_priority=None,
+            source_exclude=None,
+            fallback=fallback
+        )
+    else:
+        stocks = await data_source_manager.get_stock_list(
+            source_type=None if source == "auto" else source,
+            source_priority=source_priority if source_priority else None,
+            source_exclude=source_exclude if source_exclude else None,
+            fallback=fallback
+        )
     
     return ResponseModel(data=stocks)
 
@@ -91,8 +100,27 @@ async def get_kline(
     
     if is_code:
         code = identifier
-        # 通过代码获取 K 线
-        data = await stock_service.get_kline(code, start_date, end_date, adjust, priority_load=priority_load)
+        # 通过代码获取 K 线 - 使用智能加载器
+        kline_data = await smart_loader.get_kline(
+            code=code,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            use_cache=True
+        )
+        
+        if kline_data:
+            data = {
+                "code": code,
+                "klines": kline_data,
+                "total": len(kline_data)
+            }
+        else:
+            data = {
+                "code": code,
+                "klines": [],
+                "total": 0
+            }
     else:
         # 通过名称获取 K 线（efinance 支持直接传入股票名称）
         from app.adapters import efinance_adapter
@@ -164,7 +192,7 @@ async def get_market_index(
     """获取大盘指数 K 线数据"""
     from app.adapters.factory import data_source_manager
     
-    # 获取指数 K 线
+    # 获取指数 K 线 - 暂时直接使用数据源管理器（指数数据量小，缓存需求低）
     klines = await data_source_manager.get_market_index_kline(index_code, start_date, end_date)
     
     # 格式化返回
@@ -198,8 +226,8 @@ async def get_market_realtime(
     
     for code in codes:
         try:
-            # 获取实时行情
-            quote = await data_source_manager.get_realtime_quote(code)
+            # 获取实时行情 - 使用智能加载器（缓存 30 秒）
+            quote = await smart_loader.get_quote(code, use_cache=True)
             if quote:
                 realtime_data.append({
                     "code": code,

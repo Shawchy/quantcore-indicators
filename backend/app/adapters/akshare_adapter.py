@@ -16,6 +16,8 @@ from .base import (
     ChipData,
     MarketQuote
 )
+from .smart_retry import SmartRetryExecutor, ErrorClassifier, ErrorType
+from .hybrid_tls_client import HybridTLSClient
 
 
 class AkShareAdapter(BaseDataAdapter):
@@ -45,29 +47,67 @@ class AkShareAdapter(BaseDataAdapter):
         self._rate_limit_count = 0
         self._last_rate_limit_time = 0
         
-        # User-Agent 轮换池（伪装成不同浏览器）
+        # User-Agent 轮换池（简化版：4 个主流浏览器）
         self._user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (iPad; CPU OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36"
+            # Chrome 最新版（主力）
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            
+            # Chrome 上一版（备用）
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            
+            # Edge（备用）
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+            
+            # Firefox（备用）
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
         ]
-        self._current_user_agent = random.choice(self._user_agents)
+        self._current_user_agent = self._user_agents[0]  # 默认使用第一个
+        
+        # 智能重试执行器
+        self._retry_executor = SmartRetryExecutor({
+            'max_retries': 3,
+            'base_wait_seconds': 2.0,
+        })
+        
+        # 混合 TLS 客户端（用于降级）
+        self._hybrid_client: Optional[HybridTLSClient] = None
+        
+        # 设置模式切换回调
+        self._retry_executor.set_switch_mode_callback(self._fallback_to_hybrid_client)
     
     @property
     def source_type(self) -> DataSourceType:
         return DataSourceType.AKSHARE
     
-    async def initialize(self) -> bool:
-        try:
-            self._is_initialized = True
-            logger.info("AkShare 适配器初始化成功")
+    async def _ensure_credentials(self) -> bool:
+        """确保凭证有效（懒加载获取）"""
+        if not hasattr(self, '_injector') or self._injector is None:
+            return False
+        
+        # 如果已有有效凭证，跳过
+        if self._injector._is_patched:
             return True
+        
+        # 首次获取凭证
+        try:
+            logger.info("正在获取凭证（首次请求）...")
+            
+            # 初始化 Playwright（懒加载）
+            if not await self._injector.initialize():
+                logger.warning("Playwright 初始化失败，使用普通模式")
+                return False
+            
+            # 获取凭证
+            await self._injector.fetch_credentials('eastmoney.com')
+            
+            # 注入 TLS 指纹
+            self._injector.patch_requests_with_tls()
+            
+            logger.info("凭证获取并注入成功")
+            return True
+            
         except Exception as e:
-            logger.error(f"AkShare 适配器初始化失败：{e}")
+            logger.warning(f"获取凭证失败：{e}，使用普通模式")
             return False
     
     async def close(self) -> None:
@@ -313,13 +353,65 @@ class AkShareAdapter(BaseDataAdapter):
         return decorator
     
     async def initialize(self) -> bool:
+        """初始化 AkShare 适配器，集成凭证注入和 TLS 指纹伪装"""
         try:
+            # 集成凭证注入器（带 TLS 指纹伪装）
+            from .credential_injector import CredentialInjector
+            
+            self._injector = CredentialInjector({
+                'tls_patch_mode': 'curl_cffi',
+                'impersonate': 'chrome120',
+                'headless': True,
+            })
+            
+            # 懒加载：不立即初始化 Playwright，仅在需要时获取凭证
+            # 懒加载 HybridTLSClient（仅在需要时初始化）
+            self._hybrid_client: Optional[HybridTLSClient] = None
+            
+            logger.info("AkShare 适配器初始化成功（凭证注入模式待命 + 智能重试）")
+            logger.info(f"  - TLS 指纹：curl_cffi (chrome120)")
+            logger.info(f"  - 智能重试：已启用（自动切换模式）")
+            logger.info(f"  - 降级方案：HybridTLSClient（懒加载，tls-client → curl_cffi → Playwright）")
+            logger.info(f"  - 请求频率：自适应延迟（根据时间段和失败次数调整）")
+            logger.info(f"  - 最大重试：{self._max_retries}次（指数退避）")
+            
             self._is_initialized = True
-            logger.info("AkShare 适配器初始化成功（含反风控设置）")
             return True
+            
         except Exception as e:
             logger.error(f"AkShare 适配器初始化失败：{e}")
             return False
+    
+    async def _fallback_to_hybrid_client(self, url: str, **kwargs) -> Optional[Dict]:
+        """降级到混合 TLS 客户端（懒加载初始化）"""
+        # 懒加载初始化 HybridTLSClient
+        if self._hybrid_client is None:
+            logger.info("首次使用 HybridTLSClient，正在初始化...")
+            self._hybrid_client = HybridTLSClient({
+                'playwright_pool_size': 2,
+                'enable_http2': True,
+                'fallback_to_playwright': True,
+            })
+            await self._hybrid_client.initialize()
+            logger.info("HybridTLSClient 初始化完成")
+        
+        logger.info("检测到 TLS 指纹错误，降级到 HybridTLSClient...")
+        
+        try:
+            result = await self._hybrid_client.get(
+                url=url,
+                headers=kwargs.get('headers'),
+                cookies=kwargs.get('cookies'),
+                timeout=kwargs.get('timeout', 30),
+                api_type=kwargs.get('api_type', 'fallback')
+            )
+            
+            logger.info(f"HybridTLSClient 请求成功：状态码 {result.get('status_code')}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"HybridTLSClient 也失败：{e}")
+            return None
     
     async def close(self) -> None:
         self._is_initialized = False
@@ -560,7 +652,12 @@ class AkShareAdapter(BaseDataAdapter):
             return []
     
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
-        try:
+        """获取板块列表（高敏感 API，需要凭证注入 + 智能重试）"""
+        # 确保凭证有效（懒加载）
+        if not await self._ensure_credentials():
+            logger.warning("凭证注入失败，尝试直接请求")
+        
+        async def fetch():
             if sector_type == "industry":
                 df = ak.stock_board_industry_name_em()
             elif sector_type == "concept":
@@ -578,8 +675,53 @@ class AkShareAdapter(BaseDataAdapter):
                     volume=float(row["成交量"]) if "成交量" in row else None
                 ))
             return sectors
+        
+        try:
+            # 使用智能重试执行器
+            result = await self._retry_executor.execute(
+                func=fetch,
+                context="get_sector_list",
+                on_switch_mode=lambda: self._handle_sector_list_fallback(sector_type)
+            )
+            return result or []
         except Exception as e:
-            logger.error(f"获取板块列表失败：{e}")
+            logger.error(f"get_sector_list 智能重试失败：{e}")
+            # 最后尝试降级方案
+            return await self._handle_sector_list_fallback(sector_type)
+    
+    async def _handle_sector_list_fallback(self, sector_type: str) -> List[SectorInfo]:
+        """降级处理：使用 HybridTLSClient 获取板块列表"""
+        logger.info(f"使用 HybridTLSClient 获取 {sector_type} 板块列表...")
+        
+        try:
+            if sector_type == "industry":
+                url = "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=500&fs=m:90+t:1&fields=f12,f13,f14"
+            else:
+                url = "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=500&fs=m:90+t:2&fields=f12,f13,f14"
+            
+            result = await self._fallback_to_hybrid_client(url, api_type="sector_list")
+            
+            if result and result.get('ok'):
+                import json
+                data = json.loads(result['text'])
+                if data.get('data') and data['data'].get('diff'):
+                    sectors = []
+                    for item in data['data']['diff']:
+                        sectors.append(SectorInfo(
+                            code=str(item.get('f12', '')),
+                            name=str(item.get('f14', '')),
+                            sector_type=sector_type,
+                            change_pct=float(item.get('f3', 0)) if item.get('f3') else None,
+                            volume=float(item.get('f5', 0)) if item.get('f5') else None
+                        ))
+                    logger.info(f"HybridTLSClient 获取板块列表成功：{len(sectors)}个")
+                    return sectors
+            
+            logger.warning(f"HybridTLSClient 获取板块列表失败")
+            return []
+            
+        except Exception as e:
+            logger.error(f"降级方案也失败：{e}")
             return []
     
     async def get_sector_components(self, sector_code: str) -> List[str]:

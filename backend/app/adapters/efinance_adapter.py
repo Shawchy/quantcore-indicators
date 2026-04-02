@@ -24,6 +24,8 @@ from .base import (
     ChipData,
     IndexComponent
 )
+from .smart_retry import SmartRetryExecutor, ErrorClassifier, ErrorType
+from .hybrid_tls_client import HybridTLSClient
 from app.models.schemas import (
     BillboardEntry,
     BoardInfo,
@@ -168,26 +170,19 @@ class EFinanceAdapter(BaseDataAdapter):
         self._max_retries = 3  # 最大重试次数
         self._retry_base_delay = 2.0  # 重试基础延迟（秒）
         
-        # 请求头轮换池（多个浏览器配置）
+        # 请求头轮换池（简化版：4 个主流浏览器）
         self._user_agents = [
-            # Chrome - Windows
+            # Chrome 最新版（主力，60% 概率）
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            
+            # Chrome 上一版（20% 概率）
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            # Chrome - macOS
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            # Edge - Windows
+            
+            # Edge（10% 概率）
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
-            # Firefox - Windows
+            
+            # Firefox（10% 概率）
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
-            # Firefox - macOS
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.3; rv:123.0) Gecko/20100101 Firefox/123.0",
-            # Safari - macOS
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
         ]
         
         # 当前使用的 User-Agent 索引
@@ -201,6 +196,18 @@ class EFinanceAdapter(BaseDataAdapter):
         # 动态调整参数
         self._adaptive_delay_enabled = True  # 启用自适应延迟
         self._consecutive_failures = 0  # 连续失败次数
+        
+        # 智能重试执行器
+        self._retry_executor = SmartRetryExecutor({
+            'max_retries': 3,
+            'base_wait_seconds': 2.0,
+        })
+        
+        # 混合 TLS 客户端（用于降级）
+        self._hybrid_client: Optional[HybridTLSClient] = None
+        
+        # 设置模式切换回调
+        self._retry_executor.set_switch_mode_callback(self._fallback_to_hybrid_client)
     
     @property
     def source_type(self) -> DataSourceType:
@@ -235,15 +242,15 @@ class EFinanceAdapter(BaseDataAdapter):
             return "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     
     def _rotate_user_agent(self) -> str:
-        """轮换 User-Agent
+        """轮换 User-Agent（降低频率：每 10 次请求轮换一次）
         
         Returns:
             str: 轮换后的 User-Agent
         """
-        # 随机选择一个 User-Agent
-        ua = random.choice(self._user_agents)
-        self._current_ua_index = (self._current_ua_index + 1) % len(self._user_agents)
-        return ua
+        # 每 10 次请求轮换一次（而非每次）
+        if self._request_count % 10 == 0:
+            self._current_ua_index = (self._current_ua_index + 1) % len(self._user_agents)
+        return self._user_agents[self._current_ua_index]
     
     def _get_time_based_delay(self) -> tuple:
         """根据时间段获取延迟范围
@@ -445,16 +452,28 @@ class EFinanceAdapter(BaseDataAdapter):
         logger.info(f"自定义延迟范围：{min_delay}-{max_delay}秒（已禁用自适应延迟）")
     
     async def initialize(self) -> bool:
-        """初始化适配器，包含反风控设置"""
+        """初始化适配器，集成凭证注入、TLS 指纹伪装和智能重试"""
         if not EF_AVAILABLE:
             logger.warning("efinance 模块不可用，跳过初始化")
             return False
         
         try:
-            # 1. 设置请求头（伪装浏览器，使用本地设备信息）
+            # 1. 集成凭证注入器（带 TLS 指纹伪装）
+            from .credential_injector import CredentialInjector
+            
+            self._injector = CredentialInjector({
+                'tls_patch_mode': 'curl_cffi',
+                'impersonate': 'chrome120',
+                'headless': True,
+            })
+            
+            # 2. 懒加载 HybridTLSClient（仅在需要时初始化）
+            self._hybrid_client: Optional[HybridTLSClient] = None
+            
+            # 3. 设置请求头（伪装浏览器，使用本地设备信息）
             self._setup_request_headers(rotate=True)
             
-            # 2. efinance 无需其他初始化，直接可用
+            # 4. efinance 无需其他初始化，直接可用
             self._is_initialized = True
             
             # 获取当前时间段
@@ -466,8 +485,11 @@ class EFinanceAdapter(BaseDataAdapter):
             
             time_period = "交易时段" if ((9*60+30 <= current_time <= 11*60+30) or (13*60 <= current_time <= 15*60)) else "非交易时段"
             
-            logger.info("efinance 适配器初始化成功（含反风控设置）")
-            logger.info(f"  - 请求头：已配置（{len(self._user_agents)}个浏览器配置，自动轮换）")
+            logger.info("efinance 适配器初始化成功（凭证注入 + 智能重试）")
+            logger.info(f"  - 请求头：已配置（{len(self._user_agents)}个主流浏览器，每 10 次轮换）")
+            logger.info(f"  - TLS 指纹：curl_cffi (chrome120)")
+            logger.info(f"  - 智能重试：已启用（自动切换模式）")
+            logger.info(f"  - 降级方案：HybridTLSClient（懒加载，tls-client → curl_cffi → Playwright）")
             logger.info(f"  - 当前时间段：{time_period}")
             logger.info(f"  - 请求频率：自适应延迟（根据时间段和失败次数调整）")
             logger.info(f"  - 最大重试：{self._max_retries}次（指数退避）")
@@ -478,10 +500,72 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.error(f"efinance 适配器初始化失败：{e}")
             return False
     
+    async def _fallback_to_hybrid_client(self, url: str, **kwargs) -> Optional[Dict]:
+        """降级到混合 TLS 客户端（懒加载初始化）"""
+        # 懒加载初始化 HybridTLSClient
+        if self._hybrid_client is None:
+            logger.info("首次使用 HybridTLSClient，正在初始化...")
+            self._hybrid_client = HybridTLSClient({
+                'playwright_pool_size': 2,
+                'enable_http2': True,
+                'fallback_to_playwright': True,
+            })
+            await self._hybrid_client.initialize()
+            logger.info("HybridTLSClient 初始化完成")
+        
+        logger.info("检测到 TLS 指纹错误，降级到 HybridTLSClient...")
+        
+        try:
+            result = await self._hybrid_client.get(
+                url=url,
+                headers=kwargs.get('headers'),
+                cookies=kwargs.get('cookies'),
+                timeout=kwargs.get('timeout', 30),
+                api_type=kwargs.get('api_type', 'fallback')
+            )
+            
+            logger.info(f"HybridTLSClient 请求成功：状态码 {result.get('status_code')}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"HybridTLSClient 也失败：{e}")
+            return None
+    
     async def close(self):
         """关闭连接"""
         self._is_initialized = False
         logger.info("efinance 适配器已关闭")
+    
+    async def _ensure_credentials(self) -> bool:
+        """确保凭证有效（懒加载获取）"""
+        if not hasattr(self, '_injector') or self._injector is None:
+            return False
+        
+        # 如果已有有效凭证，跳过
+        if self._injector._is_patched:
+            return True
+        
+        # 首次获取凭证
+        try:
+            logger.info("正在获取凭证（首次请求）...")
+            
+            # 初始化 Playwright（懒加载）
+            if not await self._injector.initialize():
+                logger.warning("Playwright 初始化失败，使用普通模式")
+                return False
+            
+            # 获取凭证
+            await self._injector.fetch_credentials('eastmoney.com')
+            
+            # 注入 TLS 指纹
+            self._injector.patch_requests_with_tls()
+            
+            logger.info("凭证获取并注入成功")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"获取凭证失败：{e}，使用普通模式")
+            return False
     
     def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3):
         """请求频率控制装饰器（带重试机制）
@@ -529,7 +613,11 @@ class EFinanceAdapter(BaseDataAdapter):
         return decorator
     
     async def get_stock_list(self) -> List[StockBasicInfo]:
-        """获取股票列表"""
+        """获取股票列表（高敏感 API，需要凭证注入）"""
+        # 确保凭证有效（懒加载）
+        if not await self._ensure_credentials():
+            logger.warning("凭证注入失败，尝试直接请求")
+        
         try:
             if not EF_AVAILABLE:
                 return []

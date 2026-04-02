@@ -216,3 +216,7 @@ dmypy.json
 # Temporary files
 *.tmp
 *.temp
+
+# Playwright browsers (large binary files, install via `playwright install`)
+playwright_browsers/
+ms-playwright/

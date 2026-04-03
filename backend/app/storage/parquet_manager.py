@@ -79,8 +79,14 @@ class ParquetManager:
         
         df = pd.DataFrame(klines)
         
+        # 统一日期格式处理，支持多种格式
+        try:
+            df['date'] = df['date'].astype(str).str.strip()
+            df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
+        except Exception:
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+        
         # 提取年份
-        df['date'] = pd.to_datetime(df['date'])
         df['year'] = df['date'].dt.year
         
         saved_count = 0
@@ -155,8 +161,14 @@ class ParquetManager:
         # 合并
         combined_df = pd.concat(dfs, ignore_index=True)
         
+        # 统一日期格式处理，支持多种格式
+        try:
+            combined_df['date'] = combined_df['date'].astype(str).str.strip()
+            combined_df['date'] = pd.to_datetime(combined_df['date'], format='mixed', errors='coerce')
+        except Exception:
+            combined_df['date'] = pd.to_datetime(combined_df['date'], errors='coerce')
+        
         # 筛选日期范围
-        combined_df['date'] = pd.to_datetime(combined_df['date'])
         mask = (combined_df['date'] >= start_date) & (combined_df['date'] <= end_date)
         result = combined_df[mask]
         
@@ -240,7 +252,13 @@ class ParquetManager:
         
         # 筛选日期范围
         if start_date or end_date:
-            df['date'] = pd.to_datetime(df['date'])
+            # 统一日期格式处理，支持多种格式
+            try:
+                df['date'] = df['date'].astype(str).str.strip()
+                df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
+            except Exception:
+                df['date'] = pd.to_datetime(df['date'], errors='coerce')
+            
             mask = True
             if start_date:
                 mask = mask & (df['date'] >= start_date)
@@ -314,7 +332,13 @@ class ParquetManager:
         df = pd.read_parquet(parquet_path)
         
         if start_date or end_date:
-            df['date'] = pd.to_datetime(df['date'])
+            # 统一日期格式处理，支持多种格式
+            try:
+                df['date'] = df['date'].astype(str).str.strip()
+                df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
+            except Exception:
+                df['date'] = pd.to_datetime(df['date'], errors='coerce')
+            
             mask = True
             if start_date:
                 mask = mask & (df['date'] >= start_date)

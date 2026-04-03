@@ -31,27 +31,61 @@ class DataPersistence:
         2. 批量插入（add_all 代替逐条 add）
         3. 一次 commit（减少事务开销）
         4. 去重处理（避免数据源重复和并发冲突）
+        5. 日期格式标准化（统一为 YYYY-MM-DD）
         
         性能提升：10-50 倍
         """
         if not klines:
             return 0
         
+        # 使用统一的日期工具函数标准化日期
+        from app.utils.date_utils import to_compact_date
+        
         # 0. 去重：同一批次中的重复数据（数据源可能返回重复）
         seen_dates = set()
         unique_klines = []
+        invalid_dates = 0
         for k in klines:
-            if k.date not in seen_dates:
-                seen_dates.add(k.date)
-                unique_klines.append(k)
+            normalized_date = to_compact_date(k.date)
+            # 跳过无效日期
+            if not normalized_date:
+                invalid_dates += 1
+                if invalid_dates <= 3:  # 只记录前 3 个
+                    logger.warning(f"无效日期：code={k.code}, date={k.date}")
+                continue
+            if normalized_date not in seen_dates:
+                seen_dates.add(normalized_date)
+                # 创建新的 KLineData 对象，使用标准化日期
+                unique_klines.append(KLineData(
+                    code=k.code,
+                    date=normalized_date,
+                    open=k.open,
+                    high=k.high,
+                    low=k.low,
+                    close=k.close,
+                    volume=k.volume,
+                    amount=k.amount,
+                    turnover_rate=k.turnover_rate,
+                    pre_close=k.pre_close
+                ))
+        
+        if invalid_dates > 0:
+            logger.warning(f"总共 {invalid_dates} 条无效日期记录，已过滤")
         
         if not unique_klines:
+            logger.warning(f"没有有效的 K 线数据，跳过保存：{code}, 原始数据：{len(klines)}条")
             return 0
         
         async with get_session() as session:
             try:
                 # 1. 批量查询已存在的记录（一次查询代替 N 次）
-                dates = [k.date for k in unique_klines]
+                # 过滤掉 None 值
+                dates = [k.date for k in unique_klines if k.date is not None]
+                
+                if not dates:
+                    logger.warning(f"没有有效的日期数据，跳过保存：{code}")
+                    return 0
+                
                 existing_query = await session.execute(
                     select(KLineDB.date).where(
                         and_(
@@ -152,6 +186,26 @@ class DataPersistence:
         limit: int = 5000,
         order_by_date: str = "asc"  # "asc" 或 "desc"
     ) -> List[KLineData]:
+        """
+        从数据库获取 K 线数据（支持多种日期格式）
+        
+        Args:
+            code: 股票代码
+            start_date: 开始日期（支持 YYYYMMDD 或 YYYY-MM-DD 格式）
+            end_date: 结束日期（支持 YYYYMMDD 或 YYYY-MM-DD 格式）
+            adjust: 复权类型
+            limit: 数量限制
+            order_by_date: 日期排序方式
+        
+        Returns:
+            KLineData 列表
+        """
+        # 使用统一的日期工具函数转换格式
+        from app.utils.date_utils import to_compact_date
+        
+        start_date_normalized = to_compact_date(start_date)
+        end_date_normalized = to_compact_date(end_date)
+        
         async with get_session() as session:
             query = select(KLineDB).where(
                 and_(
@@ -160,10 +214,10 @@ class DataPersistence:
                 )
             )
             
-            if start_date:
-                query = query.where(KLineDB.date >= start_date)
-            if end_date:
-                query = query.where(KLineDB.date <= end_date)
+            if start_date_normalized:
+                query = query.where(KLineDB.date >= start_date_normalized)
+            if end_date_normalized:
+                query = query.where(KLineDB.date <= end_date_normalized)
             
             if order_by_date == "desc":
                 query = query.order_by(KLineDB.date.desc()).limit(limit)

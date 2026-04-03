@@ -201,51 +201,62 @@ class UnifiedStorage(Generic[T]):
                 end_date = kwargs.get("end_date")
                 
                 if category == "kline_daily":
-                    return await local_db_service.get_kline_from_db(code, start_date, end_date)
+                    result = await local_db_service.get_kline_from_db(code, start_date, end_date)
+                    return result
                 elif category == "kline_weekly":
-                    return await local_db_service.get_kline_weekly_from_db(code, start_date, end_date)
+                    result = await local_db_service.get_kline_weekly_from_db(code, start_date, end_date)
+                    return result
                 elif category == "kline_monthly":
-                    return await local_db_service.get_kline_monthly_from_db(code, start_date, end_date)
+                    result = await local_db_service.get_kline_monthly_from_db(code, start_date, end_date)
+                    return result
             
             elif category == "quote":
                 code = identifier
-                return await local_db_service.get_quote_from_db(code)
+                result = await local_db_service.get_quote_from_db(code)
+                return result
             
             elif category == "fund":
                 code = identifier
-                return await local_db_service.get_fund_nav_from_db(code)
+                result = await local_db_service.get_fund_nav_from_db(code)
+                return result
             
             elif category == "billboard":
                 trade_date = kwargs.get("trade_date")
                 code = kwargs.get("code")
-                return await local_db_service.get_billboard_from_db(trade_date, code)
+                result = await local_db_service.get_billboard_from_db(trade_date, code)
+                return result
             
             elif category == "moneyflow":
                 code = identifier
                 start_date = kwargs.get("start_date")
                 end_date = kwargs.get("end_date")
-                return await local_db_service.get_moneyflow_from_db(code, start_date, end_date)
+                result = await local_db_service.get_moneyflow_from_db(code, start_date, end_date)
+                return result
             
             elif category == "financial":
                 code = identifier
                 report_date = kwargs.get("report_date")
-                return await local_db_service.get_financial_from_db(code, report_date)
+                result = await local_db_service.get_financial_from_db(code, report_date)
+                return result
             
             elif category == "shareholder":
                 code = identifier
                 report_date = kwargs.get("report_date")
-                return await local_db_service.get_shareholder_from_db(code, report_date)
+                result = await local_db_service.get_shareholder_from_db(code, report_date)
+                return result
             
             elif category == "sector":
                 sector_code = identifier
-                return await local_db_service.get_sector_components_from_db(sector_code)
+                result = await local_db_service.get_sector_components_from_db(sector_code)
+                return result
             
             elif category == "exchange":
                 # 交易所数据使用 JSON 文件存储（特殊类型，不常变化）
-                return await self._load_from_json_file("exchanges")
+                result = await self._load_from_json_file("exchanges")
+                return result
             
         except Exception as e:
-            logger.error(f"从数据库获取数据失败：{e}")
+            logger.error(f"从数据库获取数据失败：{identifier}, 错误：{e}")
         
         return None
     
@@ -280,6 +291,23 @@ class UnifiedStorage(Generic[T]):
                 if isinstance(data, list):
                     await local_db_service.sync_moneyflow(data)
             
+            elif category == "financial":
+                if isinstance(data, list):
+                    code = identifier
+                    report_date = kwargs.get("report_date")
+                    await local_db_service.sync_financial(code, data)
+            
+            elif category == "shareholder":
+                if isinstance(data, list):
+                    code = identifier
+                    report_date = kwargs.get("report_date")
+                    await local_db_service.sync_shareholder(code, report_date, data)
+            
+            elif category == "sector":
+                if isinstance(data, list):
+                    sector_name = kwargs.get("sector_name", "")
+                    await local_db_service.sync_sector_components(identifier, sector_name, data)
+            
             elif category == "exchange":
                 # 交易所数据使用 JSON 文件存储
                 await self._save_to_json_file("exchanges", data)
@@ -287,6 +315,7 @@ class UnifiedStorage(Generic[T]):
             logger.debug(f"数据已同步到数据库：{identifier}")
             
         except Exception as e:
+            logger.error(f"同步到数据库失败：{identifier}, 错误：{e}")
             logger.error(f"同步数据到数据库失败：{e}")
     
     async def _load_from_json_file(self, data_type: str) -> Optional[Any]:

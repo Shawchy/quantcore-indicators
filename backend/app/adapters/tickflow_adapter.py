@@ -332,12 +332,31 @@ class TickFlowAdapter(BaseDataAdapter):
                 logger.warning(f"TickFlow K 线数据为空：{code} (period={period})")
                 return []
             
+            # 调试：检查 DataFrame 结构
+            if not df.empty:
+                logger.debug(f"TickFlow DataFrame 列：{df.columns.tolist()}")
+                logger.debug(f"TickFlow 第一行数据：{df.iloc[0].to_dict()}")
+            
             # 解析数据
             klines = []
             prev_close = None
+            empty_dates = 0
+            invalid_dates = 0
             
             for _, row in df.iterrows():
-                date_str = str(row.get('time', ''))
+                # TickFlow 返回 trade_date 或 trade_time 字段，不是 time
+                date_str = str(row.get('trade_date', '')).strip()
+                if not date_str:
+                    date_str = str(row.get('trade_time', '')).strip()
+                if not date_str:
+                    date_str = str(row.get('time', '')).strip()
+                
+                # 跳过空日期
+                if not date_str:
+                    empty_dates += 1
+                    if empty_dates <= 3:  # 只记录前 3 个
+                        logger.warning(f"TickFlow 返回空日期：code={code}, row={row.to_dict()}")
+                    continue
                 
                 # 日期格式转换（TickFlow 返回的可能是时间戳或字符串）
                 if len(date_str) > 10:
@@ -345,6 +364,13 @@ class TickFlowAdapter(BaseDataAdapter):
                     date = date_str[:10].replace('-', '')
                 else:
                     date = date_str.replace('-', '')
+                
+                # 确保日期是 8 位数字
+                if len(date) != 8 or not date.isdigit():
+                    invalid_dates += 1
+                    if invalid_dates <= 3:  # 只记录前 3 个
+                        logger.warning(f"TickFlow 日期格式错误：code={code}, date={date}, time={row.get('time')}")
+                    continue
                 
                 current_close = float(row.get('close', 0))
                 
@@ -362,6 +388,14 @@ class TickFlowAdapter(BaseDataAdapter):
                 )
                 klines.append(kline)
                 prev_close = current_close
+            
+            # 统计无效数据
+            if empty_dates > 0:
+                logger.warning(f"TickFlow 总共 {empty_dates} 条空日期记录，已过滤")
+            if invalid_dates > 0:
+                logger.warning(f"TickFlow 总共 {invalid_dates} 条无效日期格式记录，已过滤")
+            if empty_dates + invalid_dates > 0:
+                logger.info(f"TickFlow 有效数据：{len(klines)}/{len(df)} 条")
             
             # 按日期排序
             klines.sort(key=lambda x: x.date)

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.storage.sqlite import Base, get_session
 from app.storage import sqlite as sqlite_module
+from app.utils.date_utils import to_compact_date
 
 
 class TradingDay(Base):
@@ -108,9 +109,21 @@ class TradingCalendarService:
                 dates = [row[0] for row in result.fetchall()]
                 
                 if dates:
-                    self._memory_cache = set(dates)
-                    self._sorted_list_cache = sorted(dates)
+                    # 统一转换为 YYYYMMDD 格式
+                    normalized_dates = []
+                    for date in dates:
+                        try:
+                            normalized = self._normalize_date_format(date)
+                            normalized_dates.append(normalized)
+                        except Exception as e:
+                            logger.warning(f"日期格式转换失败：{date}, 错误：{e}")
+                            # 如果转换失败，尝试直接替换短横线
+                            normalized_dates.append(date.replace('-', ''))
+                    
+                    self._memory_cache = set(normalized_dates)
+                    self._sorted_list_cache = sorted(normalized_dates)
                     self._cache_time = time.time()
+                    logger.info(f"交易日历从数据库加载完成，共 {len(self._memory_cache)} 个交易日（已统一格式）")
                     return True
                 return False
                 
@@ -125,14 +138,21 @@ class TradingCalendarService:
                 await session.execute(delete(TradingDay))
                 
                 now = datetime.now()
-                records = [
-                    TradingDay(date=date, is_trading_day=True, updated_at=now)
-                    for date in trading_days
-                ]
+                # 统一转换为 YYYYMMDD 格式
+                records = []
+                for date in trading_days:
+                    try:
+                        normalized = self._normalize_date_format(date)
+                        records.append(TradingDay(date=normalized, is_trading_day=True, updated_at=now))
+                    except Exception as e:
+                        logger.warning(f"日期格式转换失败：{date}, 错误：{e}")
+                        # 如果转换失败，尝试直接替换短横线
+                        records.append(TradingDay(date=date.replace('-', ''), is_trading_day=True, updated_at=now))
+                
                 session.add_all(records)
                 await session.commit()
                 
-                logger.info(f"交易日数据已保存到数据库，共 {len(trading_days)} 条")
+                logger.info(f"交易日数据已保存到数据库，共 {len(records)} 条（已统一格式）")
                 return True
                 
         except Exception as e:
@@ -301,8 +321,8 @@ class TradingCalendarService:
         获取交易日列表
         
         Args:
-            start_date: 开始日期，格式 YYYYMMDD
-            end_date: 结束日期，格式 YYYYMMDD
+            start_date: 开始日期，格式 YYYYMMDD 或 YYYY-MM-DD
+            end_date: 结束日期，格式 YYYYMMDD 或 YYYY-MM-DD
             limit: 最多返回的交易日数量
         
         Returns:
@@ -315,9 +335,13 @@ class TradingCalendarService:
         
         if not end_date:
             end_date = datetime.now().strftime("%Y%m%d")
+        else:
+            end_date = self._normalize_date_format(end_date)
         
         if not start_date:
             start_date = (datetime.now() - timedelta(days=limit * 3)).strftime("%Y%m%d")
+        else:
+            start_date = self._normalize_date_format(start_date)
         
         result = []
         for date in reversed(self._sorted_list_cache):
@@ -340,19 +364,47 @@ class TradingCalendarService:
         
         return datetime.now().strftime("%Y%m%d")
     
+    def _normalize_date_format(self, date: str) -> str:
+        """统一日期格式为 YYYYMMDD"""
+        if not date:
+            return datetime.now().strftime("%Y%m%d")
+        
+        # 如果已经是 8 位数字，直接返回
+        if len(date) == 8 and date.isdigit():
+            return date
+        
+        # 如果是 ISO 格式（YYYY-MM-DD），转换为 YYYYMMDD
+        try:
+            return to_compact_date(date) or datetime.now().strftime("%Y%m%d")
+        except Exception:
+            # 如果转换失败，尝试直接替换短横线
+            return date.replace('-', '')
+    
+    def _parse_date(self, date: str) -> datetime:
+        """解析日期字符串为 datetime 对象（支持多种格式）"""
+        normalized = self._normalize_date_format(date)
+        try:
+            return datetime.strptime(normalized, "%Y%m%d")
+        except ValueError as e:
+            logger.warning(f"日期解析失败：{date}, 错误：{e}")
+            return datetime.now()
+    
     async def get_previous_trading_day(self, date: str) -> str:
         """获取前一个交易日"""
         await self.ensure_initialized()
         
+        # 统一日期格式
+        normalized_date = self._normalize_date_format(date)
+        
         if self._sorted_list_cache:
             try:
-                idx = self._sorted_list_cache.index(date)
+                idx = self._sorted_list_cache.index(normalized_date)
                 if idx > 0:
                     return self._sorted_list_cache[idx - 1]
             except ValueError:
                 pass
         
-        dt = datetime.strptime(date, "%Y%m%d")
+        dt = self._parse_date(normalized_date)
         while True:
             dt -= timedelta(days=1)
             if dt.weekday() < 5:
@@ -365,10 +417,13 @@ class TradingCalendarService:
         if not date:
             date = datetime.now().strftime("%Y%m%d")
         
-        if self._memory_cache:
-            return date in self._memory_cache
+        # 统一日期格式
+        normalized_date = self._normalize_date_format(date)
         
-        dt = datetime.strptime(date, "%Y%m%d")
+        if self._memory_cache:
+            return normalized_date in self._memory_cache
+        
+        dt = self._parse_date(normalized_date)
         return dt.weekday() < 5
     
     async def is_market_open(self) -> bool:
@@ -464,7 +519,9 @@ class TradingCalendarService:
     
     def _estimate_previous_day(self, date: str) -> str:
         """估算前一个交易日"""
-        dt = datetime.strptime(date, "%Y%m%d")
+        # 统一日期格式
+        normalized_date = self._normalize_date_format(date)
+        dt = self._parse_date(normalized_date)
         while True:
             dt -= timedelta(days=1)
             if dt.weekday() < 5:
@@ -473,9 +530,11 @@ class TradingCalendarService:
     def _format_date_display(self, date: str) -> str:
         """格式化日期显示"""
         try:
-            dt = datetime.strptime(date, "%Y%m%d")
+            # 统一日期格式
+            normalized_date = self._normalize_date_format(date)
+            dt = self._parse_date(normalized_date)
             return f"{dt.month}月{dt.day}日"
-        except:
+        except Exception:
             return date
     
     async def force_refresh(self) -> bool:

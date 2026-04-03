@@ -59,12 +59,22 @@ class DataLifecycleManager:
         数据分层
         
         Args:
-            date: 数据日期 (YYYY-MM-DD)
+            date: 数据日期 (支持 YYYY-MM-DD 或 YYYYMMDD 格式)
         
         Returns:
             数据层级 (hot/warm/cold/expired)
         """
-        data_date = datetime.strptime(date, "%Y-%m-%d")
+        # 统一日期格式
+        from app.utils.date_utils import to_compact_date
+        
+        try:
+            # 尝试转换为紧凑格式
+            normalized = to_compact_date(date) or date.replace('-', '')
+            data_date = datetime.strptime(normalized, "%Y%m%d")
+        except Exception as e:
+            logger.warning(f"日期解析失败：{date}, 错误：{e}")
+            data_date = datetime.now()
+        
         days_old = (datetime.now() - data_date).days
         
         if days_old <= 90:

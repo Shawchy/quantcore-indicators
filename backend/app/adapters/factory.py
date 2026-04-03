@@ -145,17 +145,15 @@ class DataSourceManager:
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        adjust: str = "qfk",
+        adjust: str = "qfq",  # 修复拼写错误：qfk -> qfq
         source_type: Optional[str] = None
     ) -> list[KLineData]:
-        fqt_map = {'qfk': 1, 'qfq': 1, 'hfq': 2, '': 0}
-        fqt = fqt_map.get(adjust, 1)
-        
+        # 统一使用 adjust 参数，不再转换 fqt
         if source_type:
             adapter = self.get_adapter(source_type)
-            return await adapter.get_kline(code, start_date, end_date, fqt=fqt)
+            return await adapter.get_kline(code, start_date, end_date, adjust=adjust)
         
-        result = await self._try_sources("kline", "get_kline", code, start_date, end_date, fqt=fqt)
+        result = await self._try_sources("kline", "get_kline", code, start_date, end_date, adjust=adjust)
         return result or []
     
     async def get_market_index_kline(

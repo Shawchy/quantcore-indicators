@@ -290,8 +290,11 @@ class StockService:
             # 4. 保存到数据库（如果启用持久化）
             if persist:
                 try:
-                    await data_persistence.save_klines(code, klines, adjust)
-                    logger.info(f"已保存到数据库：{code}, {len(klines)} 条")
+                    saved_count = await data_persistence.save_klines(code, klines, adjust)
+                    if saved_count > 0:
+                        logger.info(f"已保存到数据库：{code}, {saved_count} 条")
+                    else:
+                        logger.debug(f"数据已全部存在，跳过保存：{code}")
                 except Exception as e:
                     logger.warning(f"保存失败：{e}")
         

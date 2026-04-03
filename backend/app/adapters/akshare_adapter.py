@@ -467,9 +467,11 @@ class AkShareAdapter(BaseDataAdapter):
             }
             adjust_type = adjust_map.get(adjust, "qfq")
             
-            # 处理日期格式为整数（YYYYMMDD）
-            start_date_int = int(start_date.replace("-", "")) if start_date else 19900101
-            end_date_int = int(end_date.replace("-", "")) if end_date else 20991231
+            # 使用统一的日期工具函数转换为整数格式（AkShare 需要）
+            from app.utils.date_utils import to_int_date
+            
+            start_date_int = to_int_date(start_date) if start_date else 19900101
+            end_date_int = to_int_date(end_date) if end_date else 20991231
             
             df = ak.stock_zh_a_hist(
                 symbol=code,
@@ -665,6 +667,19 @@ class AkShareAdapter(BaseDataAdapter):
             else:
                 df = ak.stock_board_industry_name_em()
             
+            # 检查返回值类型，akshare 可能返回错误码（整数）而不是 DataFrame
+            if df is None:
+                logger.warning(f"akshare 返回 None，无法获取板块列表")
+                return []
+            
+            if isinstance(df, int):
+                logger.warning(f"akshare 返回错误码：{df}，可能是 API 限流或网络问题")
+                raise ValueError(f"akshare 返回错误码：{df}")
+            
+            if not hasattr(df, 'iterrows'):
+                logger.warning(f"akshare 返回非 DataFrame 类型：{type(df)}")
+                raise TypeError(f"akshare 返回类型错误：{type(df)}，期望 DataFrame")
+            
             sectors = []
             for _, row in df.iterrows():
                 sectors.append(SectorInfo(
@@ -727,6 +742,12 @@ class AkShareAdapter(BaseDataAdapter):
     async def get_sector_components(self, sector_code: str) -> List[str]:
         try:
             df = ak.stock_board_industry_cons_em(symbol=sector_code)
+            
+            # 检查返回值类型
+            if df is None or isinstance(df, int) or not hasattr(df, 'columns'):
+                logger.warning(f"akshare 返回无效数据：{type(df)}")
+                return []
+            
             return df["代码"].tolist()
         except Exception as e:
             logger.error(f"获取板块成分股失败 {sector_code}: {e}")
@@ -743,6 +764,11 @@ class AkShareAdapter(BaseDataAdapter):
                 df = ak.stock_board_industry_name_em()
             else:
                 df = ak.stock_board_concept_name_em()
+            
+            # 检查返回值类型
+            if df is None or isinstance(df, int) or not hasattr(df, 'iterrows'):
+                logger.warning(f"akshare 返回无效数据：{type(df)}")
+                return []
             
             sort_col = "涨跌幅" if sort_by == "change_pct" else "成交量"
             df = df.sort_values(by=sort_col, ascending=False)
@@ -1230,7 +1256,17 @@ class AkShareAdapter(BaseDataAdapter):
             loop = asyncio.get_event_loop()
             df = await loop.run_in_executor(None, lambda: ak.stock_board_industry_name_em())
             
-            if df is None or df.empty:
+            # 检查返回值类型
+            if df is None:
+                logger.warning("akshare 返回 None")
+                return []
+            if isinstance(df, int):
+                logger.warning(f"akshare 返回错误码：{df}")
+                return []
+            if not hasattr(df, 'iterrows'):
+                logger.warning(f"akshare 返回非 DataFrame 类型：{type(df)}")
+                return []
+            if df.empty:
                 return []
             
             boards = []

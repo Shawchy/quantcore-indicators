@@ -1272,6 +1272,432 @@ class BaseDataAdapter(ABC):
         self.config = config or {}
         self._is_initialized = False
     
+    # ========== 智能缓存方法 ==========
+    
+    def _get_cache_key(self, prefix: str, **kwargs) -> str:
+        """生成缓存键
+        
+        Args:
+            prefix: 缓存前缀（如 'stock_list', 'kline'）
+            **kwargs: 额外参数（如 code, start_date 等）
+        
+        Returns:
+            缓存键字符串
+        
+        示例:
+            >>> _get_cache_key('stock_list')
+            'efinance_stock_list_default_20260402'
+            
+            >>> _get_cache_key('kline', code='600000', start='20240101')
+            'efinance_kline_code=600000_start=20240101_20260402'
+        """
+        from datetime import datetime
+        
+        # 添加日期后缀（按天缓存）
+        date_suffix = datetime.now().strftime('%Y%m%d')
+        
+        # 构建参数部分
+        params = []
+        for key, value in sorted(kwargs.items()):
+            params.append(f"{key}={value}")
+        
+        params_str = '_'.join(params) if params else 'default'
+        
+        # 生成完整缓存键
+        cache_key = f"{self.source_type.value}_{prefix}_{params_str}_{date_suffix}"
+        
+        return cache_key
+    
+    async def _get_from_cache(self, cache_key: str, data_type: str) -> Optional[Any]:
+        """从缓存获取数据（智能判断缓存层级）
+        
+        Args:
+            cache_key: 缓存键
+            data_type: 数据类型（如 'kline_daily', 'realtime_quote'）
+        
+        Returns:
+            缓存的数据，如果不存在则返回 None
+        """
+        from app.storage.intelligent_classifier import data_classifier
+        
+        # 智能判断缓存策略
+        decision = data_classifier.classify(data_type)
+        
+        if not decision.should_cache:
+            logger.debug(f"数据 {data_type} 不缓存，跳过缓存读取")
+            return None
+        
+        # 从缓存管理器获取
+        from app.storage.cache import cache_manager
+        
+        cache_type = self._map_data_type_to_cache(data_type)
+        if cache_type:
+            cached_data = await cache_manager.get(cache_type, cache_key)
+            
+            # 检查是否是空值标记（防穿透）
+            if cached_data == "__NONE__":
+                logger.debug(f"缓存空值：{data_type} - {cache_key}")
+                return None
+            
+            if cached_data is not None:
+                logger.debug(f"缓存命中：{data_type} - {cache_key}")
+                return cached_data
+        
+        logger.debug(f"缓存未命中：{data_type} - {cache_key}")
+        return None
+    
+    async def _save_to_cache(self, cache_key: str, data: Any, data_type: str) -> None:
+        """保存数据到缓存（智能判断缓存层级和 TTL）
+        
+        Args:
+            cache_key: 缓存键
+            data: 要缓存的数据
+            data_type: 数据类型（如 'kline_daily', 'realtime_quote'）
+        """
+        from app.storage.intelligent_classifier import data_classifier
+        
+        # 智能判断缓存策略
+        decision = data_classifier.classify(data_type)
+        
+        if not decision.should_cache:
+            logger.debug(f"数据 {data_type} 不缓存，跳过缓存写入")
+            return
+        
+        # 保存到缓存管理器
+        from app.storage.cache import cache_manager
+        
+        cache_type = self._map_data_type_to_cache(data_type)
+        if cache_type:
+            # 空值缓存处理（防穿透）
+            if data is None:
+                # 空值也缓存，设置短 TTL（1 分钟）
+                await cache_manager.set(cache_type, cache_key, "__NONE__", ttl=60)
+                logger.debug(f"缓存空值：{data_type} - {cache_key} (TTL=60s)")
+            else:
+                await cache_manager.set(cache_type, cache_key, data, ttl=decision.ttl_seconds)
+                logger.debug(f"缓存保存：{data_type} - {cache_key} (TTL={decision.ttl_seconds}s)")
+    
+    def _map_data_type_to_cache(self, data_type: str) -> Optional[str]:
+        """映射数据类型到缓存类型
+        
+        根据智能分类器的决策，映射到 CacheManager 的缓存类型
+        """
+        from app.storage.intelligent_classifier import data_classifier
+        
+        decision = data_classifier.classify(data_type)
+        
+        # 根据缓存层级映射到缓存类型
+        mapping = {
+            "l1": "realtime",  # L1 -> realtime 缓存（最快）
+            "l2": "kline",     # L2 -> kline 缓存（平衡）
+            "l3": "indicators", # L3 -> indicators 缓存（大容量）
+        }
+        
+        if decision.cache_level in mapping:
+            return mapping[decision.cache_level]
+        
+        # 默认使用 kline 缓存
+        return "kline"
+    
+    # ========== 持久化方法 ==========
+    
+    async def _get_from_persist(self, cache_key: str, data_type: str) -> Optional[Any]:
+        """从持久化存储获取数据
+        
+        Args:
+            cache_key: 缓存键
+            data_type: 数据类型
+        
+        Returns:
+            持久化的数据，如果不存在则返回 None
+        """
+        from app.storage.intelligent_classifier import data_classifier
+        
+        # 智能判断持久化策略
+        decision = data_classifier.classify(data_type)
+        
+        if not decision.should_persist:
+            logger.debug(f"数据 {data_type} 不持久化，跳过持久化读取")
+            return None
+        
+        # 根据 persist_target 选择存储
+        persist_target = decision.persist_target
+        
+        try:
+            if persist_target == "sqlite":
+                return await self._get_from_sqlite(cache_key, data_type)
+            elif persist_target == "parquet":
+                return await self._get_from_parquet(cache_key, data_type)
+            else:
+                logger.debug(f"未知持久化目标：{persist_target}")
+                return None
+        except Exception as e:
+            logger.warning(f"持久化读取失败：{data_type} - {cache_key}, 错误：{e}")
+            return None
+    
+    async def _get_from_sqlite(self, cache_key: str, data_type: str) -> Optional[Any]:
+        """从 SQLite 数据库获取数据
+        
+        Args:
+            cache_key: 缓存键（格式：source_type_prefix_params_date）
+            data_type: 数据类型
+        
+        Returns:
+            数据或 None
+        """
+        try:
+            from app.services.local_database import local_db_service
+            
+            if not local_db_service._initialized:
+                await local_db_service.initialize()
+            
+            # 解析 cache_key
+            parts = cache_key.split('_')
+            if len(parts) < 3:
+                return None
+            
+            # 示例：efinance_kline_code=600000_20260402
+            # source_type = efinance, prefix = kline, params = code=600000, date = 20260402
+            
+            prefix = parts[1]  # kline, quote, sector, etc.
+            
+            # 提取参数
+            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
+            params = {}
+            for param in params_str.split('_'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    params[key] = value
+            
+            # 根据数据类型调用不同的查询
+            if 'kline' in prefix:
+                code = params.get('code')
+                start_date = params.get('start')
+                end_date = params.get('end')
+                
+                if code:
+                    df = await local_db_service.get_kline(code, start_date, end_date)
+                    if df is not None and not df.empty:
+                        logger.debug(f"SQLite 命中：{data_type} - {cache_key}")
+                        return df
+            
+            elif 'quote' in prefix:
+                code = params.get('code')
+                if code:
+                    quote = await local_db_service.get_quote(code)
+                    if quote:
+                        logger.debug(f"SQLite 命中：{data_type} - {cache_key}")
+                        return quote
+            
+            elif 'sector' in prefix:
+                sector_type = params.get('type', 'industry')
+                sectors = await local_db_service.get_sector_list(sector_type)
+                if sectors:
+                    logger.debug(f"SQLite 命中：{data_type} - {cache_key}")
+                    return sectors
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"SQLite 查询失败：{cache_key}, 错误：{e}")
+            return None
+    
+    async def _get_from_parquet(self, cache_key: str, data_type: str) -> Optional[Any]:
+        """从 Parquet 文件获取数据
+        
+        Args:
+            cache_key: 缓存键
+            data_type: 数据类型
+        
+        Returns:
+            数据或 None
+        """
+        try:
+            from app.storage.parquet_store import ParquetStore
+            
+            parquet = ParquetStore()
+            
+            # 解析 cache_key
+            parts = cache_key.split('_')
+            if len(parts) < 3:
+                return None
+            
+            prefix = parts[1]
+            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
+            params = {}
+            for param in params_str.split('_'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    params[key] = value
+            
+            # 根据数据类型调用不同的加载方法
+            if 'kline' in prefix:
+                code = params.get('code')
+                start_date = params.get('start')
+                end_date = params.get('end')
+                
+                if code:
+                    df = parquet.load_kline(code, start_date, end_date)
+                    if df is not None and not df.empty:
+                        logger.debug(f"Parquet 命中：{data_type} - {cache_key}")
+                        return df
+            
+            elif 'indicators' in prefix or 'indicator' in prefix:
+                code = params.get('code')
+                if code:
+                    df = parquet.load_indicators(code)
+                    if df is not None and not df.empty:
+                        logger.debug(f"Parquet 命中：{data_type} - {cache_key}")
+                        return df
+            
+            elif 'chip' in prefix:
+                code = params.get('code')
+                if code:
+                    df = parquet.load_chip_data(code)
+                    if df is not None and not df.empty:
+                        logger.debug(f"Parquet 命中：{data_type} - {cache_key}")
+                        return df
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Parquet 读取失败：{cache_key}, 错误：{e}")
+            return None
+    
+    async def _save_to_persist(self, cache_key: str, data: Any, data_type: str) -> None:
+        """保存数据到持久化存储
+        
+        Args:
+            cache_key: 缓存键
+            data: 要持久化的数据
+            data_type: 数据类型
+        """
+        from app.storage.intelligent_classifier import data_classifier
+        
+        # 智能判断持久化策略
+        decision = data_classifier.classify(data_type)
+        
+        if not decision.should_persist:
+            logger.debug(f"数据 {data_type} 不持久化，跳过持久化写入")
+            return
+        
+        # 根据 persist_target 选择存储
+        persist_target = decision.persist_target
+        
+        try:
+            if persist_target == "sqlite":
+                await self._save_to_sqlite(cache_key, data, data_type)
+            elif persist_target == "parquet":
+                await self._save_to_parquet(cache_key, data, data_type)
+            else:
+                logger.debug(f"未知持久化目标：{persist_target}")
+        except Exception as e:
+            logger.warning(f"持久化保存失败：{data_type} - {cache_key}, 错误：{e}")
+    
+    async def _save_to_sqlite(self, cache_key: str, data: Any, data_type: str) -> None:
+        """保存到 SQLite 数据库
+        
+        Args:
+            cache_key: 缓存键
+            data: 数据（DataFrame 或 dict）
+            data_type: 数据类型
+        """
+        try:
+            from app.services.local_database import local_db_service
+            import pandas as pd
+            
+            if not local_db_service._initialized:
+                await local_db_service.initialize()
+            
+            # 解析 cache_key
+            parts = cache_key.split('_')
+            if len(parts) < 3:
+                return
+            
+            prefix = parts[1]
+            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
+            params = {}
+            for param in params_str.split('_'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    params[key] = value
+            
+            # 根据数据类型调用不同的保存方法
+            if 'kline' in prefix and isinstance(data, pd.DataFrame):
+                code = params.get('code')
+                if code and not data.empty:
+                    await local_db_service.save_kline(data, code)
+                    logger.debug(f"SQLite 保存：{data_type} - {cache_key}")
+            
+            elif 'quote' in prefix:
+                # 保存实时行情
+                code = params.get('code')
+                if code:
+                    await local_db_service.save_quote(code, data)
+                    logger.debug(f"SQLite 保存：{data_type} - {cache_key}")
+            
+            elif 'sector' in prefix and isinstance(data, list):
+                # 保存板块数据
+                await local_db_service.save_sector_list(data)
+                logger.debug(f"SQLite 保存：{data_type} - {cache_key}")
+            
+        except Exception as e:
+            logger.warning(f"SQLite 保存失败：{cache_key}, 错误：{e}")
+    
+    async def _save_to_parquet(self, cache_key: str, data: Any, data_type: str) -> None:
+        """保存到 Parquet 文件
+        
+        Args:
+            cache_key: 缓存键
+            data: 数据（DataFrame）
+            data_type: 数据类型
+        """
+        try:
+            from app.storage.parquet_store import ParquetStore
+            import pandas as pd
+            
+            if not isinstance(data, pd.DataFrame) or data.empty:
+                return
+            
+            parquet = ParquetStore()
+            
+            # 解析 cache_key
+            parts = cache_key.split('_')
+            if len(parts) < 3:
+                return
+            
+            prefix = parts[1]
+            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
+            params = {}
+            for param in params_str.split('_'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    params[key] = value
+            
+            # 根据数据类型调用不同的保存方法
+            if 'kline' in prefix:
+                code = params.get('code')
+                if code:
+                    parquet.save_kline(data, code)
+                    logger.debug(f"Parquet 保存：{data_type} - {cache_key}")
+            
+            elif 'indicators' in prefix or 'indicator' in prefix:
+                code = params.get('code')
+                if code:
+                    parquet.save_indicators(data, code)
+                    logger.debug(f"Parquet 保存：{data_type} - {cache_key}")
+            
+            elif 'chip' in prefix:
+                code = params.get('code')
+                if code:
+                    parquet.save_chip_data(data, code)
+                    logger.debug(f"Parquet 保存：{data_type} - {cache_key}")
+            
+        except Exception as e:
+            logger.warning(f"Parquet 保存失败：{cache_key}, 错误：{e}")
+    
+    # ========== 原有方法 ==========
+    
     @property
     @abstractmethod
     def source_type(self) -> DataSourceType:
@@ -1480,7 +1906,12 @@ class BaseDataAdapter(ABC):
             for k in klines
         ]
         df = pd.DataFrame(data)
-        df["date"] = pd.to_datetime(df["date"])
+        # 统一日期格式处理，支持多种格式
+        try:
+            df["date"] = df["date"].astype(str).str.strip()
+            df["date"] = pd.to_datetime(df["date"], format='mixed', errors='coerce')
+        except Exception:
+            df["date"] = pd.to_datetime(df["date"], errors='coerce')
         df = df.sort_values("date").reset_index(drop=True)
         return df
     

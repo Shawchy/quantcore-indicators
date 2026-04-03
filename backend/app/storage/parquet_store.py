@@ -29,7 +29,14 @@ class ParquetStore:
         partition_by_year: bool = True
     ) -> str:
         if partition_by_year and "date" in df.columns:
-            df["year"] = pd.to_datetime(df["date"]).dt.year
+            # 统一日期格式处理，支持多种格式
+            try:
+                df["date"] = df["date"].astype(str).str.strip()
+                df["date"] = pd.to_datetime(df["date"], format='mixed', errors='coerce')
+            except Exception:
+                df["date"] = pd.to_datetime(df["date"], errors='coerce')
+            
+            df["year"] = df["date"].dt.year
             for year, group in df.groupby("year"):
                 file_path = self.kline_dir / code / f"{year}.parquet"
                 file_path.parent.mkdir(parents=True, exist_ok=True)

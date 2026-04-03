@@ -87,6 +87,62 @@ async def lifespan(app: FastAPI):
     # 数据加载器已初始化为按需模式（不自动预加载）
     logger.info("数据加载模式：按需加载（用户请求时才拉取数据）")
     
+    # 缓存预热（可选，提升热点数据访问速度）
+    try:
+        from app.storage.cache_optimizer import cache_optimizer
+        
+        # 定义热门股票（沪深龙头股）
+        HOT_STOCKS = [
+            "600000",  # 浦发银行
+            "600036",  # 招商银行
+            "000001",  # 平安银行
+            "601318",  # 中国平安
+            "600519",  # 贵州茅台
+            "000858",  # 五粮液
+            "601398",  # 工商银行
+            "600030",  # 中信证券
+            "000333",  # 美的集团
+            "601888",  # 中国中免
+        ]
+        
+        # 定义热门板块
+        HOT_SECTORS = [
+            "industry_银行",
+            "industry_证券",
+            "industry_保险",
+            "industry_房地产",
+            "industry_食品饮料",
+            "industry_医药生物",
+            "industry_电子",
+            "industry_计算机",
+        ]
+        
+        # 后台异步预热，不阻塞启动
+        async def warmup_task():
+            try:
+                logger.info("开始缓存预热...")
+                
+                # 预热热门股票 K 线（最近 90 天）
+                logger.info(f"预热热门股票 K 线：{len(HOT_STOCKS)}只")
+                await cache_optimizer.warmup_cache("kline", HOT_STOCKS)
+                
+                # 预热热门板块成分股
+                logger.info(f"预热热门板块：{len(HOT_SECTORS)}个")
+                await cache_optimizer.warmup_cache("sector", HOT_SECTORS)
+                
+                logger.info("缓存预热完成")
+                
+            except Exception as e:
+                logger.warning(f"缓存预热失败：{e}")
+        
+        # 启动后台预热任务
+        import asyncio
+        asyncio.create_task(warmup_task())
+        logger.info("缓存预热任务已启动（后台运行）")
+        
+    except Exception as e:
+        logger.warning(f"缓存预热初始化失败：{e}")
+    
     # 初始化中间件（限流器、断路器）
     from app.middleware import init_middleware
     init_middleware()

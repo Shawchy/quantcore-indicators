@@ -1119,18 +1119,12 @@ class EFinanceAdapter(BaseDataAdapter):
                 else:
                     fqt = 0
             
-            # 格式化日期
-            beg = start_date.replace('-', '') if start_date else '19000101'
-            if len(beg) == 8 and '-' not in beg:
-                pass  # 已经是 YYYYMMDD 格式
-            elif len(beg) == 10:
-                beg = beg.replace('-', '')
+            # 使用统一的日期工具函数转换格式
+            from app.utils.date_utils import to_compact_date
             
-            end = end_date.replace('-', '') if end_date else '20500101'
-            if len(end) == 8 and '-' not in end:
-                pass
-            elif len(end) == 10:
-                end = end.replace('-', '')
+            # 格式化日期为 YYYYMMDD 格式（efinance 需要）
+            beg = to_compact_date(start_date) if start_date else '19000101'
+            end = to_compact_date(end_date) if end_date else '20500101'
             
             cache_key = self._get_cache_key('kline', code=code, start=beg, end=end, klt=klt, fqt=fqt)
             cached = self._get_from_cache(cache_key, 'kline')

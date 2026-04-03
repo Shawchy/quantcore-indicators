@@ -639,10 +639,20 @@ class AkShareWithCredential:
         )
     
     def get_board_industry_name_em(self):
+        """
+        获取东方财富行业板块名称
+        
+        注意：返回值需要检查类型，akshare 可能返回错误码（整数）而不是 DataFrame
+        """
         import akshare as ak
         return ak.stock_board_industry_name_em()
     
     def get_board_concept_name_em(self):
+        """
+        获取东方财富概念板块名称
+        
+        注意：返回值需要检查类型，akshare 可能返回错误码（整数）而不是 DataFrame
+        """
         import akshare as ak
         return ak.stock_board_concept_name_em()
     

@@ -26,7 +26,29 @@ class DataCleaner:
             df[col] = df[col].astype(float)
         
         if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"])
+            # 统一日期格式处理，支持多种格式
+            try:
+                # 先尝试转换为字符串，去除可能的前后空格
+                df["date"] = df["date"].astype(str).str.strip()
+                # 使用 pandas 的智能解析，支持混合格式
+                df["date"] = pd.to_datetime(df["date"], format='mixed', errors='coerce')
+            except Exception as e:
+                from loguru import logger
+                logger.warning(f"日期转换失败，使用备用方案：{e}")
+                # 备用方案：手动转换
+                def convert_date(date_str):
+                    try:
+                        date_str = str(date_str).strip()
+                        if len(date_str) == 8 and date_str.isdigit():
+                            return pd.to_datetime(date_str, format="%Y%m%d")
+                        elif len(date_str) == 10 and '-' in date_str:
+                            return pd.to_datetime(date_str, format="%Y-%m-%d")
+                        else:
+                            return pd.to_datetime(date_str)
+                    except:
+                        return pd.NaT
+                df["date"] = df["date"].apply(convert_date)
+            
             df = df.sort_values("date").reset_index(drop=True)
         
         return df
@@ -59,7 +81,14 @@ class DataCleaner:
             return df
         
         df = df.copy()
-        df["date"] = pd.to_datetime(df["date"])
+        # 统一日期格式处理
+        try:
+            df["date"] = df["date"].astype(str).str.strip()
+            df["date"] = pd.to_datetime(df["date"], format='mixed', errors='coerce')
+        except Exception:
+            # 备用方案
+            df["date"] = pd.to_datetime(df["date"], errors='coerce')
+        
         df = df.set_index("date")
         
         date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq="D")

@@ -222,8 +222,14 @@ class DataLoader:
     def _estimate_total_bars(self, code: str, start_date: str, end_date: str) -> int:
         """估算总数据量"""
         try:
-            start = datetime.strptime(start_date, "%Y%m%d")
-            end = datetime.strptime(end_date, "%Y%m%d")
+            from app.utils.date_utils import to_compact_date
+            
+            # 统一日期格式
+            start_normalized = to_compact_date(start_date) or start_date.replace('-', '')
+            end_normalized = to_compact_date(end_date) or end_date.replace('-', '')
+            
+            start = datetime.strptime(start_normalized, "%Y%m%d")
+            end = datetime.strptime(end_normalized, "%Y%m%d")
             trading_days = (end - start).days * 0.41  # 一年约 250 个交易日
             return int(trading_days)
         except:

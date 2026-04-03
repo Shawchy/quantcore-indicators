@@ -61,15 +61,21 @@ async def get_stock_billboard(
         end_date: 结束日期
     """
     try:
-        # 这里可以调用历史龙虎榜 API，目前返回空列表
-        # TODO: 实现历史龙虎榜查询
-        logger.warning(f"个股历史龙虎榜查询暂未实现，代码：{code}")
+        # 使用数据源管理器获取历史龙虎榜数据
+        data = await data_source_manager.get_stock_billboard(
+            code=code,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        if not data:
+            logger.warning(f"未获取到个股历史龙虎榜数据，代码：{code}")
         
         return ResponseModel(
             success=True,
             code="SUCCESS",
-            message="功能暂未实现",
-            data=[]
+            message="获取成功",
+            data=data if data else []
         )
         
     except Exception as e:

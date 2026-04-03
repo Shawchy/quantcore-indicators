@@ -1400,6 +1400,162 @@ class LocalDatabaseService:
         finally:
             session.close()
     
+    # ========== 数据删除方法 ==========
+    
+    async def delete_kline_data(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
+        """删除 K 线数据"""
+        if not self._initialized:
+            return 0
+        
+        try:
+            session = self.get_session()
+            query = session.query(StockKlineDaily).filter(StockKlineDaily.code == code)
+            
+            if start_date:
+                query = query.filter(StockKlineDaily.date >= start_date)
+            if end_date:
+                query = query.filter(StockKlineDaily.date <= end_date)
+            
+            deleted = query.delete(synchronize_session=False)
+            session.commit()
+            logger.debug(f"删除 K 线数据成功：{code}, 删除 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"删除 K 线数据失败：{e}")
+            return 0
+        finally:
+            session.close()
+    
+    async def delete_kline_weekly(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
+        """删除周线 K 线数据"""
+        if not self._initialized:
+            return 0
+        
+        try:
+            session = self.get_session()
+            query = session.query(StockKlineWeekly).filter(StockKlineWeekly.code == code)
+            
+            if start_date:
+                query = query.filter(StockKlineWeekly.date >= start_date)
+            if end_date:
+                query = query.filter(StockKlineWeekly.date <= end_date)
+            
+            deleted = query.delete(synchronize_session=False)
+            session.commit()
+            logger.debug(f"删除周线 K 线数据成功：{code}, 删除 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"删除周线 K 线数据失败：{e}")
+            return 0
+        finally:
+            session.close()
+    
+    async def delete_kline_monthly(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
+        """删除月线 K 线数据"""
+        if not self._initialized:
+            return 0
+        
+        try:
+            session = self.get_session()
+            query = session.query(StockKlineMonthly).filter(StockKlineMonthly.code == code)
+            
+            if start_date:
+                query = query.filter(StockKlineMonthly.date >= start_date)
+            if end_date:
+                query = query.filter(StockKlineMonthly.date <= end_date)
+            
+            deleted = query.delete(synchronize_session=False)
+            session.commit()
+            logger.debug(f"删除月线 K 线数据成功：{code}, 删除 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"删除月线 K 线数据失败：{e}")
+            return 0
+        finally:
+            session.close()
+    
+    async def delete_quote_data(self, code: str) -> int:
+        """删除实时行情数据"""
+        if not self._initialized:
+            return 0
+        
+        try:
+            session = self.get_session()
+            deleted = session.query(StockQuote).filter(StockQuote.code == code).delete(synchronize_session=False)
+            session.commit()
+            logger.debug(f"删除实时行情数据成功：{code}, 删除 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"删除实时行情数据失败：{e}")
+            return 0
+        finally:
+            session.close()
+    
+    async def delete_fund_nav(self, code: str) -> int:
+        """删除基金净值数据"""
+        if not self._initialized:
+            return 0
+        
+        try:
+            session = self.get_session()
+            deleted = session.query(FundNAV).filter(FundNAV.code == code).delete(synchronize_session=False)
+            session.commit()
+            logger.debug(f"删除基金净值数据成功：{code}, 删除 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"删除基金净值数据失败：{e}")
+            return 0
+        finally:
+            session.close()
+    
+    async def delete_billboard(self, trade_date: Optional[str] = None, code: Optional[str] = None) -> int:
+        """删除龙虎榜数据"""
+        if not self._initialized:
+            return 0
+        
+        try:
+            session = self.get_session()
+            query = session.query(StockBillboard)
+            
+            if trade_date:
+                query = query.filter(StockBillboard.trade_date == trade_date)
+            if code:
+                query = query.filter(StockBillboard.code == code)
+            
+            deleted = query.delete(synchronize_session=False)
+            session.commit()
+            logger.debug(f"删除龙虎榜数据成功，删除 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"删除龙虎榜数据失败：{e}")
+            return 0
+        finally:
+            session.close()
+    
+    async def delete_moneyflow(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
+        """删除资金流向数据"""
+        if not self._initialized:
+            return 0
+        
+        try:
+            session = self.get_session()
+            query = session.query(StockMoneyflow).filter(StockMoneyflow.code == code)
+            
+            if start_date:
+                query = query.filter(StockMoneyflow.trade_date >= start_date)
+            if end_date:
+                query = query.filter(StockMoneyflow.trade_date <= end_date)
+            
+            deleted = query.delete(synchronize_session=False)
+            session.commit()
+            logger.debug(f"删除资金流向数据成功：{code}, 删除 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"删除资金流向数据失败：{e}")
+            return 0
+        finally:
+            session.close()
+    
     async def get_database_stats(self) -> Dict[str, int]:
         """获取数据库统计信息"""
         if not self._initialized:

@@ -392,9 +392,53 @@ class UnifiedStorage(Generic[T]):
         key = self._generate_key(identifier, **kwargs)
         deleted = await self._cache.delete(key)
         
-        # TODO: 从数据库删除
+        # 从数据库删除
+        await self._delete_from_db(identifier, **kwargs)
         
         return deleted
+    
+    async def _delete_from_db(self, identifier: str, **kwargs):
+        """从数据库删除数据的内部方法"""
+        try:
+            await self._ensure_db_initialized()
+            category = self.category.value
+            
+            # 根据数据分类调用不同的数据库删除方法
+            if category in ["kline_daily", "kline_weekly", "kline_monthly"]:
+                code = identifier
+                start_date = kwargs.get("start_date")
+                end_date = kwargs.get("end_date")
+                
+                if category == "kline_daily":
+                    await local_db_service.delete_kline_data(code, start_date, end_date)
+                elif category == "kline_weekly":
+                    await local_db_service.delete_kline_weekly(code, start_date, end_date)
+                elif category == "kline_monthly":
+                    await local_db_service.delete_kline_monthly(code, start_date, end_date)
+            
+            elif category == "quote":
+                code = identifier
+                await local_db_service.delete_quote_data(code)
+            
+            elif category == "fund":
+                code = identifier
+                await local_db_service.delete_fund_nav(code)
+            
+            elif category == "billboard":
+                trade_date = kwargs.get("trade_date")
+                code = kwargs.get("code")
+                await local_db_service.delete_billboard(trade_date, code)
+            
+            elif category == "moneyflow":
+                code = identifier
+                start_date = kwargs.get("start_date")
+                end_date = kwargs.get("end_date")
+                await local_db_service.delete_moneyflow(code, start_date, end_date)
+            
+            logger.debug(f"数据已从数据库删除：{identifier}")
+            
+        except Exception as e:
+            logger.error(f"从数据库删除失败：{e}")
     
     async def clear(self):
         """清空缓存"""

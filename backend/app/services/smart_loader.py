@@ -232,10 +232,20 @@ class SmartDataLoader:
         
         # 未命中则从 API 获取
         logger.debug(f"从 API 获取基金净值：{code}")
-        # TODO: 实现基金净值获取
-        # fund_nav = await data_source_manager.get_fund_nav(code, start_date, end_date)
         
-        return None
+        try:
+            # 使用数据源管理器获取基金净值
+            fund_nav = await data_source_manager.get_fund_nav(code, start_date, end_date)
+            
+            if fund_nav:
+                # 保存到存储层
+                await storage.set(code, fund_nav)
+                logger.info(f"基金净值数据已缓存：{code} {len(fund_nav)}条")
+            
+            return fund_nav
+        except Exception as e:
+            logger.error(f"获取基金净值失败 {code}: {e}")
+            return None
     
     async def warmup_cache(self, stock_codes: List[str] = None, use_smart_warmup: bool = True):
         """

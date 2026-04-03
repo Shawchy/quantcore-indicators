@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     APP_NAME: str = "Quant Analysis System"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False  # 生产环境应关闭 DEBUG 模式
     
     API_PREFIX: str = "/api/v1"
     

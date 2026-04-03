@@ -9,7 +9,7 @@ from datetime import datetime
 import json
 
 from app.websocket.manager import connection_manager, ConnectionManager
-from app.api.deps import get_optional_current_user
+from app.api.deps import get_optional_current_user, get_current_admin_user
 from app.core.security import User
 from loguru import logger
 
@@ -40,12 +40,26 @@ async def websocket_endpoint(
     user_id = None
     if token:
         try:
-            # TODO: 实现 token 验证逻辑
-            # 这里暂时不验证，生产环境需要添加验证
-            user_id = None  # 从 token 中解析用户 ID
-            logger.info(f"WebSocket 连接带 Token - Connection: {connection_id}")
+            from app.core.security import verify_access_token
+            from jose import JWTError
+            
+            # 验证 JWT Token
+            token_data = verify_access_token(token)
+            if token_data:
+                user_id = token_data.username
+                logger.info(f"WebSocket 连接认证成功 - Connection: {connection_id}, User: {user_id}")
+            else:
+                logger.warning(f"WebSocket Token 无效 - Connection: {connection_id}")
+                await websocket.close(code=4001, reason="Invalid token")
+                return
+        except JWTError as e:
+            logger.warning(f"WebSocket Token 验证失败：{e} - Connection: {connection_id}")
+            await websocket.close(code=4001, reason="Token verification failed")
+            return
         except Exception as e:
-            logger.warning(f"Token 验证失败：{e}，允许匿名连接")
+            logger.warning(f"WebSocket 认证异常：{e} - Connection: {connection_id}")
+            await websocket.close(code=4001, reason="Authentication error")
+            return
     
     # 连接
     success = await connection_manager.connect(websocket, connection_id, user_id)
@@ -154,16 +168,65 @@ async def handle_client_message(connection_id: str, message: dict):
     elif msg_type == "auth":
         # 认证消息
         if event == "login":
-            # TODO: 实现认证逻辑
+            # 实现客户端认证逻辑
             logger.info(f"客户端认证请求 - Connection: {connection_id}")
-            await connection_manager.send_message(
-                connection_id,
-                {
-                    "type": "system",
-                    "event": "auth_success",
-                    "data": {"message": "认证成功"}
-                }
-            )
+            
+            username = data.get("username")
+            password = data.get("password")
+            
+            if not username or not password:
+                await connection_manager.send_message(
+                    connection_id,
+                    {
+                        "type": "system",
+                        "event": "auth_error",
+                        "data": {"message": "缺少用户名或密码"}
+                    }
+                )
+                return
+            
+            # 验证用户凭证
+            from app.core.security import authenticate_user
+            user = await authenticate_user(username, password)
+            
+            if user:
+                # 认证成功，更新连接的用户信息
+                await connection_manager.update_user(connection_id, user.id)
+                
+                # 生成临时会话 Token
+                from app.core.security import create_access_token
+                from datetime import timedelta
+                from app.config import settings
+                
+                access_token = create_access_token(
+                    data={"sub": user.id},
+                    expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+                )
+                
+                await connection_manager.send_message(
+                    connection_id,
+                    {
+                        "type": "system",
+                        "event": "auth_success",
+                        "data": {
+                            "message": "认证成功",
+                            "user_id": user.id,
+                            "username": user.username,
+                            "token": access_token
+                        }
+                    }
+                )
+                logger.info(f"客户端认证成功 - Connection: {connection_id}, User: {user.username}")
+            else:
+                await connection_manager.send_message(
+                    connection_id,
+                    {
+                        "type": "system",
+                        "event": "auth_error",
+                        "data": {"message": "用户名或密码错误"}
+                    }
+                )
+                logger.warning(f"客户端认证失败 - Connection: {connection_id}, Username: {username}")
     
     else:
         # 未知消息类型
@@ -196,9 +259,8 @@ async def get_websocket_stats():
 
 
 @router.get("/ws/connections")
-async def list_connections():
+async def list_connections(current_user: User = Depends(get_current_admin_user)):
     """列出所有活跃连接（仅管理员可访问）"""
-    # TODO: 添加权限验证
     connections = []
     for conn_id, conn in connection_manager.active_connections.items():
         connections.append({

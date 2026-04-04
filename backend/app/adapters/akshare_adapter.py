@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple, Callable
 import akshare as ak
 import pandas as pd
 from loguru import logger
@@ -20,6 +20,18 @@ from .smart_retry import SmartRetryExecutor, ErrorClassifier, ErrorType
 from .hybrid_tls_client import HybridTLSClient
 
 
+class CacheEntry:
+    """缓存条目类"""
+    
+    def __init__(self, data: Any, expires_at: float):
+        self.data = data
+        self.expires_at = expires_at
+    
+    def is_expired(self) -> bool:
+        """检查缓存是否过期"""
+        return time.time() > self.expires_at
+
+
 class AkShareAdapter(BaseDataAdapter):
     """AkShare 数据源适配器
     
@@ -33,6 +45,9 @@ class AkShareAdapter(BaseDataAdapter):
         super().__init__(config)
         self._last_request_time = 0
         self._min_request_interval = 1.5  # akshare 需要更保守
+        
+        # 缓存机制
+        self._cache: Dict[str, CacheEntry] = {}
         
         # 反风控设置
         self._request_delay_range = (2.0, 4.0)  # 请求间隔（秒），默认更保守
@@ -114,9 +129,62 @@ class AkShareAdapter(BaseDataAdapter):
         self._is_initialized = False
         logger.info("AkShare 适配器已关闭")
     
+    # ========== 缓存机制 ===========
+    
+    def _get_cache_key(self, api_name: str, **kwargs) -> str:
+        """生成缓存键
+        
+        Args:
+            api_name: API 名称
+            **kwargs: 参数键值对
+            
+        Returns:
+            缓存键字符串
+        """
+        params = '_'.join(f"{k}={v}" for k, v in sorted(kwargs.items()))
+        return f"ak_{api_name}_{params}" if params else f"ak_{api_name}"
+    
+    def _get_from_cache(self, key: str, category: str = "default") -> Optional[Any]:
+        """从缓存获取数据
+        
+        Args:
+            key: 缓存键
+            category: 缓存分类
+            
+        Returns:
+            缓存的数据，如果不存在或已过期则返回 None
+        """
+        if key not in self._cache:
+            return None
+        
+        entry = self._cache[key]
+        if entry.is_expired():
+            del self._cache[key]
+            logger.debug(f"缓存已过期：{key}")
+            return None
+        
+        logger.debug(f"缓存命中：{key}")
+        return entry.data
+    
+    def _save_to_cache(self, key: str, data: Any, category: str = "default", ttl: int = 300) -> None:
+        """保存数据到缓存
+        
+        Args:
+            key: 缓存键
+            data: 要保存的数据
+            category: 缓存分类
+            ttl: 生存时间（秒），默认 5 分钟
+        """
+        if data is None:
+            return
+        
+        expires_at = time.time() + ttl
+        self._cache[key] = CacheEntry(data, expires_at)
+        logger.debug(f"保存到缓存：{key}, TTL={ttl}s")
+    
     # ========== 反风控方法 ===========
     
-    def _get_time_based_delay(self) -> tuple:
+    def _get_time_based_delay(self) -> Tuple[float, float]:
         """根据当前时间段获取合适的延迟范围
         
         Returns:
@@ -131,7 +199,7 @@ class AkShareAdapter(BaseDataAdapter):
         else:
             return (0.5, 1.5)
     
-    async def _rate_limit(self):
+    async def _rate_limit(self) -> None:
         """异步请求限流"""
         if self._adaptive_delay_enabled:
             min_delay, max_delay = self._get_time_based_delay()
@@ -192,7 +260,7 @@ class AkShareAdapter(BaseDataAdapter):
         
         return is_rate_limit
     
-    def _rate_limit_sync(self):
+    def _rate_limit_sync(self) -> None:
         """同步请求限流"""
         delay = random.uniform(*self._request_delay_range)
         time.sleep(delay)
@@ -210,7 +278,7 @@ class AkShareAdapter(BaseDataAdapter):
             "user_agent_rotation": "已启用"
         }
     
-    def enable_adaptive_delay(self, enabled: bool = True):
+    def enable_adaptive_delay(self, enabled: bool = True) -> None:
         """启用/禁用自适应延迟
         
         Args:
@@ -220,7 +288,7 @@ class AkShareAdapter(BaseDataAdapter):
         status = "已启用" if enabled else "已禁用"
         logger.info(f"AkShare 自适应延迟：{status}")
     
-    def reset_rate_limit_status(self):
+    def reset_rate_limit_status(self) -> None:
         """重置限流状态（在成功请求后调用）"""
         if self._rate_limit_detected:
             self._rate_limit_detected = False
@@ -228,7 +296,7 @@ class AkShareAdapter(BaseDataAdapter):
             self._last_rate_limit_time = 0
             logger.info("限流状态已重置")
     
-    def set_custom_delay(self, min_delay: float, max_delay: float):
+    def set_custom_delay(self, min_delay: float, max_delay: float) -> None:
         """设置自定义延迟范围
         
         Args:
@@ -239,7 +307,7 @@ class AkShareAdapter(BaseDataAdapter):
         self._adaptive_delay_enabled = False  # 禁用自适应延迟
         logger.info(f"AkShare 自定义延迟范围：{min_delay}-{max_delay}秒（已禁用自适应延迟）")
     
-    def _rotate_user_agent(self):
+    def _rotate_user_agent(self) -> None:
         """轮换 User-Agent"""
         old_ua = self._current_user_agent
         self._current_user_agent = random.choice(self._user_agents)
@@ -250,7 +318,7 @@ class AkShareAdapter(BaseDataAdapter):
         return self._current_user_agent
     
     @staticmethod
-    def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3):
+    def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3) -> Callable:
         """限流装饰器（用于同步方法）
         
         Args:
@@ -296,7 +364,7 @@ class AkShareAdapter(BaseDataAdapter):
         return decorator
     
     @staticmethod
-    def async_rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3):
+    def async_rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3) -> Callable:
         """异步限流装饰器
         
         Args:
@@ -418,25 +486,49 @@ class AkShareAdapter(BaseDataAdapter):
         logger.info("AkShare 适配器已关闭")
     
     async def get_stock_list(self, market: Optional[str] = None) -> List[StockBasicInfo]:
-        try:
+        """获取 A 股股票列表（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             df = ak.stock_zh_a_spot_em()
             stocks = []
             for _, row in df.iterrows():
                 code = str(row["代码"])
                 name = str(row["名称"])
                 market_tag = "SH" if code.startswith("6") else "SZ"
-                stocks.append(StockBasicInfo(
-                    code=code,
-                    name=name,
-                    market=market_tag
-                ))
+                stocks.append(StockBasicInfo(code=code, name=name, market=market_tag))
             return stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_list"
+            )
+            return result or []
         except Exception as e:
             logger.error(f"获取股票列表失败：{e}")
             return []
     
     async def get_stock_info(self, code: str) -> Optional[StockBasicInfo]:
-        try:
+        """获取个股详细信息（带 TLS 指纹伪装 + 凭证注入 + 缓存）"""
+        # 生成缓存键
+        cache_key = self._get_cache_key('stock_info', code=code)
+        cached = self._get_from_cache(cache_key, 'stock_basic')
+        if cached:
+            logger.debug(f"缓存命中：{cache_key}")
+            return cached
+        
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             df = ak.stock_individual_info_em(symbol=code)
             info_dict = dict(zip(df["item"], df["value"]))
             market_tag = "SH" if code.startswith("6") else "SZ"
@@ -448,6 +540,16 @@ class AkShareAdapter(BaseDataAdapter):
                 list_date=info_dict.get("上市时间"),
                 total_shares=float(info_dict.get("总市值", 0)) / 100000000 if info_dict.get("总市值") else None
             )
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
+            # 保存到缓存（股票信息变化慢，缓存 10 分钟）
+            if result:
+                self._save_to_cache(cache_key, result, 'stock_basic', ttl=600)
+            return result
         except Exception as e:
             logger.error(f"获取股票信息失败 {code}: {e}")
             return None
@@ -459,20 +561,33 @@ class AkShareAdapter(BaseDataAdapter):
         end_date: Optional[str] = None,
         adjust: str = "qfq"
     ) -> List[KLineData]:
-        try:
-            adjust_map = {
-                "qfq": "qfq",
-                "hfq": "hfq",
-                "": ""
-            }
-            adjust_type = adjust_map.get(adjust, "qfq")
-            
-            # 使用统一的日期工具函数转换为整数格式（AkShare 需要）
-            from app.utils.date_utils import to_int_date
-            
-            start_date_int = to_int_date(start_date) if start_date else 19900101
-            end_date_int = to_int_date(end_date) if end_date else 20991231
-            
+        """获取个股 K 线数据（带 TLS 指纹伪装 + 凭证注入 + 缓存）"""
+        # 生成缓存键
+        cache_key = self._get_cache_key('kline', code=code, start=start_date, end=end_date, adjust=adjust)
+        cached = self._get_from_cache(cache_key, 'kline')
+        if cached:
+            logger.debug(f"缓存命中：{cache_key}")
+            return cached
+        
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        adjust_map = {
+            "qfq": "qfq",
+            "hfq": "hfq",
+            "": ""
+        }
+        adjust_type = adjust_map.get(adjust, "qfq")
+        
+        from app.utils.date_utils import to_int_date
+        
+        start_date_int = to_int_date(start_date) if start_date else 19900101
+        end_date_int = to_int_date(end_date) if end_date else 20991231
+        
+        def fetch_sync():
             df = ak.stock_zh_a_hist(
                 symbol=code,
                 period="daily",
@@ -498,9 +613,18 @@ class AkShareAdapter(BaseDataAdapter):
                     amount=float(row["成交额"]) if "成交额" in row else None,
                     turnover_rate=float(row["换手率"]) if "换手率" in row else None
                 ))
-            
-            logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条")
             return klines
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_kline"
+            )
+            # 保存到缓存（K 线数据盘后更新，缓存到次日）
+            if result:
+                logger.info(f"获取 K 线数据成功 {code}: {len(result)}条")
+                self._save_to_cache(cache_key, result, 'kline', ttl=3600)
+            return result or []
         except Exception as e:
             logger.error(f"获取 K 线数据失败 {code}: {e}")
             return []
@@ -511,16 +635,10 @@ class AkShareAdapter(BaseDataAdapter):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[KLineData]:
-        """获取大盘指数 K 线数据
+        """获取大盘指数 K 线数据（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Args:
-            index_code: 指数代码，如 000001（上证指数）、399001（深证成指）
-            start_date: 开始日期 YYYY-MM-DD
-            end_date: 结束日期 YYYY-MM-DD
-            
-        Returns:
-            K 线数据列表
-        """
         try:
             await self._rate_limit()
             
@@ -552,12 +670,25 @@ class AkShareAdapter(BaseDataAdapter):
             return []
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
-        try:
+        """获取个股实时行情（带 TLS 指纹伪装 + 凭证注入 + 缓存）"""
+        # 生成缓存键
+        cache_key = self._get_cache_key('realtime_quote', code=code)
+        cached = self._get_from_cache(cache_key, 'quote')
+        if cached:
+            logger.debug(f"缓存命中：{cache_key}")
+            return cached
+        
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             df = ak.stock_zh_a_spot_em()
             row = df[df["代码"] == code]
             if row.empty:
-                return {}
-            
+                return None
             row = row.iloc[0]
             return {
                 "code": code,
@@ -573,6 +704,16 @@ class AkShareAdapter(BaseDataAdapter):
                 "prev_close": float(row["昨收"]),
                 "turnover_rate": float(row["换手率"]) if "换手率" in row else None
             }
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_realtime_quote"
+            )
+            # 保存到缓存（实时行情变化快，缓存 60 秒）
+            if result:
+                self._save_to_cache(cache_key, result, 'quote', ttl=60)
+            return result or {}
         except Exception as e:
             logger.error(f"获取实时行情失败 {code}: {e}")
             return {}
@@ -581,33 +722,17 @@ class AkShareAdapter(BaseDataAdapter):
         self,
         market_types: Optional[List[str]] = None
     ) -> List[MarketQuote]:
-        try:
-            # 缓存已移除，统一使用 storage_manager
-            # cache_key = self._get_cache_key('market_quotes', types=','.join(market_types or []))
-            # cached = self._get_from_cache(cache_key, 'quote')
-            # if cached:
-            #     return cached
-            
-            max_retries = 3
-            df = None
-            
-            for attempt in range(max_retries):
-                try:
-                    df = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: ak.stock_zh_a_spot_em()
-                    )
-                    break
-                except Exception as e:
-                    if attempt < max_retries - 1:
-                        delay = (2 ** attempt) * 2.0 + random.uniform(0, 1)
-                        logger.warning(f"akshare 获取市场行情失败，{delay:.1f}秒后重试（{attempt+1}/{max_retries}）: {e}")
-                        await asyncio.sleep(delay)
-                    else:
-                        raise e
+        """获取市场实时行情（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
+            df = ak.stock_zh_a_spot_em()
             
             if df is None or df.empty:
-                logger.warning("akshare 返回空数据")
                 return []
             
             quotes = []
@@ -643,10 +768,17 @@ class AkShareAdapter(BaseDataAdapter):
                     float_market_cap=safe_float(row.get("流通市值")),
                     market_type="A 股"
                 ))
+            return quotes
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_market_realtime_quotes"
+            )
+            quotes = result or []
             
-            # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, quotes, 'quote')
-            logger.info(f"akshare 获取市场实时行情成功：{len(quotes)}条")
+            if quotes:
+                logger.info(f"akshare 获取市场实时行情成功：{len(quotes)}条")
             return quotes
             
         except Exception as e:
@@ -740,15 +872,28 @@ class AkShareAdapter(BaseDataAdapter):
             return []
     
     async def get_sector_components(self, sector_code: str) -> List[str]:
-        try:
+        """获取板块成分股（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             df = ak.stock_board_industry_cons_em(symbol=sector_code)
             
-            # 检查返回值类型
             if df is None or isinstance(df, int) or not hasattr(df, 'columns'):
                 logger.warning(f"akshare 返回无效数据：{type(df)}")
                 return []
             
             return df["代码"].tolist()
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_sector_components"
+            )
+            return result or []
         except Exception as e:
             logger.error(f"获取板块成分股失败 {sector_code}: {e}")
             return []
@@ -759,13 +904,19 @@ class AkShareAdapter(BaseDataAdapter):
         sort_by: str = "change_pct",
         limit: int = 20
     ) -> List[SectorInfo]:
-        try:
+        """获取板块排名（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             if sector_type == "industry":
                 df = ak.stock_board_industry_name_em()
             else:
                 df = ak.stock_board_concept_name_em()
             
-            # 检查返回值类型
             if df is None or isinstance(df, int) or not hasattr(df, 'iterrows'):
                 logger.warning(f"akshare 返回无效数据：{type(df)}")
                 return []
@@ -783,6 +934,13 @@ class AkShareAdapter(BaseDataAdapter):
                     change_pct=float(row["涨跌幅"]) if "涨跌幅" in row else None
                 ))
             return sectors
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_sector_ranking"
+            )
+            return result or []
         except Exception as e:
             logger.error(f"获取板块排名失败：{e}")
             return []
@@ -793,7 +951,14 @@ class AkShareAdapter(BaseDataAdapter):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[ChipData]:
-        try:
+        """获取筹码数据（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             df = ak.stock_zh_a_gdhs(symbol=code)
             if df.empty:
                 return []
@@ -834,6 +999,13 @@ class AkShareAdapter(BaseDataAdapter):
                     avg_shares_per_holder=float(row["户均持股数量"]) if "户均持股数量" in row else None
                 ))
             return chip_data
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_chip_data"
+            )
+            return result or []
         except Exception as e:
             logger.error(f"获取筹码数据失败 {code}: {e}")
             return []
@@ -845,43 +1017,18 @@ class AkShareAdapter(BaseDataAdapter):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
-        """获取大盘资金流向
+        """获取大盘资金流向（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Args:
-            market_type: 市场类型
-                - 'all': 沪深两市合计
-                - 'sh': 沪市
-                - 'sz': 深市
-                - 'cyb': 创业板
-                - 'zxb': 中小板
-            trade_date: 交易日期（未使用，保留兼容性）
-            start_date: 开始日期（未使用，保留兼容性）
-            end_date: 结束日期（未使用，保留兼容性）
-            
-        Returns:
-            大盘资金流向数据，包含：
-            - market_type: 市场类型
-            - main_net_amount: 主力净流入（元）
-            - buy_elg_amount: 超大单净流入（元）
-            - buy_big_amount: 大单净流入（元）
-            - sell_medium_amount: 中单净流入（元）
-            - sell_small_amount: 小单净流入（元）
-            - rise_count: 上涨家数
-            - fall_count: 下跌家数
-        """
-        try:
-            # 缓存已移除，统一使用 storage_manager
-            # cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
-            # cached = self._get_from_cache(cache_key, 'quote')
-            # if cached:
-            #     return cached
-            
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             # 使用 akshare 获取全市场资金流向
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_individual_fund_flow())
+            df = ak.stock_individual_fund_flow()
             
             if df is None or df.empty:
-                logger.warning(f"获取大盘资金流向数据为空：{market_type}")
                 return {}
             
             # 计算主力资金流向
@@ -895,7 +1042,7 @@ class AkShareAdapter(BaseDataAdapter):
             rise_count = len(df[df['涨跌幅'] > 0]) if '涨跌幅' in df.columns else 0
             fall_count = len(df[df['涨跌幅'] < 0]) if '涨跌幅' in df.columns else 0
             
-            result = {
+            return {
                 'market_type': market_type,
                 'main_net_amount': main_net,
                 'buy_elg_amount': buy_elg,
@@ -906,20 +1053,40 @@ class AkShareAdapter(BaseDataAdapter):
                 'fall_count': int(fall_count),
                 'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_market_moneyflow_dc"
+            )
+            result_dict = result or {}
             
-            # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
-            logger.info(f"获取大盘资金流向成功：{market_type}")
-            return result
+            if result_dict:
+                logger.info(f"获取大盘资金流向成功：{market_type}")
+            return result_dict
             
         except Exception as e:
             logger.error(f"获取大盘资金流向失败 {market_type}: {e}")
             return {}
     
     async def get_stock_financial(self, code: str) -> Dict[str, Any]:
-        try:
+        """获取财务数据（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
             df = ak.stock_financial_abstract_ths(symbol=code, indicator="全部") 
             return df.to_dict("records")
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_financial"
+            )
+            return result or {}
         except Exception as e:
             logger.error(f"获取财务数据失败 {code}: {e}")
             return {}
@@ -927,7 +1094,7 @@ class AkShareAdapter(BaseDataAdapter):
     # ========== 东方财富特色数据接口（从 EastMoneyAdapter 合并）==========
     
     async def get_stock_changes(self, change_type: str = "big_buy") -> List[Any]:
-        """获取盘口异动数据
+        """获取盘口异动数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             change_type: 异动类型，可选：
@@ -941,9 +1108,14 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             盘口异动数据列表
         """
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_change_em(symbol=change_type))
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
+            df = ak.stock_change_em(symbol=change_type)
             
             if df is None or df.empty:
                 return []
@@ -959,15 +1131,22 @@ class AkShareAdapter(BaseDataAdapter):
                     'amount': float(row.get('成交额', 0)) if pd.notna(row.get('成交额')) else None,
                     'change_reason': str(row.get('异动类型', ''))
                 })
-            
-            logger.info(f"获取盘口异动数据成功，共{len(changes)}条")
             return changes
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_changes"
+            )
+            if result:
+                logger.info(f"获取盘口异动数据成功，共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取盘口异动数据失败：{e}")
             return []
     
     async def get_zt_pool(self, date: Optional[str] = None) -> List[Any]:
-        """获取涨停股池数据
+        """获取涨停股池数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             date: 日期，格式 YYYYMMDD，默认为今日
@@ -975,12 +1154,17 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             涨停股池数据列表
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         if not date:
             date = datetime.now().strftime('%Y%m%d')
         
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_zt_pool_em(date=date))
+        def fetch_sync():
+            df = ak.stock_zt_pool_em(date=date)
             
             if df is None or df.empty:
                 return []
@@ -1004,15 +1188,22 @@ class AkShareAdapter(BaseDataAdapter):
                     'continuous_count': int(row.get('连板数', 1)) if pd.notna(row.get('连板数')) else None,
                     'industry': str(row.get('所属行业', ''))
                 })
-            
-            logger.info(f"获取涨停股池数据成功：{date}, 共{len(zt_stocks)}条")
             return zt_stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_zt_pool"
+            )
+            if result:
+                logger.info(f"获取涨停股池数据成功：{date}, 共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取涨停股池数据失败：{e}")
             return []
     
     async def get_zt_pool_previous(self, date: Optional[str] = None) -> List[Any]:
-        """获取昨日涨停股池数据
+        """获取昨日涨停股池数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             date: 日期，格式 YYYYMMDD，默认为昨日
@@ -1020,12 +1211,17 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             昨日涨停股池数据列表
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         if not date:
             date = datetime.now().strftime('%Y%m%d')
         
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_zt_pool_previous_em(date=date))
+        def fetch_sync():
+            df = ak.stock_zt_pool_previous_em(date=date)
             
             if df is None or df.empty:
                 return []
@@ -1045,15 +1241,22 @@ class AkShareAdapter(BaseDataAdapter):
                     'speed_pct': float(row.get('涨速', 0)) if pd.notna(row.get('涨速')) else None,
                     'amplitude': float(row.get('振幅', 0)) if pd.notna(row.get('振幅')) else None
                 })
-            
-            logger.info(f"获取昨日涨停股池数据成功：{date}, 共{len(zt_stocks)}条")
             return zt_stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_zt_pool_previous"
+            )
+            if result:
+                logger.info(f"获取昨日涨停股池数据成功：{date}, 共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取昨日涨停股池数据失败：{e}")
             return []
     
     async def get_zt_strong(self, date: Optional[str] = None) -> List[Any]:
-        """获取强势股池数据（连续涨停股）
+        """获取强势股池数据（连续涨停股）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             date: 日期，格式 YYYYMMDD，默认为今日
@@ -1061,12 +1264,17 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             强势股池数据列表
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         if not date:
             date = datetime.now().strftime('%Y%m%d')
         
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_zt_strong_em(date=date))
+        def fetch_sync():
+            df = ak.stock_zt_strong_em(date=date)
             
             if df is None or df.empty:
                 return []
@@ -1082,15 +1290,22 @@ class AkShareAdapter(BaseDataAdapter):
                     'industry': str(row.get('所属行业', '')),
                     'reason': str(row.get('涨停理由', ''))
                 })
-            
-            logger.info(f"获取强势股池数据成功：{date}, 共{len(zt_stocks)}条")
             return zt_stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_zt_strong"
+            )
+            if result:
+                logger.info(f"获取强势股池数据成功：{date}, 共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取强势股池数据失败：{e}")
             return []
     
     async def get_zt_sub_new(self, date: Optional[str] = None) -> List[Any]:
-        """获取次新股涨停池数据
+        """获取次新股涨停池数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             date: 日期，格式 YYYYMMDD，默认为今日
@@ -1098,12 +1313,17 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             次新股涨停池数据列表
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         if not date:
             date = datetime.now().strftime('%Y%m%d')
         
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_zt_sub_new_em(date=date))
+        def fetch_sync():
+            df = ak.stock_zt_sub_new_em(date=date)
             
             if df is None or df.empty:
                 return []
@@ -1123,22 +1343,34 @@ class AkShareAdapter(BaseDataAdapter):
                     'industry': str(row.get('所属行业', '')),
                     'list_date': str(row.get('上市日期', ''))
                 })
-            
-            logger.info(f"获取次新股涨停池数据成功：{date}, 共{len(zt_stocks)}条")
             return zt_stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_zt_sub_new"
+            )
+            if result:
+                logger.info(f"获取次新股涨停池数据成功：{date}, 共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取次新股涨停池数据失败：{e}")
             return []
     
     async def get_board_changes(self) -> List[Any]:
-        """获取板块异动数据
+        """获取板块异动数据（带 TLS 指纹伪装 + 凭证注入）
         
         Returns:
             板块异动数据列表
         """
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_board_change_em())
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
+            df = ak.stock_board_change_em()
             
             if df is None or df.empty:
                 return []
@@ -1155,25 +1387,30 @@ class AkShareAdapter(BaseDataAdapter):
                     'top_stock_type': str(row.get('板块异动最频繁个股及所属类型 - 买卖方向', '')),
                     'change_types': row.get('板块具体异动类型列表及出现次数', [])
                 })
-            
-            logger.info(f"获取板块异动数据成功，共{len(changes)}条")
             return changes
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_board_changes"
+            )
+            if result:
+                logger.info(f"获取板块异动数据成功，共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取板块异动数据失败：{e}")
             return []
     
     async def get_stock_info_sh_name_code(self, symbol: str = "主板 A 股") -> List[Any]:
-        """获取上海证券交易所股票列表
+        """获取上海证券交易所股票列表（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Args:
-            symbol: 板块类型，可选值："主板 A 股"、"主板 B 股"、"科创板"
+        # 限流
+        await self._rate_limit()
         
-        Returns:
-            股票信息列表
-        """
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_info_sh_name_code(symbol=symbol))
+        def fetch_sync():
+            df = ak.stock_info_sh_name_code(symbol=symbol)
             
             if df is None or df.empty:
                 return []
@@ -1184,25 +1421,30 @@ class AkShareAdapter(BaseDataAdapter):
                     'code': str(row.get('证券代码', '')),
                     'name': str(row.get('证券简称', ''))
                 })
-            
-            logger.info(f"获取上交所股票列表成功 ({symbol}), 共{len(stocks)}条")
             return stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info_sh_name_code"
+            )
+            if result:
+                logger.info(f"获取上交所股票列表成功 ({symbol}), 共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取上交所股票列表失败：{e}")
             return []
     
     async def get_stock_info_sz_name_code(self, symbol: str = "主板 A 股") -> List[Any]:
-        """获取深圳证券交易所股票列表
+        """获取深圳证券交易所股票列表（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Args:
-            symbol: 板块类型，可选值："主板 A 股"、"主板 B 股"、"创业板"
+        # 限流
+        await self._rate_limit()
         
-        Returns:
-            股票信息列表
-        """
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_info_sz_name_code(symbol=symbol))
+        def fetch_sync():
+            df = ak.stock_info_sz_name_code(symbol=symbol)
             
             if df is None or df.empty:
                 return []
@@ -1213,22 +1455,30 @@ class AkShareAdapter(BaseDataAdapter):
                     'code': str(row.get('证券代码', '')),
                     'name': str(row.get('证券简称', ''))
                 })
-            
-            logger.info(f"获取深交所股票列表成功 ({symbol}), 共{len(stocks)}条")
             return stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info_sz_name_code"
+            )
+            if result:
+                logger.info(f"获取深交所股票列表成功 ({symbol}), 共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取深交所股票列表失败：{e}")
             return []
     
     async def get_stock_info_bj_name_code(self) -> List[Any]:
-        """获取北京证券交易所股票列表
+        """获取北京证券交易所股票列表（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Returns:
-            股票信息列表
-        """
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_info_bj_name_code())
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
+            df = ak.stock_info_bj_name_code()
             
             if df is None or df.empty:
                 return []
@@ -1239,34 +1489,32 @@ class AkShareAdapter(BaseDataAdapter):
                     'code': str(row.get('证券代码', '')),
                     'name': str(row.get('证券简称', ''))
                 })
-            
-            logger.info(f"获取北交所股票列表成功，共{len(stocks)}条")
             return stocks
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info_bj_name_code"
+            )
+            if result:
+                logger.info(f"获取北交所股票列表成功，共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取北交所股票列表失败：{e}")
             return []
     
     async def get_board_industry_name_em(self) -> List[Any]:
-        """获取东方财富行业板块列表
+        """获取东方财富行业板块列表（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Returns:
-            行业板块列表
-        """
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_board_industry_name_em())
+        # 限流
+        await self._rate_limit()
+        
+        def fetch_sync():
+            df = ak.stock_board_industry_name_em()
             
-            # 检查返回值类型
-            if df is None:
-                logger.warning("akshare 返回 None")
-                return []
-            if isinstance(df, int):
-                logger.warning(f"akshare 返回错误码：{df}")
-                return []
-            if not hasattr(df, 'iterrows'):
-                logger.warning(f"akshare 返回非 DataFrame 类型：{type(df)}")
-                return []
-            if df.empty:
+            if df is None or not hasattr(df, 'iterrows') or df.empty:
                 return []
             
             boards = []
@@ -1279,25 +1527,30 @@ class AkShareAdapter(BaseDataAdapter):
                     'total_mv': float(row.get('总市值', 0)) if pd.notna(row.get('总市值')) else None,
                     'turnover': float(row.get('成交额', 0)) if pd.notna(row.get('成交额')) else None
                 })
-            
-            logger.info(f"获取东方财富行业板块列表成功，共{len(boards)}条")
             return boards
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_board_industry_name_em"
+            )
+            if result:
+                logger.info(f"获取东方财富行业板块列表成功，共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取东方财富行业板块列表失败：{e}")
             return []
     
     async def get_board_industry_cons_em(self, symbol: str) -> List[Any]:
-        """获取东方财富行业板块成份股
+        """获取东方财富行业板块成份股（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Args:
-            symbol: 板块代码或板块名称
+        # 限流
+        await self._rate_limit()
         
-        Returns:
-            板块成份股列表
-        """
-        try:
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, lambda: ak.stock_board_industry_cons_em(symbol=symbol))
+        def fetch_sync():
+            df = ak.stock_board_industry_cons_em(symbol=symbol)
             
             if df is None or df.empty:
                 return []
@@ -1316,9 +1569,16 @@ class AkShareAdapter(BaseDataAdapter):
                     'pe_ratio': float(row.get('市盈率 - 动态', 0)) if pd.notna(row.get('市盈率 - 动态')) else None,
                     'pb_ratio': float(row.get('市净率', 0)) if pd.notna(row.get('市净率')) else None
                 })
-            
-            logger.info(f"获取东方财富行业板块成份股成功 ({symbol}), 共{len(cons_data)}条")
             return cons_data
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_board_industry_cons_em"
+            )
+            if result:
+                logger.info(f"获取东方财富行业板块成份股成功 ({symbol}), 共{len(result)}条")
+            return result or []
         except Exception as e:
             logger.error(f"获取东方财富行业板块成份股失败：{e}")
             return []

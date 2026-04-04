@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Tuple
 from enum import Enum
 from loguru import logger
 from pydantic import BaseModel
@@ -252,7 +252,7 @@ class EFinanceAdapter(BaseDataAdapter):
             self._current_ua_index = (self._current_ua_index + 1) % len(self._user_agents)
         return self._user_agents[self._current_ua_index]
     
-    def _get_time_based_delay(self) -> tuple:
+    def _get_time_based_delay(self) -> Tuple[float, float]:
         """根据时间段获取延迟范围
         
         Returns:
@@ -613,12 +613,12 @@ class EFinanceAdapter(BaseDataAdapter):
         return decorator
     
     async def get_stock_list(self) -> List[StockBasicInfo]:
-        """获取股票列表（高敏感 API，需要凭证注入）"""
+        """获取股票列表（高敏感 API，带 TLS 指纹伪装 + 凭证注入 + 智能重试）"""
         # 确保凭证有效（懒加载）
         if not await self._ensure_credentials():
             logger.warning("凭证注入失败，尝试直接请求")
         
-        try:
+        def fetch_sync():
             if not EF_AVAILABLE:
                 return []
             
@@ -628,7 +628,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 return cached
             
             # 频率控制
-            await self._rate_limit()
+            # 注意：限流已在外部调用，这里不需要再次调用
             
             # 获取沪深 A 股实时行情，从中提取股票基本信息
             df = ef.stock.get_realtime_quotes()
@@ -666,13 +666,19 @@ class EFinanceAdapter(BaseDataAdapter):
             self._set_to_cache(cache_key, stocks, 'stock_list')
             logger.info(f"获取股票列表成功：{len(stocks)}只")
             return stocks
-            
+        
+        try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_list"
+            )
+            return result or []
         except Exception as e:
             logger.error(f"获取股票列表失败：{e}")
             return []
     
     async def get_stock_info(self, code: str) -> Optional[StockBasicInfo]:
-        """获取股票信息（单只）
+        """获取股票信息（单只）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -683,7 +689,17 @@ class EFinanceAdapter(BaseDataAdapter):
         Note:
             使用 efinance.stock.get_base_info 接口，获取更详细的股票信息
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="unknown"
+            )
             if not EF_AVAILABLE:
                 return None
             
@@ -741,19 +757,19 @@ class EFinanceAdapter(BaseDataAdapter):
             return None
     
     async def get_stocks_base_info(self, stock_codes: List[str]) -> List[StockBasicInfo]:
-        """
-        批量获取多只股票的基本信息
+        """批量获取多只股票的基本信息（带 TLS 指纹伪装 + 凭证注入）"""
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
         
-        Args:
-            stock_codes: 股票代码列表，如 ['600519', '000858']
+        # 限流
+        await self._rate_limit()
         
-        Returns:
-            股票基本信息列表
-        """
         try:
-            if not EF_AVAILABLE:
-                return []
-            
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
+
             if not stock_codes:
                 return []
             
@@ -764,48 +780,57 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 批量获取股票信息
-            df = ef.stock.get_base_info(stock_codes)
+            # 限流
+            await self._rate_limit()
             
-            if df is None or (hasattr(df, 'empty') and df.empty):
-                return []
-            
-            stocks = []
-            for row in df.itertuples(index=False):
-                code = str(getattr(row, '股票代码', '')).zfill(6)
-                if not code:
-                    continue
+            def fetch_sync():
+                df = ef.stock.get_base_info(stock_codes)
                 
-                # 安全转换浮点数
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                if df is None or (hasattr(df, 'empty') and df.empty):
+                    return []
+                
+                stocks = []
+                for row in df.itertuples(index=False):
+                    code = str(getattr(row, '股票代码', '')).zfill(6)
+                    if not code:
+                        continue
+                    
+                    def safe_float(value, default=0.0):
+                        try:
+                            if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                                return default
+                            return float(value)
+                        except (ValueError, TypeError):
                             return default
-                        return float(value)
-                    except (ValueError, TypeError):
-                        return default
-                
-                # 获取最新价用于计算股本
-                latest_price = safe_float(getattr(row, '最新价', 1.0), 1.0)
-                if latest_price == 0:
-                    latest_price = 1.0
-                
-                total_shares_raw = safe_float(getattr(row, '总市值', 0.0), 0.0)
-                float_shares_raw = safe_float(getattr(row, '流通市值', 0.0), 0.0)
-                
-                stocks.append(StockBasicInfo(
-                    code=code,
-                    name=getattr(row, '股票名称', '') or '',
-                    market='SH' if code.startswith('6') else 'SZ',
-                    industry=getattr(row, '所处行业', '') or '',
-                    area='',
-                    list_date='',
-                    total_shares=total_shares_raw / latest_price if total_shares_raw > 0 else 0.0,
-                    float_shares=float_shares_raw / latest_price if float_shares_raw > 0 else 0.0
-                ))
+                    
+                    latest_price = safe_float(getattr(row, '最新价', 1.0), 1.0)
+                    if latest_price == 0:
+                        latest_price = 1.0
+                    
+                    total_shares_raw = safe_float(getattr(row, '总市值', 0.0), 0.0)
+                    float_shares_raw = safe_float(getattr(row, '流通市值', 0.0), 0.0)
+                    
+                    stocks.append(StockBasicInfo(
+                        code=code,
+                        name=getattr(row, '股票名称', '') or '',
+                        market='SH' if code.startswith('6') else 'SZ',
+                        industry=getattr(row, '所处行业', '') or '',
+                        area='',
+                        list_date='',
+                        total_shares=total_shares_raw / latest_price if total_shares_raw > 0 else 0.0,
+                        float_shares=float_shares_raw / latest_price if float_shares_raw > 0 else 0.0
+                    ))
+                return stocks
             
-            self._set_to_cache(cache_key, stocks, 'stock_list')
-            logger.info(f"批量获取股票信息成功：{len(stocks)}只")
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stocks_base_info"
+            )
+            stocks = result or []
+            
+            if stocks:
+                self._set_to_cache(cache_key, stocks, 'stock_list')
+                logger.info(f"批量获取股票信息成功：{len(stocks)}只")
             return stocks
             
         except Exception as e:
@@ -814,7 +839,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[DealDetail]:
         """
-        获取股票最新交易日成交明细
+        获取股票最新交易日成交明细（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_code: 股票代码或股票名称，如 '600519' 或 '贵州茅台'
@@ -829,7 +854,17 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for deal in deals[:5]:
             ...     print(f"{deal.trade_time} - {deal.price:.2f}元 - {deal.volume}手")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_data"
+            )
             if not EF_AVAILABLE:
                 return []
             
@@ -887,7 +922,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_history_bill(self, stock_code: str) -> List[HistoryBill]:
         """
-        获取单只股票历史单子流入流出数据
+        获取单只股票历史单子流入流出数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_code: 股票代码
@@ -901,10 +936,18 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for bill in bills[:5]:
             ...     print(f"{bill.date} - 主力净流入：{bill.main_net_amount/1e8:.2f}亿")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
-            
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_deal_detail"
+            )
+
             cache_key = self._get_cache_key('history_bill', code=stock_code)
             cached = self._get_from_cache(cache_key, 'kline')
             if cached:
@@ -985,9 +1028,15 @@ class EFinanceAdapter(BaseDataAdapter):
             K 线数据列表
             
         Note:
-            efinance 不支持指数 K 线数据，使用 AkShare 替代
-        """
+            efinance 不支持指数 K 线数据，使用 AkShare 替代（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
+
             # efinance 不支持指数 K 线数据，动态导入 AkShare
             try:
                 import akshare as ak
@@ -1065,7 +1114,7 @@ class EFinanceAdapter(BaseDataAdapter):
         adjust: Optional[str] = None
     ) -> List[KLineData]:
         """
-        获取股票 K 线数据（支持多种周期和复权方式）
+        获取股票 K 线数据（支持多种周期和复权方式）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码或名称，如 '600519' 或 '贵州茅台'
@@ -1104,12 +1153,21 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> # 获取周线数据（不复权）
             >>> weekly = await adapter.get_kline('600519', klt=102, fqt=0)
             >>> # 获取 60 分钟 K 线
-            >>> hourly = await adapter.get_kline('600519', klt=60)
-        """
+            >>> hourly = await adapter.get_kline('600519', klt=60)（带 TLS 指纹伪装 + 凭证注入）
+"""
+        #
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
-            
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_history_bill"
+            )
+
             # 兼容旧的 adjust 参数
             if adjust is not None and fqt == 1:
                 if adjust == 'qfq':
@@ -1132,76 +1190,95 @@ class EFinanceAdapter(BaseDataAdapter):
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
             
-            # 构建参数
-            kwargs = {
-                'beg': beg,
-                'end': end,
-                'klt': klt,
-                'fqt': fqt,
-                'use_id_cache': True
-            }
-            
-            # 处理市场类型
-            if market_type:
-                try:
-                    market_enum = getattr(MarketType, market_type, None)
-                    if market_enum:
-                        kwargs['market_type'] = market_enum
-                except Exception:
-                    logger.warning(f"无效的市场类型：{market_type}")
-            
-            # 获取 K 线数据
-            df = ef.stock.get_quote_history(code.zfill(6), **kwargs)
-            
-            if df.empty:
-                logger.warning(f"K 线数据为空：{code} (klt={klt})")
-                self.record_request_success()  # 空数据也算成功（非错误）
-                return []
-            
-            klines = []
-            prev_close = None
-            for row in df.itertuples(index=False):
-                # 获取日期字段
-                date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
+            def fetch_sync():
+                # 构建参数
+                kwargs = {
+                    'beg': beg,
+                    'end': end,
+                    'klt': klt,
+                    'fqt': fqt,
+                    'use_id_cache': True
+                }
                 
-                if not date_raw or date_raw == '':
-                    logger.warning(f"K 线数据日期为空：{code}")
-                    continue
-                
-                # 统一格式为 YYYYMMDD
-                if len(date_raw) == 10 and '-' in date_raw:
-                    date = date_raw.replace('-', '')
-                elif len(date_raw) == 8:
-                    date = date_raw
-                else:
-                    logger.warning(f"K 线数据日期格式异常：{date_raw}")
-                    continue
-                
-                # 安全转换浮点数
-                def safe_float(value, default=0.0):
+                # 处理市场类型
+                if market_type:
                     try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
-                        return float(value)
-                    except (ValueError, TypeError):
-                        return default
+                        market_enum = getattr(MarketType, market_type, None)
+                        if market_enum:
+                            kwargs['market_type'] = market_enum
+                    except Exception:
+                        logger.warning(f"无效的市场类型：{market_type}")
                 
-                current_close = safe_float(getattr(row, '收盘', 0), 0.0)
-                klines.append(KLineData(
-                    code=code,
-                    date=date,
-                    open=safe_float(getattr(row, '开盘', 0), 0.0),
-                    high=safe_float(getattr(row, '最高', 0), 0.0),
-                    low=safe_float(getattr(row, '最低', 0), 0.0),
-                    close=current_close,
-                    volume=safe_float(getattr(row, '成交量', 0), 0.0),
-                    amount=safe_float(getattr(row, '成交额', 0), 0.0),
-                    turnover_rate=safe_float(getattr(row, '换手率', 0), 0.0),
-                    pre_close=prev_close
-                ))
-                prev_close = current_close
+                # 获取 K 线数据
+                df = ef.stock.get_quote_history(code.zfill(6), **kwargs)
+                
+                if df.empty:
+                    return []
+                
+                klines = []
+                prev_close = None
+                for row in df.itertuples(index=False):
+                    # 获取日期字段
+                    date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
+                    
+                    if not date_raw or date_raw == '':
+                        continue
+                    
+                    # 统一格式为 YYYYMMDD
+                    if len(date_raw) == 10 and '-' in date_raw:
+                        date = date_raw.replace('-', '')
+                    elif len(date_raw) == 8:
+                        date = date_raw
+                    else:
+                        continue
+                    
+                    # 安全转换浮点数
+                    def safe_float(value, default=0.0):
+                        try:
+                            if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
+                                return default
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    current_close = safe_float(getattr(row, '收盘', 0), 0.0)
+                    klines.append(KLineData(
+                        code=code,
+                        date=date,
+                        open=safe_float(getattr(row, '开盘', 0), 0.0),
+                        high=safe_float(getattr(row, '最高', 0), 0.0),
+                        low=safe_float(getattr(row, '最低', 0), 0.0),
+                        close=current_close,
+                        volume=safe_float(getattr(row, '成交量', 0), 0.0),
+                        amount=safe_float(getattr(row, '成交额', 0), 0.0),
+                        turnover_rate=safe_float(getattr(row, '换手率', 0), 0.0),
+                        pre_close=prev_close
+                    ))
+                    prev_close = current_close
+                
+                # 按日期排序
+                klines.sort(key=lambda x: x.date)
+                return klines
             
-            # 按日期排序
+            # 使用智能重试执行器
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_kline"
+            )
+            klines = result or []
+            
+            if klines:
+                self._set_to_cache(cache_key, klines, 'kline')
+                logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条")
+            else:
+                logger.warning(f"K 线数据为空：{code} (klt={klt})")
+            
+            self.record_request_success()
+            return klines
+            
+        except Exception as e:
+            logger.error(f"获取 K 线数据失败 {code}: {e}")
+            return []
             klines.sort(key=lambda x: x.date)
             
             self._set_to_cache(cache_key, klines, 'kline')
@@ -1223,7 +1300,7 @@ class EFinanceAdapter(BaseDataAdapter):
         market_type: Optional[str] = None
     ) -> Dict[str, List[KLineData]]:
         """
-        批量获取多只股票的 K 线数据
+        批量获取多只股票的 K 线数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_codes: 股票代码列表，如 ['600519', '300750']
@@ -1242,7 +1319,16 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for code, data in klines.items():
             ...     print(f"{code}: {len(data)}条 K 线数据")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
         try:
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_data"
+            )
             if not EF_AVAILABLE:
                 return {}
             
@@ -1369,8 +1455,15 @@ class EFinanceAdapter(BaseDataAdapter):
             adjust: 兼容旧参数
         
         Returns:
-            周 K 线数据列表
-        """
+            周 K 线数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
+        #
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         # 直接调用优化后的 get_kline 方法
         return await self.get_kline(
             code=code,
@@ -1407,8 +1500,15 @@ class EFinanceAdapter(BaseDataAdapter):
             adjust: 兼容旧参数
         
         Returns:
-            月 K 线数据列表
-        """
+            月 K 线数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
+        #
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         # 直接调用优化后的 get_kline 方法
         return await self.get_kline(
             code=code,
@@ -1422,7 +1522,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
         """
-        获取沪深市场股票最新行情快照
+        获取沪深市场股票最新行情快照（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码，如 '600519' 或指数代码 '000001'
@@ -1455,6 +1555,12 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> quote = await adapter.get_realtime_quote('600519')
             >>> print(f"贵州茅台最新价：{quote['price']}元，涨跌幅：{quote['change_pct']}%")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
             # 检测是否为指数代码（000001=上证指数，399001=深证成指等）
             # efinance 不支持指数实时行情，使用 akshare 替代
@@ -1543,7 +1649,7 @@ class EFinanceAdapter(BaseDataAdapter):
                         }
                 except Exception as e:
                     logger.warning(f"使用 akshare 获取指数行情失败 {code}: {e}")
-                return {}
+                    return {}
             
             if not EF_AVAILABLE:
                 return {}
@@ -1649,7 +1755,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_latest_quote(self, stock_codes: List[str]) -> List[Dict[str, Any]]:
         """
-        获取沪深市场多只股票的实时涨幅情况
+        获取沪深市场多只股票的实时涨幅情况（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_codes: 股票代码列表，如 ['600519', '300750']
@@ -1663,10 +1769,18 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for quote in quotes:
             ...     print(f"{quote['name']}: {quote['price']}元 ({quote['change_pct']}%)")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
-            
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_multi_kline"
+            )
+
             if not stock_codes:
                 return []
             
@@ -1728,8 +1842,15 @@ class EFinanceAdapter(BaseDataAdapter):
             return []
     
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
-        """获取板块列表"""
+        """获取板块列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -1773,8 +1894,15 @@ class EFinanceAdapter(BaseDataAdapter):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[ChipData]:
-        """获取筹码数据"""
+        """获取筹码数据（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -1820,7 +1948,7 @@ class EFinanceAdapter(BaseDataAdapter):
         end_date: Optional[str] = None
     ) -> List[BillboardEntry]:
         """
-        获取指定日期区间的龙虎榜详情数据
+        获取指定日期区间的龙虎榜详情数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             start_date: 开始日期，格式：YYYY-MM-DD
@@ -1841,9 +1969,17 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> # 获取指定日期区间
             >>> bills = await adapter.get_daily_billboard('2021-08-20', '2021-08-27')
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 生成缓存 key
             date_key = f"{start_date or 'latest'}_{end_date or 'latest'}"
@@ -1906,7 +2042,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_belong_board(self, code: str) -> List[BoardInfo]:
         """
-        获取股票所属板块
+        获取股票所属板块（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -1920,9 +2056,17 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for board in boards:
             ...     print(f"{board.name} - {board.board_type} - {board.change_pct}%")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
             
             cache_key = self._get_cache_key('board', code=code)
             cached = self._get_from_cache(cache_key, 'stock_info')
@@ -1980,9 +2124,15 @@ class EFinanceAdapter(BaseDataAdapter):
             index_code: 指数名称或指数代码，如 '000300' 或 '沪深 300'
             
         Returns:
-            指数成分股列表
-        """
+            指数成分股列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -2038,9 +2188,15 @@ class EFinanceAdapter(BaseDataAdapter):
             trade_date: 交易日期，格式：YYYY-MM-DD，默认今日
             
         Returns:
-            资金流向数据列表
-        """
+            资金流向数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -2088,7 +2244,7 @@ class EFinanceAdapter(BaseDataAdapter):
             return []
     
     async def get_stock_bill_detail(self, code: str) -> List[Dict[str, Any]]:
-        """获取单只股票最新交易日的日内分钟级单子流入流出数据
+        """获取单只股票最新交易日的日内分钟级单子流入流出数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -2119,18 +2275,23 @@ class EFinanceAdapter(BaseDataAdapter):
                 print(f"主力净流入：{latest['main_net_amount']}元")
                 print(f"超大单净流入：{latest['elg_net_amount']}元")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
             
             cache_key = self._get_cache_key('bill_detail', code=code)
             cached = self._get_from_cache(cache_key, 'quote')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
-            
-            # 频率控制
-            await self._rate_limit()
             
             # 获取单只股票资金流向明细
             df = ef.stock.get_today_bill(code.zfill(6))
@@ -2181,9 +2342,15 @@ class EFinanceAdapter(BaseDataAdapter):
             end_date: 结束日期，格式：YYYY-MM-DD
             
         Returns:
-            历史资金流向数据列表
-        """
+            历史资金流向数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -2264,9 +2431,15 @@ class EFinanceAdapter(BaseDataAdapter):
             - sell_medium_amount: 中单净流入（元）
             - sell_small_amount: 小单净流入（元）
             - rise_count: 上涨家数
-            - fall_count: 下跌家数
-        """
+            - fall_count: 下跌家数（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return {}
             
@@ -2335,7 +2508,7 @@ class EFinanceAdapter(BaseDataAdapter):
         code: str, 
         top: int = 4
     ) -> List[ShareholderInfo]:
-        """获取前十大股东信息（支持指定获取前 top 个股东）
+        """获取前十大股东信息（支持指定获取前 top 个股东）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -2371,9 +2544,17 @@ class EFinanceAdapter(BaseDataAdapter):
             # 获取前 1 大股东
             shareholders = await adapter.get_top10_stock_holder_info("600519", top=1)
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 参数验证
             if not isinstance(top, int) or top < 1 or top > 10:
@@ -2398,7 +2579,8 @@ class EFinanceAdapter(BaseDataAdapter):
                 return []
             
             def safe_parse_amount(value):
-                """安全解析持股数量，支持'亿'、'万'等单位"""
+                """安全解析持股数量，支持'亿'、'万'等单位（带 TLS 指纹伪装 + 凭证注入）
+"""
                 try:
                     if value is None or value == '' or value == '-':
                         return None
@@ -2511,9 +2693,15 @@ class EFinanceAdapter(BaseDataAdapter):
                 - '2021-03-31': 2021 年 Q1 季度报
         
         Returns:
-            公司业绩表现数据列表
-        """
+            公司业绩表现数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -2583,9 +2771,15 @@ class EFinanceAdapter(BaseDataAdapter):
         获取所有可选的报告发布日期
         
         Returns:
-            报告日期列表，格式：YYYY-MM-DD
-        """
+            报告日期列表，格式：YYYY-MM-DD（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -2620,7 +2814,7 @@ class EFinanceAdapter(BaseDataAdapter):
         timeout: int = 20
     ) -> List[MarketQuote]:
         """
-        获取市场实时行情数据
+        获取市场实时行情数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             market_types: 市场类型列表（可选）
@@ -2678,9 +2872,17 @@ class EFinanceAdapter(BaseDataAdapter):
             # 获取沪深 300 指数成分股
             quotes = await adapter.get_market_realtime_quotes(fs="000300")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 确定筛选条件
             if fs:
@@ -2744,7 +2946,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     else:
                         raise
                 except Exception as e:
-                    if attempt < retry - 1:
+            if attempt < retry - 1:
                         delay = (2 ** attempt) * 2.0 + random.uniform(0, 1)
                         logger.warning(f"获取市场实时行情失败，{delay:.1f}秒后重试 {attempt + 1}/{retry}: {e}")
                         await asyncio.sleep(delay)
@@ -2830,9 +3032,15 @@ class EFinanceAdapter(BaseDataAdapter):
             
         Note:
             efinance 提供的是季度业绩数据，包括营业收入、净利润等关键指标
-            支持获取历史多个季度的数据
-        """
+            支持获取历史多个季度的数据（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -2913,9 +3121,15 @@ class EFinanceAdapter(BaseDataAdapter):
                 {'date': '2024-03-31', 'name': '2024年 一季报'},
                 {'date': '2023-12-31', 'name': '2023年 年报'},
                 ...
-            ]
-        """
+            ]（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -2960,9 +3174,15 @@ class EFinanceAdapter(BaseDataAdapter):
             历史财务业绩数据列表，按时间倒序排列
             
         Note:
-            会自动获取所有可用的报告期，然后依次获取每个报告期的数据
-        """
+            会自动获取所有可用的报告期，然后依次获取每个报告期的数据（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -3020,9 +3240,15 @@ class EFinanceAdapter(BaseDataAdapter):
             fund_info = await adapter.get_fund_base_info('161725')
             
             # 获取多只基金信息
-            fund_list = await adapter.get_fund_base_info(['161725', '005827'])
-        """
+            fund_list = await adapter.get_fund_base_info(['161725', '005827'])（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return None if isinstance(fund_codes, str) else []
             
@@ -3106,7 +3332,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self,
         fund_type: Optional[str] = None
     ) -> List[Dict[str, str]]:
-        """获取天天基金网公开的全部公募基金名单
+        """获取天天基金网公开的全部公募基金名单（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_type: 基金类型（可选）
@@ -3137,9 +3363,15 @@ class EFinanceAdapter(BaseDataAdapter):
             funds = await adapter.get_fund_codes('gp')
             
             # 获取 ETF 基金
-            funds = await adapter.get_fund_codes('etf')
-        """
+            funds = await adapter.get_fund_codes('etf')（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -3183,7 +3415,7 @@ class EFinanceAdapter(BaseDataAdapter):
         fund_code: str,
         dates: Optional[Union[str, List[str]]] = None
     ) -> List[Dict[str, Any]]:
-        """获取基金持仓占比数据
+        """获取基金持仓占比数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_code: 基金代码（6 位）
@@ -3214,9 +3446,15 @@ class EFinanceAdapter(BaseDataAdapter):
             positions = await adapter.get_fund_invest_position('161725', '2021-12-31')
             
             # 获取多个日期的持仓数据
-            positions = await adapter.get_fund_invest_position('161725', ['2021-12-31', '2021-09-30'])
-        """
+            positions = await adapter.get_fund_invest_position('161725', ['2021-12-31', '2021-09-30'])（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -3294,9 +3532,15 @@ class EFinanceAdapter(BaseDataAdapter):
             history = await adapter.get_fund_quote_history('161725')
             
             # 获取部分历史净值
-            history = await adapter.get_fund_quote_history('161725', pz=100)
-        """
+            history = await adapter.get_fund_quote_history('161725', pz=100)（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             
@@ -3342,7 +3586,7 @@ class EFinanceAdapter(BaseDataAdapter):
         pz: int = 40000
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        批量获取多只基金历史净值数据
+        批量获取多只基金历史净值数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_codes: 多只基金代码列表
@@ -3368,9 +3612,15 @@ class EFinanceAdapter(BaseDataAdapter):
             
             # 访问单只基金数据
             history_161725 = history_dict['161725']
-            history_005918 = history_dict['005918']
-        """
+            history_005918 = history_dict['005918']（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return {}
             
@@ -3427,7 +3677,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self,
         fund_codes: Union[str, List[str]]
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
-        """获取基金实时估算涨跌幅度
+        """获取基金实时估算涨跌幅度（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_codes: 6 位基金代码或者 6 位基金代码构成的字符串列表
@@ -3454,9 +3704,15 @@ class EFinanceAdapter(BaseDataAdapter):
             rate_info = await adapter.get_fund_realtime_increase_rate('161725')
             
             # 多只基金
-            rate_list = await adapter.get_fund_realtime_increase_rate(['161725', '005827'])
-        """
+            rate_list = await adapter.get_fund_realtime_increase_rate(['161725', '005827'])（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return None if isinstance(fund_codes, str) else []
             
@@ -3563,7 +3819,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self,
         fund_code: str
     ) -> List[Dict[str, Any]]:
-        """获取基金阶段涨跌幅度
+        """获取基金阶段涨跌幅度（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_code: 6 位基金代码
@@ -3592,18 +3848,23 @@ class EFinanceAdapter(BaseDataAdapter):
             print(f"近一年收益率：{one_year['return_rate']}%")
             print(f"同类排名：{one_year['rank']}/{one_year['total_count']}")
         """
+        # 确保凭证有效（TLS 指纹伪装）
+        await self._ensure_credentials()
+        
+        # 限流
+        await self._rate_limit()
+        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 构建缓存 key
             cache_key = self._get_cache_key('fund_period', code=fund_code)
             cached = self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
-            
-            # 频率控制
-            await self._rate_limit()
             
             # 获取基金阶段涨跌幅
             df = ef.fund.get_period_change(fund_code)
@@ -3664,7 +3925,7 @@ class EFinanceAdapter(BaseDataAdapter):
         fund_code: str,
         dates: Optional[Union[str, List[str]]] = None
     ) -> List[Dict[str, Any]]:
-        """获取基金不同类型占比信息（资产配置比例）
+        """获取基金不同类型占比信息（资产配置比例）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_code: 6 位基金代码
@@ -3699,6 +3960,12 @@ class EFinanceAdapter(BaseDataAdapter):
             assets = await adapter.get_fund_types_percentage('005827', ['2021-12-31', '2021-06-30'])
         """
         try:
+            # 确保凭证有效（TLS 指纹伪装）
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
+
             if not EF_AVAILABLE:
                 return []
             

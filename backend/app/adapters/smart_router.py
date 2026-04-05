@@ -4,6 +4,8 @@
 根据 API 敏感度自动选择最优方案：
 1. 低敏感 API → curl_cffi（快速、低资源）
 2. 高敏感 API → Playwright（反风控兜底）
+
+使用统一策略配置 (strategy_config.py)
 """
 
 from typing import Optional, Dict, Any, List, Callable
@@ -12,15 +14,18 @@ from dataclasses import dataclass
 from enum import Enum
 import asyncio
 
-
-class APISensitivity(Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+# 导入统一策略配置
+from .strategy_config import (
+    APISensitivity,
+    get_strategy,
+    get_client_config,
+    UNIFIED_DATA_STRATEGY,
+)
 
 
 @dataclass
 class APIConfig:
+    """API 配置（兼容旧版本，实际使用统一策略配置）"""
     name: str
     sensitivity: APISensitivity
     preferred_client: str  # "curl_cffi" or "playwright"
@@ -33,24 +38,9 @@ class SmartDataRouter:
     根据 API 敏感度自动选择最优方案：
     - 低敏感 API：优先使用 curl_cffi（快速）
     - 高敏感 API：直接使用 Playwright（可靠）
-    """
     
-    API_CONFIGS = {
-        # 高敏感 API - 必须使用 Playwright
-        'stock_list': APIConfig('A股列表', APISensitivity.HIGH, 'playwright'),
-        'realtime_quotes': APIConfig('实时行情', APISensitivity.HIGH, 'playwright'),
-        'sector_list': APIConfig('板块列表', APISensitivity.HIGH, 'playwright'),
-        'board_list': APIConfig('板块列表', APISensitivity.HIGH, 'playwright'),
-        
-        # 中敏感 API - 优先 curl_cffi，失败时切换 Playwright
-        'fund_flow': APIConfig('资金流向', APISensitivity.MEDIUM, 'curl_cffi', 'playwright'),
-        'main_fund_flow': APIConfig('主力资金', APISensitivity.MEDIUM, 'curl_cffi', 'playwright'),
-        
-        # 低敏感 API - 使用 curl_cffi
-        'kline': APIConfig('K线数据', APISensitivity.LOW, 'curl_cffi'),
-        'quote_history': APIConfig('历史行情', APISensitivity.LOW, 'curl_cffi'),
-        'stock_info': APIConfig('个股信息', APISensitivity.LOW, 'curl_cffi'),
-    }
+    使用统一策略配置替代分散的 API_CONFIGS
+    """
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self._config = {
@@ -98,200 +88,161 @@ class SmartDataRouter:
             return False
     
     def get_api_config(self, api_name: str) -> APIConfig:
-        """获取 API 配置"""
-        return self.API_CONFIGS.get(api_name, APIConfig(
-            api_name, APISensitivity.MEDIUM, 'curl_cffi', 'playwright'
-        ))
-    
-    async def execute(
-        self,
-        api_name: str,
-        func_curl: Optional[Callable] = None,
-        func_playwright: Optional[Callable] = None,
-        **kwargs
-    ) -> Any:
-        """执行请求，自动选择最优方案
+        """
+        获取 API 配置 - 使用统一策略配置
         
         Args:
-            api_name: API 名称
-            func_curl: curl_cffi 方式的请求函数
-            func_playwright: Playwright 方式的请求函数
-            **kwargs: 传递给请求函数的参数
+            api_name: API 名称（数据类型）
+        
+        Returns:
+            API 配置
+        """
+        # 优先使用统一策略配置
+        strategy = get_strategy(api_name)
+        if strategy:
+            return APIConfig(
+                name=api_name,
+                sensitivity=strategy.sensitivity,
+                preferred_client=strategy.preferred_client,
+                fallback_client=strategy.fallback_client,
+            )
+        
+        # 默认配置
+        return APIConfig(
+            name=api_name,
+            sensitivity=APISensitivity.LOW,
+            preferred_client='curl_cffi',
+            fallback_client=None,
+        )
+    
+    async def route_request(
+        self,
+        api_name: str,
+        request_func: Callable,
+        *args,
+        **kwargs
+    ) -> Any:
+        """
+        路由请求到合适的客户端
+        
+        Args:
+            api_name: API 名称（数据类型）
+            request_func: 请求函数
+            *args, **kwargs: 请求参数
+        
+        Returns:
+            请求结果
         """
         config = self.get_api_config(api_name)
         
         if self._config['log_routing']:
-            logger.info(f"路由 {api_name}: 敏感度={config.sensitivity.value}, 首选={config.preferred_client}")
+            logger.debug(f"路由请求 {api_name}: 敏感度={config.sensitivity.value}, 客户端={config.preferred_client}")
         
-        # 根据配置选择客户端
-        if config.preferred_client == 'playwright':
-            return await self._execute_playwright(api_name, func_playwright, **kwargs)
+        # 根据敏感度选择客户端
+        if config.sensitivity == APISensitivity.HIGH:
+            # 高敏感：直接使用 Playwright
+            return await self._execute_with_playwright(request_func, *args, **kwargs)
+        
+        elif config.sensitivity == APISensitivity.MEDIUM:
+            # 中敏感：先尝试 curl_cffi，失败时降级到 Playwright
+            try:
+                return await self._execute_with_curl(request_func, *args, **kwargs)
+            except Exception as e:
+                if self._config['auto_fallback'] and config.fallback_client:
+                    logger.warning(f"curl_cffi 失败，降级到 Playwright: {e}")
+                    self._stats['fallback_count'] += 1
+                    return await self._execute_with_playwright(request_func, *args, **kwargs)
+                raise
+        
         else:
-            result = await self._execute_curl(api_name, func_curl, **kwargs)
-            
-            # 如果失败且支持回退
-            if result is None and config.fallback_client == 'playwright' and self._config['auto_fallback']:
-                logger.info(f"{api_name}: curl_cffi 失败，回退到 Playwright")
-                self._stats['fallback_count'] += 1
-                result = await self._execute_playwright(api_name, func_playwright, **kwargs)
-            
-            return result
+            # 低敏感：使用 curl_cffi
+            return await self._execute_with_curl(request_func, *args, **kwargs)
     
-    async def _execute_curl(self, api_name: str, func: Optional[Callable], **kwargs) -> Any:
-        """使用 curl_cffi 执行"""
-        if not func or not self._curl_client:
-            return None
+    async def _execute_with_curl(self, func: Callable, *args, **kwargs) -> Any:
+        """使用 curl_cffi 执行请求"""
+        if not self._curl_client:
+            raise RuntimeError("curl_cffi 客户端未初始化")
         
         self._stats['curl_cffi_requests'] += 1
         
         try:
-            result = await func(self._curl_client, **kwargs)
+            # 将 curl_cffi session 注入 kwargs
+            if 'session' not in kwargs:
+                kwargs['session'] = self._curl_client
+            
+            result = await func(*args, **kwargs)
             self._stats['success_by_client']['curl_cffi'] += 1
             return result
         except Exception as e:
             self._stats['failure_by_client']['curl_cffi'] += 1
-            logger.warning(f"curl_cffi {api_name} 失败: {type(e).__name__}")
-            return None
+            raise
     
-    async def _execute_playwright(self, api_name: str, func: Optional[Callable], **kwargs) -> Any:
-        """使用 Playwright 执行"""
-        if not func:
-            return None
-        
+    async def _execute_with_playwright(self, func: Callable, *args, **kwargs) -> Any:
+        """使用 Playwright 执行请求"""
         if not await self._ensure_playwright():
-            return None
+            raise RuntimeError("Playwright 客户端不可用")
         
         self._stats['playwright_requests'] += 1
         
         try:
-            result = await func(self._playwright_client, **kwargs)
+            # 将 Playwright 客户端注入 kwargs
+            if 'playwright' not in kwargs:
+                kwargs['playwright'] = self._playwright_client
+            
+            result = await func(*args, **kwargs)
             self._stats['success_by_client']['playwright'] += 1
             return result
         except Exception as e:
             self._stats['failure_by_client']['playwright'] += 1
-            logger.error(f"Playwright {api_name} 失败: {e}")
-            return None
+            raise
     
     def get_stats(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """获取路由统计信息"""
+        total_requests = self._stats['curl_cffi_requests'] + self._stats['playwright_requests']
+        
         return {
             **self._stats,
-            'curl_cffi_success_rate': (
-                self._stats['success_by_client']['curl_cffi'] / 
-                max(1, self._stats['curl_cffi_requests'])
-            ),
-            'playwright_success_rate': (
-                self._stats['success_by_client']['playwright'] / 
-                max(1, self._stats['playwright_requests'])
-            ),
+            'total_requests': total_requests,
+            'curl_cffi_ratio': self._stats['curl_cffi_requests'] / total_requests if total_requests > 0 else 0,
+            'playwright_ratio': self._stats['playwright_requests'] / total_requests if total_requests > 0 else 0,
+            'fallback_rate': self._stats['fallback_count'] / total_requests if total_requests > 0 else 0,
         }
     
-    async def close(self):
-        """关闭客户端"""
+    def reset_stats(self) -> None:
+        """重置统计信息"""
+        self._stats = {
+            'curl_cffi_requests': 0,
+            'playwright_requests': 0,
+            'fallback_count': 0,
+            'success_by_client': {'curl_cffi': 0, 'playwright': 0},
+            'failure_by_client': {'curl_cffi': 0, 'playwright': 0},
+        }
+    
+    async def close(self) -> None:
+        """关闭路由器"""
         if self._curl_client:
             try:
                 self._curl_client.close()
-            except:
-                pass
+                logger.info("curl_cffi 客户端已关闭")
+            except Exception as e:
+                logger.error(f"关闭 curl_cffi 客户端失败: {e}")
         
         if self._playwright_client:
             try:
                 await self._playwright_client.close()
-            except:
-                pass
-
-
-class OptimizedRetryPolicy:
-    """优化的重试策略
+                logger.info("Playwright 客户端已关闭")
+            except Exception as e:
+                logger.error(f"关闭 Playwright 客户端失败: {e}")
     
-    根据错误类型决定是否重试：
-    - TLS 指纹错误：不重试，直接切换方案
-    - 网络错误：可重试
-    - 限流：等待后重试
-    """
-    
-    # 不应重试的错误（需要切换方案）
-    NO_RETRY_ERRORS = [
-        'Connection closed abruptly',
-        'RemoteDisconnected',
-        'Remote end closed connection',
-        'Connection aborted',
-        'Empty reply from server',
-    ]
-    
-    @classmethod
-    def should_retry(cls, error: Exception, attempt: int, max_retries: int = 2) -> bool:
-        """判断是否应该重试"""
-        error_str = str(error)
+    def get_all_api_configs(self) -> Dict[str, APIConfig]:
+        """获取所有 API 配置 - 使用统一策略配置"""
+        from .strategy_config import get_all_data_types
         
-        # TLS 指纹错误不重试
-        for indicator in cls.NO_RETRY_ERRORS:
-            if indicator in error_str:
-                return False
-        
-        # 其他错误可重试
-        return attempt < max_retries
-    
-    @classmethod
-    def get_action(cls, error: Exception) -> str:
-        """获取建议的操作"""
-        error_str = str(error)
-        
-        for indicator in cls.NO_RETRY_ERRORS:
-            if indicator in error_str:
-                return "switch_to_playwright"
-        
-        if 'timeout' in error_str.lower():
-            return "retry_with_longer_timeout"
-        
-        if '429' in error_str or 'rate' in error_str.lower():
-            return "wait_and_retry"
-        
-        return "retry"
+        return {
+            data_type: self.get_api_config(data_type)
+            for data_type in get_all_data_types()
+        }
 
 
-def get_optimized_retry_config() -> Dict[str, Any]:
-    """获取优化的重试配置"""
-    return {
-        # 不重试的情况
-        'no_retry_on': [
-            'Connection closed abruptly',
-            'RemoteDisconnected',
-            'Remote end closed connection',
-            'Connection aborted',
-            'Empty reply from server',
-        ],
-        
-        # 可重试的情况
-        'retry_on': {
-            'timeout': {'max_retries': 2, 'base_delay': 3.0},
-            'network_error': {'max_retries': 2, 'base_delay': 2.0},
-            'server_error': {'max_retries': 2, 'base_delay': 5.0},
-            'rate_limited': {'max_retries': 1, 'base_delay': 30.0},
-        },
-        
-        # 重试间延迟策略
-        'delay_strategy': 'exponential_jitter',  # 指数退避 + 随机抖动
-        'max_delay': 60.0,
-        'jitter_range': (0.8, 1.2),
-    }
-
-
-async def test_smart_router():
-    """测试智能路由器"""
-    print("\n=== 测试智能数据源路由器 ===\n")
-    
-    router = SmartDataRouter()
-    
-    print("API 敏感度配置:")
-    for name, config in router.API_CONFIGS.items():
-        print(f"  {name}: {config.sensitivity.value} → {config.preferred_client}")
-    
-    print("\n建议:")
-    print("  1. 高敏感 API（A股列表、板块列表）: 直接使用 Playwright")
-    print("  2. 中敏感 API（资金流向）: 优先 curl_cffi，失败时切换 Playwright")
-    print("  3. 低敏感 API（K线）: 使用 curl_cffi")
-
-
-if __name__ == "__main__":
-    asyncio.run(test_smart_router())
+# 全局路由器实例
+smart_router = SmartDataRouter()

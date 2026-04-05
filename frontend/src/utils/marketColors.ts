@@ -87,7 +87,7 @@ export function getAStockColor(change: number | null | undefined): string {
  * @param marketType 市场类型
  * @returns 带正负号的文本
  */
-export function getChangeText(change: number | null | undefined, marketType: MarketType = 'A'): string {
+export function getChangeText(change: number | null | undefined, _marketType: MarketType = 'A'): string {
   if (change === null || change === undefined) {
     return '-'
   }

@@ -5,7 +5,6 @@ from app.api.v1.endpoints import (
     data_source, fund, stock_info, market_sentiment, lhb, financial, restricted, changes, chip_distribution,
     market_overview, area_summary, sector_deal, stock_spot, cy_spot, kc_spot, sina_spot, stock_hist, stock_minute, stock_intraday, stock_pre_min, stock_comparison, stock_us_hist, stock_hk_hist, stock_yjbb, stock_industry, stock_financial_report, stock_ggcg, stock_fund_flow, stock_big_deal, stock_individual_fund_flow, stock_market_fund_flow, stock_sector_fund_flow_rank, stock_main_fund_flow, stock_sector_fund_flow_summary, stock_fund_flow_hist, stock_report_fund_hold, stock_lhb, stock_institute_recommend, indicators, kline, monitoring, lifecycle, backup, performance, audit
 )
-from app.websocket import routes as websocket_router
 
 api_router = APIRouter()
 
@@ -88,6 +87,3 @@ api_router.include_router(performance.router, tags=["性能优化"])
 
 # 审计日志相关（不需要认证）
 api_router.include_router(audit.router, tags=["审计日志"])
-
-# WebSocket 端点（不需要认证）
-api_router.include_router(websocket_router.router, tags=["WebSocket"])

@@ -46,7 +46,7 @@ import {
   Divider,
 } from '@chakra-ui/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FiTrash2, FiEdit, FiPlus, FiRefreshCw, FiStar, FiTrendingUp, FiTrendingDown, FiActivity } from 'react-icons/fi'
+import { FiTrash2, FiPlus, FiRefreshCw, FiStar, FiTrendingUp, FiTrendingDown, FiActivity } from 'react-icons/fi'
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { watchlistApi } from '../services/api'
@@ -61,12 +61,10 @@ const Watchlist = () => {
   const toast = useToast()
   const [selectedCode, setSelectedCode] = useState<string>('')
   const [selectedType, setSelectedType] = useState<'stock' | 'fund'>('stock')
-  const [noteValue, setNoteValue] = useState('')
   const [addCode, setAddCode] = useState('')
   const cancelRef = useRef<HTMLButtonElement>(null)
   
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure()
-  const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure()
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure()
 
   // 股票自选列表
@@ -79,15 +77,20 @@ const Watchlist = () => {
   const { data: fundWatchlistData, isLoading: fundLoading, refetch: refetchFundWatchlist } = useQuery({
     queryKey: ['fundWatchlist'],
     queryFn: async () => {
+      console.log('[Watchlist Query] 开始获取基金自选列表...')
       // 从本地存储获取基金自选代码（使用 fundStorage 的验证方法）
       const codes = fundStorage.getWatchlist()
+      console.log('[Watchlist Query] 从本地存储获取到基金代码:', codes)
       
       if (codes.length === 0) {
+        console.log('[Watchlist Query] 自选列表为空，返回空数组')
         return []
       }
       
       // 批量获取基金信息
+      console.log('[Watchlist Query] 开始批量获取基金信息...')
       const infoRes = await fundApi.getFundBaseInfo(codes)
+      console.log('[Watchlist Query] 获取基金信息结果:', infoRes)
       return Array.isArray(infoRes.data) ? infoRes.data : [infoRes.data]
     },
   })
@@ -221,9 +224,23 @@ const Watchlist = () => {
       // 使用 fundStorage 的添加方法（会自动验证）
       fundStorage.addToWatchlist(fundCode)
       
+      // 调试日志
+      console.log('[Watchlist] 添加基金后，当前自选列表:', fundStorage.getWatchlist())
+      
       // 手动刷新基金列表和行情数据
-      refetchFundWatchlist()
-      refetchFundQuotes()
+      console.log('[Watchlist] 开始刷新基金列表...')
+      refetchFundWatchlist().then((result) => {
+        console.log('[Watchlist] 基金列表刷新完成:', result)
+      }).catch((err) => {
+        console.error('[Watchlist] 基金列表刷新失败:', err)
+      })
+      
+      console.log('[Watchlist] 开始刷新行情数据...')
+      refetchFundQuotes().then((result) => {
+        console.log('[Watchlist] 行情数据刷新完成:', result)
+      }).catch((err) => {
+        console.error('[Watchlist] 行情数据刷新失败:', err)
+      })
       
       toast({
         title: '添加成功',
@@ -235,14 +252,6 @@ const Watchlist = () => {
       setAddCode('')
       onAddClose()
     }
-  }
-
-  // 获取涨跌幅颜色
-  const getReturnColor = (value?: number) => {
-    if (value === undefined || value === null) return 'gray.500'
-    if (value > 0) return 'red.500'
-    if (value < 0) return 'green.500'
-    return 'blue.500'
   }
 
   // 渲染股票列表
@@ -686,7 +695,7 @@ const Watchlist = () => {
                 colorScheme="red"
                 onClick={confirmDelete}
                 ml={3}
-                isLoading={deleteMutation.isLoading || deleteFundMutation.isLoading}
+                isLoading={deleteMutation.isPending || deleteFundMutation.isPending}
               >
                 删除
               </Button>

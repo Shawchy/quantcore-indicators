@@ -2,7 +2,7 @@
  * K 线图表类型定义
  */
 
-// K 线数据
+// K 线数据 - 使用类型联合避免索引签名冲突
 export interface KLineData {
   date: string
   open: number
@@ -12,12 +12,19 @@ export interface KLineData {
   volume: number
   amount?: number
   turnover_rate?: number
+  ma5?: number | null
+  ma10?: number | null
+  ma20?: number | null
+  ma60?: number | null
+  // 允许其他动态属性
+  [key: string]: any
 }
 
 // 技术指标数据
 export interface IndicatorData {
   date: string
-  [key: string]: number | null
+  // 允许其他动态属性
+  [key: string]: any
 }
 
 // MA 指标
@@ -107,6 +114,7 @@ export interface RenderData {
   kline: KLineData[]
   indicators?: AllIndicators
   config: ChartConfig
+  [key: string]: any // 允许其他动态属性
 }
 
 // Worker 消息类型

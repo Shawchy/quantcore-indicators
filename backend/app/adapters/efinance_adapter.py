@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Union, Tuple
+from typing import Optional, List, Dict, Any, Union, Tuple, Callable
 from enum import Enum
 from loguru import logger
 from pydantic import BaseModel
@@ -283,7 +283,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 夜间：0.5-1.5 秒
             return (0.5, 1.5)
     
-    def _setup_request_headers(self, rotate: bool = True):
+    def _setup_request_headers(self, rotate: bool = True) -> None:
         """设置请求头（模拟浏览器，降低被识别为爬虫的概率）
         
         Args:
@@ -318,7 +318,7 @@ class EFinanceAdapter(BaseDataAdapter):
         except Exception as e:
             logger.warning(f"设置请求头失败：{e}")
     
-    async def _rate_limit(self):
+    async def _rate_limit(self) -> None:
         """请求频率控制（异步版本，支持自适应延迟）"""
         # 如果启用自适应延迟，根据时间段调整
         if self._adaptive_delay_enabled:
@@ -341,7 +341,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self._last_request_time = time.time()
         self._request_count += 1
     
-    def _rate_limit_sync(self):
+    def _rate_limit_sync(self) -> None:
         """请求频率控制（同步版本，用于同步函数）"""
         delay = random.uniform(*self._request_delay_range)
         time.sleep(delay)
@@ -382,7 +382,7 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.error(f"设置代理 IP 失败：{e}")
             return False
     
-    async def clear_proxy(self):
+    async def clear_proxy(self) -> None:
         """清除代理设置"""
         try:
             if hasattr(ef.stock, '_session'):
@@ -391,12 +391,12 @@ class EFinanceAdapter(BaseDataAdapter):
         except Exception as e:
             logger.warning(f"清除代理失败：{e}")
     
-    def record_request_success(self):
+    def record_request_success(self) -> None:
         """记录请求成功（重置连续失败计数）"""
         self._consecutive_failures = 0
         self._fail_count = max(0, self._fail_count - 1)  # 成功时减少失败计数
     
-    def record_request_failure(self):
+    def record_request_failure(self) -> None:
         """记录请求失败（增加连续失败计数）"""
         self._consecutive_failures += 1
         self._fail_count += 1
@@ -431,7 +431,7 @@ class EFinanceAdapter(BaseDataAdapter):
             "current_ua_index": self._current_ua_index
         }
     
-    def enable_adaptive_delay(self, enabled: bool = True):
+    def enable_adaptive_delay(self, enabled: bool = True) -> None:
         """启用/禁用自适应延迟
         
         Args:
@@ -440,7 +440,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self._adaptive_delay_enabled = enabled
         logger.info(f"自适应延迟已{'启用' if enabled else '禁用'}")
     
-    def set_custom_delay(self, min_delay: float, max_delay: float):
+    def set_custom_delay(self, min_delay: float, max_delay: float) -> None:
         """设置自定义延迟范围
         
         Args:
@@ -458,25 +458,20 @@ class EFinanceAdapter(BaseDataAdapter):
             return False
         
         try:
-            # 1. 集成凭证注入器（带 TLS 指纹伪装）
-            from .credential_injector import CredentialInjector
+            from .credential_injector import get_global_injector
             
-            self._injector = CredentialInjector({
+            self._injector = await get_global_injector({
                 'tls_patch_mode': 'curl_cffi',
-                'impersonate': 'chrome120',
+                'impersonate': 'chrome131',
                 'headless': True,
             })
             
-            # 2. 懒加载 HybridTLSClient（仅在需要时初始化）
             self._hybrid_client: Optional[HybridTLSClient] = None
             
-            # 3. 设置请求头（伪装浏览器，使用本地设备信息）
             self._setup_request_headers(rotate=True)
             
-            # 4. efinance 无需其他初始化，直接可用
             self._is_initialized = True
             
-            # 获取当前时间段
             import datetime
             now = datetime.datetime.now()
             hour = now.hour
@@ -487,7 +482,7 @@ class EFinanceAdapter(BaseDataAdapter):
             
             logger.info("efinance 适配器初始化成功（凭证注入 + 智能重试）")
             logger.info(f"  - 请求头：已配置（{len(self._user_agents)}个主流浏览器，每 10 次轮换）")
-            logger.info(f"  - TLS 指纹：curl_cffi (chrome120)")
+            logger.info(f"  - TLS 指纹：curl_cffi (chrome131)")
             logger.info(f"  - 智能重试：已启用（自动切换模式）")
             logger.info(f"  - 降级方案：HybridTLSClient（懒加载，tls-client → curl_cffi → Playwright）")
             logger.info(f"  - 当前时间段：{time_period}")
@@ -541,33 +536,54 @@ class EFinanceAdapter(BaseDataAdapter):
         if not hasattr(self, '_injector') or self._injector is None:
             return False
         
-        # 如果已有有效凭证，跳过
+        logger.debug(f"检查 _is_patched 标志：{self._injector._is_patched}")
         if self._injector._is_patched:
+            logger.info("凭证已注入，跳过获取")
             return True
         
-        # 首次获取凭证
-        try:
-            logger.info("正在获取凭证（首次请求）...")
+        async with self._injector._init_lock:
+            logger.debug(f"获取锁后检查 _is_patched 标志：{self._injector._is_patched}")
+            if self._injector._is_patched:
+                logger.info("凭证已注入（并发检查），跳过获取")
+                return True
             
-            # 初始化 Playwright（懒加载）
-            if not await self._injector.initialize():
-                logger.warning("Playwright 初始化失败，使用普通模式")
+            try:
+                logger.info("正在获取凭证（首次请求）...")
+                
+                logger.info("开始调用 injector.initialize()...")
+                init_result = await self._injector.initialize()
+                logger.info(f"injector.initialize() 返回：{init_result}")
+                if not init_result:
+                    logger.warning("Playwright 初始化失败，使用普通模式")
+                    return False
+                logger.info("Playwright 初始化成功")
+                
+                logger.info("开始调用 injector.fetch_credentials()...")
+                fetch_result = await self._injector.fetch_credentials('eastmoney.com')
+                logger.info(f"injector.fetch_credentials() 返回：{fetch_result}")
+                if not fetch_result:
+                    logger.warning("凭证获取失败，使用普通模式")
+                    return False
+                logger.info("凭证获取成功")
+                
+                logger.info("开始调用 injector.patch_requests_with_tls()...")
+                patch_result = self._injector.patch_requests_with_tls()
+                logger.info(f"injector.patch_requests_with_tls() 返回：{patch_result}")
+                if not patch_result:
+                    logger.warning("TLS 指纹伪装失败，使用普通模式")
+                    return False
+                logger.info("TLS 指纹伪装成功")
+                
+                logger.info("凭证获取并注入成功")
+                return True
+                
+            except Exception as e:
+                logger.warning(f"获取凭证失败：{e}，使用普通模式")
+                import traceback
+                logger.error(traceback.format_exc())
                 return False
-            
-            # 获取凭证
-            await self._injector.fetch_credentials('eastmoney.com')
-            
-            # 注入 TLS 指纹
-            self._injector.patch_requests_with_tls()
-            
-            logger.info("凭证获取并注入成功")
-            return True
-            
-        except Exception as e:
-            logger.warning(f"获取凭证失败：{e}，使用普通模式")
-            return False
     
-    def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3):
+    def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3) -> Callable:
         """请求频率控制装饰器（带重试机制）
         
         Args:
@@ -618,12 +634,12 @@ class EFinanceAdapter(BaseDataAdapter):
         if not await self._ensure_credentials():
             logger.warning("凭证注入失败，尝试直接请求")
         
-        def fetch_sync():
+        async def fetch_async():
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('stock_list')
-            cached = self._get_from_cache(cache_key, 'stock_list')
+            cached = await self._get_from_cache(cache_key, 'stock_list')
             if cached:
                 return cached
             
@@ -663,13 +679,13 @@ class EFinanceAdapter(BaseDataAdapter):
                     float_shares=safe_float(getattr(row, '流通市值', 0)) / price
                 ))
             
-            self._set_to_cache(cache_key, stocks, 'stock_list')
+            await self._save_to_cache(cache_key, stocks, 'stock_list')
             logger.info(f"获取股票列表成功：{len(stocks)}只")
             return stocks
         
         try:
             result = await self._retry_executor.execute(
-                func=fetch_sync,
+                func=fetch_async,
                 context="get_stock_list"
             )
             return result or []
@@ -695,22 +711,15 @@ class EFinanceAdapter(BaseDataAdapter):
         # 限流
         await self._rate_limit()
         
+        if not EF_AVAILABLE:
+            return None
+        
+        cache_key = self._get_cache_key('stock_info', code=code)
+        cached = await self._get_from_cache(cache_key, 'stock_info')
+        if cached:
+            return cached
+        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
-                context="unknown"
-            )
-            if not EF_AVAILABLE:
-                return None
-            
-            cache_key = self._get_cache_key('stock_info', code=code)
-            cached = self._get_from_cache(cache_key, 'stock_info')
-            if cached:
-                return cached
-            
-            # 频率控制
-            await self._rate_limit()
-            
             # 获取单只股票信息
             result = ef.stock.get_base_info(code.zfill(6))
             
@@ -749,7 +758,7 @@ class EFinanceAdapter(BaseDataAdapter):
             else:
                 return None
             
-            self._set_to_cache(cache_key, stock, 'stock_info')
+            await self._save_to_cache(cache_key, stock, 'stock_info')
             return stock
             
         except Exception as e:
@@ -764,72 +773,64 @@ class EFinanceAdapter(BaseDataAdapter):
         # 限流
         await self._rate_limit()
         
-        try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
-                context="get_stock_info"
-            )
-
-            if not stock_codes:
+        if not stock_codes:
+            return []
+        
+        # 生成缓存 key
+        codes_key = '_'.join(sorted(stock_codes))
+        cache_key = self._get_cache_key('stocks_base_info', codes=codes_key)
+        cached = await self._get_from_cache(cache_key, 'stock_list')
+        if cached:
+            return cached
+        
+        async def fetch_async():
+            df = ef.stock.get_base_info(stock_codes)
+            
+            if df is None or (hasattr(df, 'empty') and df.empty):
                 return []
             
-            # 生成缓存 key
-            codes_key = '_'.join(sorted(stock_codes))
-            cache_key = self._get_cache_key('stocks_base_info', codes=codes_key)
-            cached = self._get_from_cache(cache_key, 'stock_list')
-            if cached:
-                return cached
-            
-            # 限流
-            await self._rate_limit()
-            
-            def fetch_sync():
-                df = ef.stock.get_base_info(stock_codes)
+            stocks = []
+            for row in df.itertuples(index=False):
+                code = str(getattr(row, '股票代码', '')).zfill(6)
+                if not code:
+                    continue
                 
-                if df is None or (hasattr(df, 'empty') and df.empty):
-                    return []
-                
-                stocks = []
-                for row in df.itertuples(index=False):
-                    code = str(getattr(row, '股票代码', '')).zfill(6)
-                    if not code:
-                        continue
-                    
-                    def safe_float(value, default=0.0):
-                        try:
-                            if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                                return default
-                            return float(value)
-                        except (ValueError, TypeError):
+                def safe_float(value, default=0.0):
+                    try:
+                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
                             return default
-                    
-                    latest_price = safe_float(getattr(row, '最新价', 1.0), 1.0)
-                    if latest_price == 0:
-                        latest_price = 1.0
-                    
-                    total_shares_raw = safe_float(getattr(row, '总市值', 0.0), 0.0)
-                    float_shares_raw = safe_float(getattr(row, '流通市值', 0.0), 0.0)
-                    
-                    stocks.append(StockBasicInfo(
-                        code=code,
-                        name=getattr(row, '股票名称', '') or '',
-                        market='SH' if code.startswith('6') else 'SZ',
-                        industry=getattr(row, '所处行业', '') or '',
-                        area='',
-                        list_date='',
-                        total_shares=total_shares_raw / latest_price if total_shares_raw > 0 else 0.0,
-                        float_shares=float_shares_raw / latest_price if float_shares_raw > 0 else 0.0
-                    ))
-                return stocks
-            
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                latest_price = safe_float(getattr(row, '最新价', 1.0), 1.0)
+                if latest_price == 0:
+                    latest_price = 1.0
+                
+                total_shares_raw = safe_float(getattr(row, '总市值', 0.0), 0.0)
+                float_shares_raw = safe_float(getattr(row, '流通市值', 0.0), 0.0)
+                
+                stocks.append(StockBasicInfo(
+                    code=code,
+                    name=getattr(row, '股票名称', '') or '',
+                    market='SH' if code.startswith('6') else 'SZ',
+                    industry=getattr(row, '所处行业', '') or '',
+                    area='',
+                    list_date='',
+                    total_shares=total_shares_raw / latest_price if total_shares_raw > 0 else 0.0,
+                    float_shares=float_shares_raw / latest_price if float_shares_raw > 0 else 0.0
+                ))
+            return stocks
+        
+        try:
             result = await self._retry_executor.execute(
-                func=fetch_sync,
+                func=fetch_async,
                 context="get_stocks_base_info"
             )
             stocks = result or []
             
             if stocks:
-                self._set_to_cache(cache_key, stocks, 'stock_list')
+                await self._save_to_cache(cache_key, stocks, 'stock_list')
                 logger.info(f"批量获取股票信息成功：{len(stocks)}只")
             return stocks
             
@@ -869,7 +870,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 return []
             
             cache_key = self._get_cache_key('deal_detail', code=stock_code, max_count=max_count)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -912,7 +913,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     order_count=safe_int(getattr(row, '单数', 0), 0)
                 ))
             
-            self._set_to_cache(cache_key, deals, 'kline')
+            await self._save_to_cache(cache_key, deals, 'kline')
             logger.info(f"获取 {stock_code} 成交明细成功：{len(deals)}条")
             return deals
             
@@ -949,7 +950,7 @@ class EFinanceAdapter(BaseDataAdapter):
             )
 
             cache_key = self._get_cache_key('history_bill', code=stock_code)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -1003,7 +1004,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     change_pct=safe_float(getattr(row, '涨跌幅', 0), 0.0)
                 ))
             
-            self._set_to_cache(cache_key, bills, 'kline')
+            await self._save_to_cache(cache_key, bills, 'kline')
             logger.info(f"获取 {stock_code} 历史资金流向成功：{len(bills)}条")
             return bills
             
@@ -1185,7 +1186,7 @@ class EFinanceAdapter(BaseDataAdapter):
             end = to_compact_date(end_date) if end_date else '20500101'
             
             cache_key = self._get_cache_key('kline', code=code, start=beg, end=end, klt=klt, fqt=fqt)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
@@ -1268,7 +1269,7 @@ class EFinanceAdapter(BaseDataAdapter):
             klines = result or []
             
             if klines:
-                self._set_to_cache(cache_key, klines, 'kline')
+                await self._save_to_cache(cache_key, klines, 'kline')
                 logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条")
             else:
                 logger.warning(f"K 线数据为空：{code} (klt={klt})")
@@ -1281,7 +1282,7 @@ class EFinanceAdapter(BaseDataAdapter):
             return []
             klines.sort(key=lambda x: x.date)
             
-            self._set_to_cache(cache_key, klines, 'kline')
+            await self._save_to_cache(cache_key, klines, 'kline')
             logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条 (klt={klt}, fqt={fqt})")
             return klines
             
@@ -1338,7 +1339,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 生成缓存 key
             codes_key = '_'.join(sorted(stock_codes))
             cache_key = self._get_cache_key('multi_kline', codes=codes_key, start=start_date, end=end_date, klt=klt, fqt=fqt)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -1422,7 +1423,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 klines.sort(key=lambda x: x.date)
                 all_klines[code] = klines
             
-            self._set_to_cache(cache_key, all_klines, 'kline')
+            await self._save_to_cache(cache_key, all_klines, 'kline')
             logger.info(f"批量获取 K 线数据成功：{len(all_klines)}只股票")
             return all_klines
             
@@ -1655,7 +1656,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 return {}
             
             cache_key = self._get_cache_key('quote', code=code)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
@@ -1744,7 +1745,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 'ask1_volume': ask_volumes[0] if ask_volumes[0] > 0 else None
             }
             
-            self._set_to_cache(cache_key, quote, 'quote')
+            await self._save_to_cache(cache_key, quote, 'quote')
             logger.info(f"获取实时行情成功 {code}: {quote['price']}元 ({quote['change_pct']}%)")
             return quote
             
@@ -1787,7 +1788,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 生成缓存 key
             codes_key = '_'.join(sorted(stock_codes))
             cache_key = self._get_cache_key('latest_quote', codes=codes_key)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 return cached
             
@@ -1833,7 +1834,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     'quote_id': getattr(row, '行情 ID', '') or ''
                 })
             
-            self._set_to_cache(cache_key, quotes, 'quote')
+            await self._save_to_cache(cache_key, quotes, 'quote')
             logger.info(f"批量获取实时行情成功：{len(quotes)}只")
             return quotes
             
@@ -1984,7 +1985,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 生成缓存 key
             date_key = f"{start_date or 'latest'}_{end_date or 'latest'}"
             cache_key = self._get_cache_key('billboard', date=date_key)
-            cached = self._get_from_cache(cache_key, 'default')
+            cached = await self._get_from_cache(cache_key, 'default')
             if cached:
                 return cached
             
@@ -2031,7 +2032,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     interpretation=getattr(row, '解读', '') or ''  # 如：卖一主卖，成功率 48.36%
                 ))
             
-            self._set_to_cache(cache_key, entries, 'default')
+            await self._save_to_cache(cache_key, entries, 'default')
             date_range = f"{start_date} 至 {end_date}" if start_date and end_date else "最新"
             logger.info(f"获取龙虎榜数据成功（{date_range}）：{len(entries)}条")
             return entries
@@ -2069,7 +2070,7 @@ class EFinanceAdapter(BaseDataAdapter):
             )
             
             cache_key = self._get_cache_key('board', code=code)
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 return cached
             
@@ -2108,7 +2109,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     stock_code=str(getattr(row, '股票代码', '')).zfill(6)
                 ))
             
-            self._set_to_cache(cache_key, boards, 'stock_info')
+            await self._save_to_cache(cache_key, boards, 'stock_info')
             logger.info(f"获取股票 {code} 所属板块成功：{len(boards)}个")
             return boards
             
@@ -2128,16 +2129,16 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('members', code=index_code)
-            cached = self._get_from_cache(cache_key, 'stock_list')
+            cached = await self._get_from_cache(cache_key, 'stock_list')
             if cached:
                 return cached
             
@@ -2173,7 +2174,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     weight=safe_float(getattr(row, '股票权重', None), None)
                 ))
             
-            self._set_to_cache(cache_key, members, 'stock_list')
+            await self._save_to_cache(cache_key, members, 'stock_list')
             logger.info(f"获取指数 {index_code} 成分股成功：{len(members)}只")
             return members
             
@@ -2192,16 +2193,16 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('today_bill', date=trade_date)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 return cached
             
@@ -2234,7 +2235,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     trade_date=trade_date or ''
                 ))
             
-            self._set_to_cache(cache_key, flows, 'quote')
+            await self._save_to_cache(cache_key, flows, 'quote')
             logger.info(f"获取当日资金流向成功：{len(flows)}条")
             return flows
             
@@ -2288,7 +2289,7 @@ class EFinanceAdapter(BaseDataAdapter):
             )
             
             cache_key = self._get_cache_key('bill_detail', code=code)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
@@ -2318,7 +2319,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 }
                 bill_details.append(detail)
             
-            self._set_to_cache(cache_key, bill_details, 'quote')
+            await self._save_to_cache(cache_key, bill_details, 'quote')
             self.record_request_success()  # 记录成功
             logger.info(f"获取股票资金流向明细成功 {code}: {len(bill_details)}条")
             return bill_details
@@ -2346,16 +2347,16 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('history_bill', code=code, start=start_date, end=end_date)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -2394,7 +2395,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 按日期排序
             flows.sort(key=lambda x: x.trade_date)
             
-            self._set_to_cache(cache_key, flows, 'kline')
+            await self._save_to_cache(cache_key, flows, 'kline')
             logger.info(f"获取 {code} 历史资金流向成功：{len(flows)}条")
             return flows
             
@@ -2435,17 +2436,17 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return {}
             
             # 缓存已移除，统一使用 storage_manager
             # cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
-            # cached = self._get_from_cache(cache_key, 'quote')
+            # cached = await self._get_from_cache(cache_key, 'quote')
             # if cached:
             #     return cached
             
@@ -2495,7 +2496,7 @@ class EFinanceAdapter(BaseDataAdapter):
             }
             
             # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
+            # await self._save_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
             logger.info(f"获取大盘资金流向成功：{market_type}")
             return result
             
@@ -2562,7 +2563,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 top = 4
             
             cache_key = self._get_cache_key('shareholder', code=code, top=top)
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
@@ -2672,7 +2673,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     change_rate=change_rate
                 ))
             
-            self._set_to_cache(cache_key, shareholders, 'stock_info')
+            await self._save_to_cache(cache_key, shareholders, 'stock_info')
             self.record_request_success()  # 记录成功
             logger.info(f"获取 {code} 前{top}大股东信息成功：{len(shareholders)}条")
             return shareholders
@@ -2697,16 +2698,16 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('performance', date=date or 'latest')
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -2758,7 +2759,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     cash_flow_per_share=safe_float(getattr(row, '每股经营现金流量', 0))
                 ))
             
-            self._set_to_cache(cache_key, performances, 'kline')
+            await self._save_to_cache(cache_key, performances, 'kline')
             logger.info(f"获取公司业绩表现成功：{len(performances)}条，报告期：{date or '最新'}")
             return performances
             
@@ -2775,16 +2776,16 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
+            await self._ensure_credentials()
+            
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('report_dates')
-            cached = self._get_from_cache(cache_key, 'stock_list')
+            cached = await self._get_from_cache(cache_key, 'stock_list')
             if cached:
                 return cached
             
@@ -2797,7 +2798,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 转换为字符串列表
             date_list = [str(d) for d in dates]
             
-            self._set_to_cache(cache_key, date_list, 'stock_list')
+            await self._save_to_cache(cache_key, date_list, 'stock_list')
             logger.info(f"获取报告日期列表成功：{len(date_list)}个")
             return date_list
             
@@ -2921,7 +2922,7 @@ class EFinanceAdapter(BaseDataAdapter):
             
             # 构建缓存 key
             cache_key = self._get_cache_key('market_quotes', fs=cache_prefix)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 logger.debug(f"从缓存获取市场实时行情：{cache_key}")
                 return cached
@@ -2946,7 +2947,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     else:
                         raise
                 except Exception as e:
-            if attempt < retry - 1:
+                    if attempt < retry - 1:
                         delay = (2 ** attempt) * 2.0 + random.uniform(0, 1)
                         logger.warning(f"获取市场实时行情失败，{delay:.1f}秒后重试 {attempt + 1}/{retry}: {e}")
                         await asyncio.sleep(delay)
@@ -2993,7 +2994,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 ))
             
             # 保存到缓存（5 分钟）
-            self._set_to_cache(cache_key, quotes, 'quote')
+            await self._save_to_cache(cache_key, quotes, 'quote')
             logger.info(f"获取市场实时行情成功：{len(quotes)}条，市场类型：{market_types or '沪深 A 股（默认）'}")
             return quotes
             
@@ -3036,16 +3037,16 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('financial', code=code, date=report_date, type=report_type)
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 return cached
             
@@ -3102,7 +3103,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 按公告日期排序（最新的在前）
             performances.sort(key=lambda x: x.report_date, reverse=True)
             
-            self._set_to_cache(cache_key, performances, 'stock_info')
+            await self._save_to_cache(cache_key, performances, 'stock_info')
             logger.info(f"获取 {code} 财务业绩数据成功（报告期：{report_date or '最新'}）：{len(performances)}条")
             return performances
             
@@ -3125,16 +3126,16 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('report_dates')
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 return cached
             
@@ -3151,7 +3152,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     'name': str(getattr(row, '季报名称', ''))
                 })
             
-            self._set_to_cache(cache_key, report_dates, 'stock_info')
+            await self._save_to_cache(cache_key, report_dates, 'stock_info')
             logger.info(f"获取所有报告期日期成功：{len(report_dates)}个")
             return report_dates
             
@@ -3178,10 +3179,10 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
@@ -3222,111 +3223,11 @@ class EFinanceAdapter(BaseDataAdapter):
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """获取基金基本信息
         
-        Args:
-            fund_codes: 6 位基金代码或多个 6 位基金代码构成的列表
-                示例：'161725' 或 ['161725', '005827']
-        
-        Returns:
-            单只基金返回 Dict[str, Any]（对应 Series）
-            多只基金返回 List[Dict[str, Any]]（对应 DataFrame）
-            
-        Note:
-            使用 efinance.fund.get_base_info 接口
-            获取基金的基本信息，包括基金代码、简称、成立日期、涨跌幅、最新净值等
-            缓存时间：10 分钟
-            
-        Examples:
-            # 获取单只基金信息
-            fund_info = await adapter.get_fund_base_info('161725')
-            
-            # 获取多只基金信息
-            fund_list = await adapter.get_fund_base_info(['161725', '005827'])（带 TLS 指纹伪装 + 凭证注入）
-"""
-        try:
-            # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-
-            if not EF_AVAILABLE:
-                return None if isinstance(fund_codes, str) else []
-            
-            # 处理单只基金
-            if isinstance(fund_codes, str):
-                code = fund_codes.strip()
-                cache_key = self._get_cache_key('fund_info', code=code)
-                cached = self._get_from_cache(cache_key, 'fund_info')
-                if cached:
-                    return cached
-                
-                # 频率控制
-                await self._rate_limit()
-                
-                # 获取单只基金信息
-                result = ef.fund.get_base_info(code)
-                
-                if result is None or (hasattr(result, 'empty') and result.empty):
-                    return None
-                
-                # 解析 Series 数据
-                fund_info = {
-                    'code': str(result.get('基金代码', code)),
-                    'name': str(result.get('基金简称', '')),
-                    'establish_date': str(result.get('成立日期', '')),
-                    'change_pct': float(result.get('涨跌幅', 0)) if result.get('涨跌幅') is not None else None,
-                    'net_asset_value': float(result.get('最新净值', 0)) if result.get('最新净值') is not None else None,
-                    'fund_company': str(result.get('基金公司', '')),
-                    'nav_update_date': str(result.get('净值更新日期', '')),
-                    'description': str(result.get('简介', ''))
-                }
-                
-                self._set_to_cache(cache_key, fund_info, 'fund_info')
-                logger.info(f"获取基金 {code} 基本信息成功")
-                return fund_info
-            
-            # 处理多只基金（列表）
-            else:
-                valid_codes = [c.strip() for c in fund_codes if c and len(c.strip()) >= 6]
-                
-                if not valid_codes:
-                    return []
-                
-                cache_key = self._get_cache_key('fund_info_batch', codes=','.join(sorted(valid_codes)))
-                cached = self._get_from_cache(cache_key, 'fund_info')
-                if cached:
-                    return cached
-                
-                # 频率控制
-                await self._rate_limit()
-                
-                # 批量获取基金信息
-                df = ef.fund.get_base_info(valid_codes)
-                
-                if df is None or (hasattr(df, 'empty') and df.empty):
-                    return []
-                
-                fund_list = []
-                for row in df.itertuples(index=False):
-                    fund_info = {
-                        'code': str(getattr(row, '基金代码', '')).zfill(6),
-                        'name': str(getattr(row, '基金简称', '')),
-                        'establish_date': str(getattr(row, '成立日期', '')),
-                        'change_pct': float(getattr(row, '涨跌幅', 0)) if getattr(row, '涨跌幅', None) is not None else None,
-                        'net_asset_value': float(getattr(row, '最新净值', 0)) if getattr(row, '最新净值', None) is not None else None,
-                        'fund_company': str(getattr(row, '基金公司', '')),
-                        'nav_update_date': str(getattr(row, '净值更新日期', '')),
-                        'description': str(getattr(row, '简介', ''))
-                    }
-                    fund_list.append(fund_info)
-                
-                self._set_to_cache(cache_key, fund_list, 'fund_info')
-                logger.info(f"获取基金基本信息成功：{len(fund_list)}条")
-                return fund_list
-            
-        except Exception as e:
-            logger.error(f"获取基金基本信息失败 {fund_codes}: {e}")
-            return None if isinstance(fund_codes, str) else []
+        注意：efinance 库有 pandas 类型兼容性问题，改用 akshare
+        """
+        # 使用 akshare 获取基金信息（避免 efinance 的 pandas 类型错误）
+        from app.adapters.akshare_adapter import akshare_adapter
+        return await akshare_adapter.get_fund_base_info(fund_codes)
     
     async def get_fund_codes(
         self,
@@ -3367,17 +3268,17 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             # 缓存已移除，统一使用 storage_manager
             # cache_key = self._get_cache_key('fund_codes', fund_type=fund_type or 'all')
-            # cached = self._get_from_cache(cache_key, 'fund_info')
+            # cached = await self._get_from_cache(cache_key, 'fund_info')
             # if cached:
             #     return cached
             
@@ -3402,7 +3303,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     fund_list.append(fund_info)
             
             # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, fund_list, 'fund_info')
+            # await self._save_to_cache(cache_key, fund_list, 'fund_info')
             logger.info(f"获取基金代码列表成功：{len(fund_list)}条，类型：{fund_type or '全部'}")
             return fund_list
             
@@ -3450,10 +3351,10 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
@@ -3466,7 +3367,7 @@ class EFinanceAdapter(BaseDataAdapter):
             else:
                 cache_key = self._get_cache_key('fund_position', code=fund_code, dates=','.join(sorted(dates)))
             
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
@@ -3495,7 +3396,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     position_list.append(position_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, position_list, 'fund_info')
+            await self._save_to_cache(cache_key, position_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 持仓占比数据成功：{len(position_list)}条")
             return position_list
             
@@ -3536,17 +3437,17 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return []
             
             # 构建缓存 key
             cache_key = self._get_cache_key('fund_history', code=fund_code, pz=pz)
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
@@ -3572,7 +3473,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 history_list.append(history_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, history_list, 'fund_info')
+            await self._save_to_cache(cache_key, history_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 历史净值数据成功：{len(history_list)}条")
             return history_list
             
@@ -3616,10 +3517,10 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return {}
@@ -3629,7 +3530,7 @@ class EFinanceAdapter(BaseDataAdapter):
             
             # 构建缓存 key
             cache_key = self._get_cache_key('fund_history_multi', codes=','.join(sorted(fund_codes)), pz=pz)
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
@@ -3665,7 +3566,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 total_count += len(history_list)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, history_dict, 'fund_info')
+            await self._save_to_cache(cache_key, history_dict, 'fund_info')
             logger.info(f"批量获取 {len(fund_codes)} 只基金历史净值数据成功：共{total_count}条")
             return history_dict
             
@@ -3708,10 +3609,10 @@ class EFinanceAdapter(BaseDataAdapter):
 """
         try:
             # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
+            await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
+            # 限流
+            await self._rate_limit()
 
             if not EF_AVAILABLE:
                 return None if isinstance(fund_codes, str) else []
@@ -3720,7 +3621,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if isinstance(fund_codes, str):
                 code = fund_codes.strip()
                 cache_key = self._get_cache_key('fund_rate', code=code)
-                cached = self._get_from_cache(cache_key, 'quote')
+                cached = await self._get_from_cache(cache_key, 'quote')
                 if cached:
                     return cached
                 
@@ -3757,7 +3658,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     'estimate_change_pct': safe_float('估算涨跌幅')
                 }
                 
-                self._set_to_cache(cache_key, rate_info, 'quote')
+                await self._save_to_cache(cache_key, rate_info, 'quote')
                 logger.info(f"获取基金 {code} 实时估算涨跌幅成功：{rate_info['estimate_change_pct']}%")
                 return rate_info
             
@@ -3769,7 +3670,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     return []
                 
                 cache_key = self._get_cache_key('fund_rate_batch', codes=','.join(sorted(valid_codes)))
-                cached = self._get_from_cache(cache_key, 'quote')
+                cached = await self._get_from_cache(cache_key, 'quote')
                 if cached:
                     return cached
                 
@@ -3807,7 +3708,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     if rate_info['code']:
                         rate_list.append(rate_info)
                 
-                self._set_to_cache(cache_key, rate_list, 'quote')
+                await self._save_to_cache(cache_key, rate_list, 'quote')
                 logger.info(f"获取基金实时估算涨跌幅成功：{len(rate_list)}条")
                 return rate_list
             
@@ -3862,7 +3763,7 @@ class EFinanceAdapter(BaseDataAdapter):
             
             # 构建缓存 key
             cache_key = self._get_cache_key('fund_period', code=fund_code)
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
@@ -3912,7 +3813,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     period_list.append(period_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, period_list, 'fund_info')
+            await self._save_to_cache(cache_key, period_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 阶段涨跌幅成功：{len(period_list)}个时间段")
             return period_list
             
@@ -3977,7 +3878,7 @@ class EFinanceAdapter(BaseDataAdapter):
             else:
                 cache_key = self._get_cache_key('fund_assets', code=fund_code, dates=','.join(sorted(dates)))
             
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
@@ -4035,7 +3936,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     assets_list.append(assets_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, assets_list, 'fund_info')
+            await self._save_to_cache(cache_key, assets_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 资产配置比例成功：{len(assets_list)}个日期")
             return assets_list
             

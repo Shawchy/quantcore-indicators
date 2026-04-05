@@ -14,9 +14,13 @@
 增强版：
 - 支持 curl_cffi（TLS 指纹伪装）
 - 解决 Python requests TLS 指纹被识别的问题
+
+注意：
+- Windows 上使用同步 API + 线程池运行 Playwright
+- 避免 asyncio 事件循环与 subprocess 的兼容性问题
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from loguru import logger
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
@@ -27,6 +31,8 @@ import json
 import os
 import time
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 
 class TLSPatchMode(Enum):
@@ -82,6 +88,10 @@ class CredentialInjector:
             **(config or {})
         }
         
+        # 线程池用于运行同步 Playwright
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='playwright')
+        self._lock = threading.Lock()
+        
         self._playwright = None
         self._browser = None
         self._context = None
@@ -100,40 +110,74 @@ class CredentialInjector:
         
         self._curl_session = None
         self._tls_mode: TLSPatchMode = TLSPatchMode.NONE
+        self._init_lock = asyncio.Lock()
+        self._fetch_lock = asyncio.Lock()
+        
+        # Windows 禁用 Playwright（asyncio 事件循环不支持 subprocess）
+        # 改为使用同步 API + 线程池
+        self._playwright_disabled = False  # 启用 Playwright
+        self._drission_available = False   # DrissionPage 可用性
+        self._playwright_sync_available = False  # Playwright 同步可用性
+        
+        # 线程池用于运行同步浏览器操作
+        self._browser_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='browser')
+        
+        logger.info("凭证注入器初始化：支持 DrissionPage + Playwright 同步 + curl_cffi 三级降级")
+        
+        # 日志频率限制
+        self._last_warning_time: Dict[str, float] = {}
+        self._warning_cooldown = 10.0  # 同 URL 10 秒内只打印一次
     
     async def initialize(self) -> bool:
-        try:
-            from playwright.async_api import async_playwright
+        """初始化凭证注入器（三级降级检测）
+        
+        优先级：
+        1. DrissionPage（最优，自动绕过反爬）
+        2. Playwright 同步 + 线程池（稳定可靠）
+        3. curl_cffi（无需浏览器，TLS 指纹伪装）
+        """
+        if self._is_initialized:
+            return True
+        
+        async with self._init_lock:
+            if self._is_initialized:
+                return True
             
-            playwright_manager = async_playwright()
-            self._playwright = await playwright_manager.start()
+            # Level 1: 检测 DrissionPage
+            try:
+                from DrissionPage import ChromiumPage
+                self._drission_available = True
+                logger.info("✅ Level 1: DrissionPage 可用（最优模式）")
+            except ImportError:
+                logger.info("⚠️  Level 1: DrissionPage 不可用，尝试 Level 2")
+                self._drission_available = False
             
-            if self._playwright is None:
-                raise RuntimeError("Playwright start() returned None")
+            # Level 2: 检测 Playwright 同步
+            if not self._drission_available:
+                try:
+                    from playwright.sync_api import sync_playwright
+                    self._playwright_sync_available = True
+                    logger.info("✅ Level 2: Playwright 同步可用（稳定模式）")
+                except ImportError:
+                    logger.info("⚠️  Level 2: Playwright 同步不可用，降级到 Level 3")
+                    self._playwright_sync_available = False
             
-            browsers_path = os.environ.get(
-                'PLAYWRIGHT_BROWSERS_PATH',
-                'd:/PROJ/Quant/backend/playwright_browsers'
-            )
-            chromium_exe = os.path.join(browsers_path, 'chromium-1148', 'chrome-win', 'chrome.exe')
+            # Level 3: curl_cffi（总是可用）
+            logger.info("✅ Level 3: curl_cffi 可用（降级模式）")
             
-            launch_options = {'headless': self._config['headless']}
-            if os.path.exists(chromium_exe):
-                launch_options['executable_path'] = chromium_exe
-                logger.info(f"使用 Chromium: {chromium_exe}")
-            
-            self._browser = await self._playwright.chromium.launch(**launch_options)
+            # 确定使用哪个模式
+            if self._drission_available:
+                self._browser_mode = "drission"
+                logger.info("🚀 使用 DrissionPage 模式（推荐）")
+            elif self._playwright_sync_available:
+                self._browser_mode = "playwright_sync"
+                logger.info("🚀 使用 Playwright 同步模式")
+            else:
+                self._browser_mode = "curl_cffi"
+                logger.info("🚀 使用 curl_cffi TLS 指纹伪装模式")
             
             self._is_initialized = True
-            logger.info("凭证注入器初始化成功")
             return True
-            
-        except ImportError:
-            logger.warning("Playwright 未安装，凭证注入功能不可用")
-            return False
-        except Exception as e:
-            logger.error(f"凭证注入器初始化失败: {e}")
-            return False
     
     async def close(self) -> None:
         try:
@@ -155,68 +199,173 @@ class CredentialInjector:
             logger.info("凭证注入器已关闭")
     
     async def fetch_credentials(self, domain: str) -> bool:
+        """获取凭证（三级降级）
+        
+        1. DrissionPage（最优）
+        2. Playwright 同步 + 线程池
+        3. curl_cffi（无需浏览器）
+        """
         if not self._is_initialized:
-            logger.warning("凭证注入器未初始化")
-            return False
+            await self.initialize()
+        
+        async with self._fetch_lock:
+            # 检查是否有有效凭证
+            if self._cookies.get(domain) and self._cookies_updated_at.get(domain):
+                age = datetime.now() - self._cookies_updated_at[domain]
+                if age < timedelta(hours=self._config['cookie_max_age_hours']):
+                    logger.debug(f"{domain} 凭证有效，跳过获取")
+                    return True
+            
+            # 根据模式选择获取方式
+            if self._browser_mode == "drission":
+                return await self._fetch_with_drission(domain)
+            elif self._browser_mode == "playwright_sync":
+                return await self._fetch_with_playwright_sync(domain)
+            else:
+                # curl_cffi 模式，不需要获取凭证
+                logger.info(f"curl_cffi 模式：跳过凭证获取，使用 TLS 指纹伪装")
+                return True
+    
+    async def _fetch_with_drission(self, domain: str) -> bool:
+        """使用 DrissionPage 获取凭证（最优模式）"""
+        logger.info(f"使用 DrissionPage 获取 {domain} 凭证...")
+        
+        loop = asyncio.get_event_loop()
+        
+        def sync_fetch():
+            try:
+                from DrissionPage import ChromiumPage, ChromiumOptions
+                
+                # 配置无头模式
+                options = ChromiumOptions()
+                options.headless(True)
+                options.set_argument('--disable-blink-features=AutomationControlled')
+                options.set_argument('--disable-dev-shm-usage')
+                options.set_argument('--no-sandbox')
+                
+                # 启动浏览器
+                page = ChromiumPage(options)
+                
+                try:
+                    # 访问东方财富
+                    if 'eastmoney' in domain:
+                        page.get('https://fund.eastmoney.com/')
+                    
+                    # 等待页面加载
+                    import time
+                    time.sleep(2)
+                    
+                    # 获取 Cookie
+                    cookies = page.cookies()
+                    
+                    # 转换为标准格式
+                    cookie_list = []
+                    for cookie in cookies:
+                        cookie_list.append({
+                            'name': cookie.get('name', ''),
+                            'value': cookie.get('value', ''),
+                            'domain': cookie.get('domain', domain),
+                            'path': cookie.get('path', '/'),
+                        })
+                    
+                    return cookie_list
+                finally:
+                    page.quit()
+                    
+            except Exception as e:
+                logger.error(f"DrissionPage 获取凭证失败：{e}")
+                return None
         
         try:
-            if self._context:
-                await self._context.close()
-            
-            self._context = await self._browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                locale='zh-CN',
-                timezone_id='Asia/Shanghai',
-                user_agent=self._get_random_user_agent(),
+            # 在线程池中运行
+            cookie_list = await loop.run_in_executor(
+                self._browser_executor,
+                sync_fetch
             )
             
-            self._page = await self._context.new_page()
-            
-            if 'eastmoney' in domain:
-                success = await self._fetch_eastmoney_credentials(domain)
-            else:
-                success = await self._fetch_generic_credentials(domain)
-            
-            if success:
-                self._cookies[domain] = await self._context.cookies()
+            if cookie_list:
+                self._cookies[domain] = cookie_list
                 self._cookies_updated_at[domain] = datetime.now()
+                logger.info(f"✅ DrissionPage 成功获取 {domain} 凭证")
+                return True
+            else:
+                logger.warning("DrissionPage 获取凭证返回空列表")
+                return False
                 
-                await self._extract_headers(domain)
-                
-                logger.info(f"成功获取 {domain} 的凭证")
-            
-            return success
-            
         except Exception as e:
-            logger.error(f"获取凭证失败 {domain}: {e}")
+            logger.error(f"DrissionPage 获取凭证异常：{e}")
             return False
     
-    async def _fetch_eastmoney_credentials(self, domain: str) -> bool:
-        try:
-            if 'quote' in domain:
-                url = "https://quote.eastmoney.com/center/gridlist.html"
-            elif 'data' in domain:
-                url = "https://data.eastmoney.com/"
-            else:
-                url = "https://www.eastmoney.com/"
-            
-            logger.info(f"访问 {url} 获取凭证...")
-            
-            await self._page.goto(url, wait_until='domcontentloaded', timeout=30000)
-            
-            await asyncio.sleep(3)
-            
+    async def _fetch_with_playwright_sync(self, domain: str) -> bool:
+        """使用 Playwright 同步 API 获取凭证（稳定模式）"""
+        logger.info(f"使用 Playwright 同步 API 获取 {domain} 凭证...")
+        
+        loop = asyncio.get_event_loop()
+        
+        def sync_fetch():
             try:
-                await self._page.wait_for_load_state('networkidle', timeout=10000)
-            except Exception:
-                pass
+                from playwright.sync_api import sync_playwright
+                
+                # 启动 Playwright
+                playwright = sync_playwright().start()
+                
+                try:
+                    # 启动浏览器
+                    browser = playwright.chromium.launch(
+                        headless=True,
+                        args=['--disable-blink-features=AutomationControlled']
+                    )
+                    
+                    try:
+                        # 创建上下文
+                        context = browser.new_context(
+                            viewport={'width': 1920, 'height': 1080},
+                            locale='zh-CN',
+                            timezone_id='Asia/Shanghai',
+                        )
+                        
+                        page = context.new_page()
+                        
+                        try:
+                            # 访问东方财富
+                            if 'eastmoney' in domain:
+                                page.goto('https://fund.eastmoney.com/')
+                                page.wait_for_load_state('networkidle')
+                            
+                            # 获取 Cookie
+                            cookies = context.cookies()
+                            
+                            return cookies
+                        finally:
+                            page.close()
+                    finally:
+                        context.close()
+                        browser.close()
+                finally:
+                    playwright.stop()
+                    
+            except Exception as e:
+                logger.error(f"Playwright 同步获取凭证失败：{e}")
+                return None
+        
+        try:
+            # 在线程池中运行
+            cookie_list = await loop.run_in_executor(
+                self._browser_executor,
+                sync_fetch
+            )
             
-            await self._simulate_human_behavior()
-            
-            return True
-            
+            if cookie_list:
+                self._cookies[domain] = cookie_list
+                self._cookies_updated_at[domain] = datetime.now()
+                logger.info(f"✅ Playwright 同步成功获取 {domain} 凭证")
+                return True
+            else:
+                logger.warning("Playwright 同步获取凭证返回空列表")
+                return False
+                
         except Exception as e:
-            logger.error(f"获取东方财富凭证失败: {e}")
+            logger.error(f"Playwright 同步获取凭证异常：{e}")
             return False
     
     async def _fetch_generic_credentials(self, domain: str) -> bool:
@@ -354,7 +503,7 @@ class CredentialInjector:
             requests.Session.request = patched_session_request
             
             self._is_patched = True
-            logger.info(f"已注入 {domain} 的凭证到 requests")
+            logger.info(f"✅ 已注入 {domain} 的凭证到 requests (模式：{self._browser_mode})")
             return True
             
         except Exception as e:
@@ -378,6 +527,17 @@ class CredentialInjector:
             
         except Exception as e:
             logger.error(f"恢复 requests 失败: {e}")
+    
+    async def _refresh_credentials_on_failure(self):
+        """请求失败时自动刷新凭证（后台任务）"""
+        try:
+            logger.info("后台刷新凭证...")
+            for domain in self._config['target_domains'][:1]:  # 只刷新第一个域名
+                await self.fetch_credentials(domain)
+                logger.info(f"后台刷新 {domain} 凭证完成")
+                break
+        except Exception as e:
+            logger.error(f"后台刷新凭证失败：{e}")
     
     def _init_curl_cffi(self) -> bool:
         """初始化 curl_cffi TLS 指纹伪装"""
@@ -459,7 +619,17 @@ class CredentialInjector:
                         return CurlResponseAdapter(response)
                         
                     except Exception as e:
-                        logger.warning(f"curl_cffi 请求失败: {e}，回退到 requests")
+                        # curl_cffi 失败，尝试降级
+                        logger.warning(f"curl_cffi 请求失败：{e}")
+                        
+                        # 检查是否需要重新获取凭证
+                        if '56' in str(e) or 'Connection closed' in str(e):
+                            logger.info("检测到连接被关闭，尝试重新获取凭证...")
+                            # 异步获取凭证（不阻塞）
+                            asyncio.create_task(self._refresh_credentials_on_failure())
+                        
+                        # 降级到普通 requests
+                        logger.info("降级到普通 requests")
                         return self._original_request(method, url, **kwargs)
                 else:
                     return self._original_request(method, url, **kwargs)
@@ -500,7 +670,18 @@ class CredentialInjector:
                         return CurlResponseAdapter(response)
                         
                     except Exception as e:
-                        logger.warning(f"curl_cffi 请求失败: {e}，回退到 requests")
+                        # 日志频率限制：同 URL 10 秒内只打印一次
+                        import time
+                        current_time = time.time()
+                        url_key = url.split('?')[0]  # 忽略查询参数
+                        last_warning = self._last_warning_time.get(url_key, 0)
+                        
+                        if current_time - last_warning > self._warning_cooldown:
+                            logger.warning(f"curl_cffi 请求失败：{e}，回退到 requests")
+                            self._last_warning_time[url_key] = current_time
+                        
+                        # 添加延迟，避免重试过快
+                        time.sleep(2.0)  # 延迟 2 秒
                         return self._original_session_request(self_session, method, url, **kwargs)
                 else:
                     return self._original_session_request(self_session, method, url, **kwargs)
@@ -863,3 +1044,17 @@ class UnifiedCredentialManager:
     @property
     def is_initialized(self) -> bool:
         return self._is_initialized
+
+
+_global_injector: Optional[CredentialInjector] = None
+_injector_lock = asyncio.Lock()
+
+
+async def get_global_injector(config: Optional[Dict[str, Any]] = None) -> CredentialInjector:
+    """获取全局凭证注入器单例"""
+    global _global_injector
+    
+    async with _injector_lock:
+        if _global_injector is None:
+            _global_injector = CredentialInjector(config)
+        return _global_injector

@@ -12,9 +12,7 @@ import {
   Text,
   Tabs,
   TabList,
-  TabPanels,
   Tab,
-  TabPanel,
   Select,
   HStack,
   VStack,
@@ -49,10 +47,10 @@ const FundRanking: React.FC = () => {
       const fundInfoList: FundInfo[] = [];
       
       for (let i = 0; i < allCodes.length; i += batchSize) {
-        const batch = allCodes.slice(i, i + batchSize);
-        const infoRes = await fundApi.getFundBaseInfo(batch);
-        const batchInfo = Array.isArray(infoRes.data) ? infoRes.data : [infoRes.data];
-        fundInfoList.push(...batchInfo);
+        const batch = allCodes.slice(i, i + batchSize)
+        const infoRes = await fundApi.getFundBaseInfo(batch[0].code)
+        const batchInfo = Array.isArray(infoRes.data) ? infoRes.data : [infoRes.data]
+        fundInfoList.push(...batchInfo)
       }
 
       // 3. 筛选基金类型
@@ -62,16 +60,16 @@ const FundRanking: React.FC = () => {
       }
 
       // 4. 批量获取阶段涨跌幅（用于排序）
-      const topFunds = filtered.slice(0, 100); // 只获取前 100 只的业绩数据
-      const periodMap: Record<PeriodType, string> = {
-        '1w': '近一周',
-        '1m': '近一月',
-        '3m': '近三月',
-        '6m': '近六月',
-        '1y': '近一年',
-        '3y': '近三年',
-        '5y': '近五年',
-      };
+      const topFunds = filtered.slice(0, 100) // 只获取前 100 只的业绩数据
+      // const periodMap: Record<PeriodType, string> = {
+      //   '1w': '近一周',
+      //   '1m': '近一月',
+      //   '3m': '近三月',
+      //   '6m': '近六月',
+      //   '1y': '近一年',
+      //   '3y': '近三年',
+      //   '5y': '近五年',
+      // }
 
       const perfDataMap: Record<string, FundPeriodChangeInfo[]> = {};
       for (const fund of topFunds) {

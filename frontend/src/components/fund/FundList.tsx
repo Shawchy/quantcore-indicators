@@ -26,7 +26,7 @@ import {
   useColorModeValue,
   Icon,
 } from '@chakra-ui/react';
-import { StarIcon, SearchIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
+import { StarIcon, SearchIcon } from '@chakra-ui/icons';
 import { FundInfo, FundPeriodChangeInfo } from '@/services/fund';
 
 interface FundListProps {
@@ -61,9 +61,7 @@ interface FundListTableItem extends FundInfo {
 
 const FundList: React.FC<FundListProps> = ({
   data,
-  loading = false,
   performanceData = {},
-  onSort,
   onFilter,
   onViewDetail,
   onAddToWatchlist,

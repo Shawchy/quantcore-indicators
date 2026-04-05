@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 东方财富千股千评页面
  */
 import React, { useState, useEffect } from 'react';
@@ -36,7 +36,7 @@ import {
   TabPanels,
   Tab,
   TabPanel,
-  SimpleGrid,
+
   useDisclosure,
 } from '@chakra-ui/react';
 import {
@@ -63,7 +63,7 @@ const EastMoneyStockCommentPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockComment();
-      setComments(result);
+      setComments(result.data || []);
     } catch (error) {
       console.error('获取千股千评数据失败:', error);
     } finally {
@@ -79,8 +79,8 @@ const EastMoneyStockCommentPage: React.FC = () => {
         eastMoneyApi.getStockCommentDetailInstitution(code),
         eastMoneyApi.getStockCommentDetailScore(code),
       ]);
-      setInstitutionData(institutionRes);
-      setScoreData(scoreRes);
+      setInstitutionData(institutionRes.data || []);
+      setScoreData(scoreRes.data || []);
     } catch (error) {
       console.error('获取个股详情失败:', error);
     } finally {

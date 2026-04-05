@@ -185,7 +185,6 @@ const formatDate = (dateStr: string, type: KLineType, index: number, allDates: s
       const prevClean = prevDate.replace(/-/g, '')
       const prevYear = prevClean.substring(0, 4)
       const prevMonth = prevClean.substring(4, 6)
-      const prevDay = prevClean.substring(6, 8)
       
       // 新年份，显示完整日期
       if (year !== prevYear) {

@@ -1,5 +1,5 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Box, ColorModeScript, Spinner, Flex, Text } from '@chakra-ui/react'
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Box, ColorModeScript, Spinner, Flex } from '@chakra-ui/react'
 import { useEffect, Suspense, lazy } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -22,6 +22,11 @@ const MarketRanking = lazy(() => import('./pages/MarketRanking'))
 const DailyMarket = lazy(() => import('./pages/DailyMarket'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Billboard = lazy(() => import('./pages/Billboard'))
+
+// 预加载函数
+const prefetchDashboard = () => import('./pages/Dashboard')
+const prefetchStockDetail = () => import('./pages/StockDetail')
+const prefetchScreener = () => import('./pages/Screener')
 
 // 东方财富模块 - 懒加载
 const EastMoneyChangesPage = lazy(() => import('./pages/EastMoneyChangesPage'))
@@ -76,6 +81,18 @@ function App() {
     
     return () => clearTimeout(timer);
   }, [getStorageStats]);
+
+  // 预加载关键路由（延迟 2 秒后预加载）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      prefetchDashboard()
+      prefetchStockDetail()
+      prefetchScreener()
+      console.log('[路由预加载] 关键路由已预加载')
+    }, 2000)
+    
+    return () => clearTimeout(timer)
+  }, [])
 
   return (
     <Box>

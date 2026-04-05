@@ -1,0 +1,25 @@
+{
+  "backup_name": "full_backup_20260405_000000",
+  "backup_type": "full",
+  "timestamp": "20260405_000000",
+  "description": "每周自动完整备份",
+  "total_size_mb": 0.0,
+  "directories": [
+    {
+      "name": "sqlite",
+      "path": "backups\\full_backup_20260405_000000\\sqlite",
+      "size_mb": 0.0
+    },
+    {
+      "name": "parquet",
+      "path": "backups\\full_backup_20260405_000000\\parquet",
+      "size_mb": 0.0
+    },
+    {
+      "name": "exchanges",
+      "path": "backups\\full_backup_20260405_000000\\exchanges",
+      "size_mb": 0.0
+    }
+  ],
+  "compressed": true
+}

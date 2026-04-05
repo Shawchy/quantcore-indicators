@@ -27,10 +27,6 @@ import {
   Tab,
   TabPanel,
   Button,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
   SimpleGrid,
   Divider,
   Spinner,
@@ -39,18 +35,19 @@ import {
   AlertTitle,
   AlertDescription,
   Progress,
-  Icon,
   useToast,
+  Stat,
+  StatLabel,
+  StatNumber,
+  Icon,
 } from '@chakra-ui/react';
 import {
   ArrowBackIcon,
   StarIcon,
 } from '@chakra-ui/icons';
-import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
 import {
   fundApi,
   FundInfo,
-  FundRealtimeRateInfo,
   FundPeriodChangeInfo,
   FundAssetsAllocationInfo,
   FundPositionInfo,
@@ -63,7 +60,6 @@ const FundDetail: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [fundInfo, setFundInfo] = useState<FundInfo | null>(null);
-  const [realtimeRate, setRealtimeRate] = useState<FundRealtimeRateInfo | null>(null);
   const [periodChange, setPeriodChange] = useState<FundPeriodChangeInfo[]>([]);
   const [assetsAllocation, setAssetsAllocation] = useState<FundAssetsAllocationInfo[]>([]);
   const [position, setPosition] = useState<FundPositionInfo[]>([]);
@@ -79,15 +75,6 @@ const FundDetail: React.FC = () => {
       const infoRes = await fundApi.getFundBaseInfo(code);
       const info = Array.isArray(infoRes.data) ? infoRes.data[0] : infoRes.data;
       setFundInfo(info);
-
-      // 2. 获取实时估算涨跌幅
-      try {
-        const rateRes = await fundApi.getFundRealtimeRate(code);
-        const rate = Array.isArray(rateRes.data) ? rateRes.data[0] : rateRes.data;
-        setRealtimeRate(rate);
-      } catch (e) {
-        console.log('获取实时估算失败');
-      }
 
       // 3. 获取阶段涨跌幅
       try {

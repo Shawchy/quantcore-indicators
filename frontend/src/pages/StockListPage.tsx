@@ -1,8 +1,8 @@
-﻿/**
+/**
  * 股票列表页面
  * 展示沪深京三个交易所的股票列表
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useDeferredValue } from 'react';
 import {
   Box,
   Heading,
@@ -41,6 +41,7 @@ const StockListPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm);
   
   // 沪深京 A 股数据
   const [stockInfoA, setStockInfoA] = useState<StockInfoA[]>([]);
@@ -63,9 +64,9 @@ const StockListPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockInfoA();
-      setStockInfoA(result);
+      setStockInfoA(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -83,9 +84,9 @@ const StockListPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockInfoSH(board);
-      setStockInfoSH(result);
+      setStockInfoSH(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -103,9 +104,9 @@ const StockListPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockInfoSZ(board);
-      setStockInfoSZ(result);
+      setStockInfoSZ(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -123,9 +124,9 @@ const StockListPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockInfoBJ();
-      setStockInfoBJ(result);
+      setStockInfoBJ(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -166,14 +167,14 @@ const StockListPage: React.FC = () => {
     fetchStockInfoSZ(szBoard);
   };
 
-  // 搜索过滤
+  // 搜索过滤（使用 deferredSearchTerm 优化性能）
   const filterData = <T extends object>(data: T[], fields: (keyof T)[]): T[] => {
-    if (!searchTerm) return data;
+    if (!deferredSearchTerm) return data;
     
     return data.filter(item => {
       return fields.some(field => {
         const value = item[field];
-        return value?.toString().toLowerCase().includes(searchTerm.toLowerCase());
+        return value?.toString().toLowerCase().includes(deferredSearchTerm.toLowerCase());
       });
     });
   };

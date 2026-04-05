@@ -1,10 +1,5 @@
 """
-TickFlow 数据源测试脚本
-
-测试 TickFlow 数据源的各项功能
-
-运行方式：
-    python test_tickflow.py
+TickFlow API 连接测试脚本
 """
 import asyncio
 import sys
@@ -13,182 +8,83 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.adapters.tickflow_adapter import TickFlowAdapter, TICKFLOW_AVAILABLE
-from app.adapters.factory import DataSourceFactory, DataSourceManager
 from app.config import settings
+from app.adapters.tickflow_adapter import TickFlowAdapter
 
 
-async def test_tickflow_adapter():
-    """测试 TickFlow 适配器"""
+async def test_tickflow():
+    """测试 TickFlow 连接"""
     print("=" * 60)
-    print("TickFlow 数据源测试")
-    print("=" * 60)
-    
-    # 检查是否安装
-    if not TICKFLOW_AVAILABLE:
-        print("❌ tickflow 库未安装，请先运行：pip install 'tickflow[all]' --upgrade")
-        return
-    
-    print("✅ tickflow 库已安装")
-    
-    # 创建适配器
-    config = {}
-    if hasattr(settings, 'TICKFLOW_API_KEY') and settings.TICKFLOW_API_KEY:
-        config['api_key'] = settings.TICKFLOW_API_KEY
-        print(f"✅ 使用 API Key: {settings.TICKFLOW_API_KEY[:10]}...")
-    else:
-        print("⚠️  未配置 API Key，将使用免费服务")
-    
-    adapter = TickFlowAdapter(config)
-    
-    # 初始化
-    print("\n初始化 TickFlow...")
-    success = await adapter.initialize()
-    if not success:
-        print("❌ TickFlow 初始化失败")
-        return
-    
-    print(f"✅ TickFlow 初始化成功（免费服务：{adapter.is_free_service}）")
-    
-    # 测试 1：获取股票信息
-    print("\n" + "-" * 60)
-    print("测试 1：获取股票信息")
-    print("-" * 60)
-    
-    test_codes = ["600000", "000001", "300750"]
-    for code in test_codes:
-        try:
-            info = await adapter.get_stock_info(code)
-            if info:
-                print(f"✅ {code}: {info.name} ({info.market})")
-            else:
-                print(f"❌ {code}: 未找到信息")
-        except Exception as e:
-            print(f"❌ {code}: 获取失败 - {e}")
-    
-    # 测试 2：获取日 K 线数据
-    print("\n" + "-" * 60)
-    print("测试 2：获取日 K 线数据")
-    print("-" * 60)
-    
-    for code in ["600000"]:
-        try:
-            klines = await adapter.get_kline(code, period='daily')
-            if klines:
-                print(f"✅ {code}: 获取 {len(klines)} 条日 K 线数据")
-                # 显示最近 5 条
-                for kline in klines[-5:]:
-                    print(f"   {kline.date}: 开={kline.open:.2f} 收={kline.close:.2f} 高={kline.high:.2f} 低={kline.low:.2f}")
-            else:
-                print(f"❌ {code}: K 线数据为空")
-        except Exception as e:
-            print(f"❌ {code}: 获取 K 线失败 - {e}")
-    
-    # 测试 3：获取周 K 线数据
-    print("\n" + "-" * 60)
-    print("测试 3：获取周 K 线数据")
-    print("-" * 60)
-    
-    for code in ["600000"]:
-        try:
-            klines = await adapter.get_weekly_kline(code)
-            if klines:
-                print(f"✅ {code}: 获取 {len(klines)} 条周 K 线数据")
-                # 显示最近 3 条
-                for kline in klines[-3:]:
-                    print(f"   {kline.date}: 开={kline.open:.2f} 收={kline.close:.2f}")
-            else:
-                print(f"❌ {code}: 周 K 线数据为空")
-        except Exception as e:
-            print(f"❌ {code}: 获取周 K 线失败 - {e}")
-    
-    # 测试 4：获取实时行情（仅完整服务）
-    print("\n" + "-" * 60)
-    print("测试 4：获取实时行情")
-    print("-" * 60)
-    
-    if adapter.is_free_service:
-        print("⚠️  免费服务不支持实时行情，跳过此测试")
-    else:
-        for code in ["600000", "000001"]:
-            try:
-                quote = await adapter.get_realtime_quote(code)
-                if quote:
-                    print(f"✅ {code}: {quote.get('name', '')} - 最新价：{quote.get('price', 0):.2f}")
-                else:
-                    print(f"❌ {code}: 实时行情为空")
-            except Exception as e:
-                print(f"❌ {code}: 获取实时行情失败 - {e}")
-    
-    # 测试 5：分钟级 K 线（仅完整服务）
-    print("\n" + "-" * 60)
-    print("测试 5：获取分钟级 K 线（5 分钟）")
-    print("-" * 60)
-    
-    if adapter.is_free_service:
-        print("⚠️  免费服务不支持分钟级 K 线，跳过此测试")
-    else:
-        for code in ["600000"]:
-            try:
-                klines = await adapter.get_kline(code, period='5m')
-                if klines:
-                    print(f"✅ {code}: 获取 {len(klines)} 条 5 分钟 K 线数据")
-                else:
-                    print(f"❌ {code}: 分钟 K 线数据为空")
-            except Exception as e:
-                print(f"❌ {code}: 获取分钟 K 线失败 - {e}")
-    
-    # 关闭
-    await adapter.close()
-    
-    print("\n" + "=" * 60)
-    print("测试完成！")
-    print("=" * 60)
-
-
-async def test_data_source_manager():
-    """测试通过 DataSourceManager 调用 TickFlow"""
-    print("\n" + "=" * 60)
-    print("通过 DataSourceManager 测试 TickFlow")
+    print("TickFlow API 连接测试")
     print("=" * 60)
     
-    # 初始化数据源管理器
-    manager = DataSourceManager()
-    await manager.initialize()
+    # 1. 检查配置
+    print("\n1. 配置检查:")
+    print(f"   TICKFLOW_API_KEY: {'已配置' if settings.TICKFLOW_API_KEY else '未配置'}")
+    if settings.TICKFLOW_API_KEY:
+        # 显示部分 API Key（安全考虑）
+        key = settings.TICKFLOW_API_KEY
+        print(f"   API Key: {key[:10]}...{key[-8:]}")
     
-    # 获取 TickFlow 适配器
+    # 2. 初始化适配器
+    print("\n2. 初始化 TickFlow 适配器:")
+    adapter = TickFlowAdapter()
+    
     try:
-        adapter = manager.get_adapter("tickflow")
-        print(f"✅ 成功获取 TickFlow 适配器")
-        
-        # 测试获取股票信息
-        info = await adapter.get_stock_info("600000")
-        if info:
-            print(f"✅ 通过 manager 获取股票信息：{info.name}")
+        success = await adapter.initialize()
+        if success:
+            print("   ✓ TickFlow 初始化成功")
+            print(f"   使用服务类型: {'完整服务' if not adapter.is_free_service else '免费服务'}")
         else:
-            print("❌ 通过 manager 获取股票信息失败")
-        
-        # 测试获取 K 线
-        klines = await adapter.get_kline("600000", period='daily')
-        if klines:
-            print(f"✅ 通过 manager 获取 K 线：{len(klines)}条")
-        else:
-            print("❌ 通过 manager 获取 K 线失败")
-        
+            print("   ✗ TickFlow 初始化失败")
+            return
     except Exception as e:
-        print(f"❌ 获取 TickFlow 适配器失败：{e}")
+        print(f"   ✗ 初始化异常: {e}")
+        return
     
-    await manager.close()
-
-
-async def main():
-    """主函数"""
-    # 测试 1：直接测试适配器
-    await test_tickflow_adapter()
+    # 3. 测试获取股票信息
+    print("\n3. 测试获取股票信息 (600000 浦发银行):")
+    try:
+        stock_info = await adapter.get_stock_info("600000")
+        if stock_info:
+            print(f"   ✓ 成功获取股票信息")
+            print(f"   代码: {stock_info.code}")
+            print(f"   名称: {stock_info.name}")
+            print(f"   市场: {stock_info.market}")
+        else:
+            print("   ✗ 未获取到股票信息")
+    except Exception as e:
+        print(f"   ✗ 获取股票信息失败: {e}")
     
-    # 测试 2：通过 DataSourceManager 测试
-    await test_data_source_manager()
+    # 4. 测试获取 K 线数据
+    print("\n4. 测试获取 K 线数据 (600000 近5日):")
+    try:
+        kline_data = await adapter.get_kline(
+            code="600000",
+            start_date="2025-03-01",
+            end_date="2025-03-05",
+            period="daily"
+        )
+        if kline_data:
+            print(f"   ✓ 成功获取 K 线数据")
+            print(f"   数据条数: {len(kline_data)}")
+            if len(kline_data) > 0:
+                first = kline_data[0]
+                print(f"   最新数据: {first.date} 收盘: {first.close}")
+        else:
+            print("   ✗ 未获取到 K 线数据")
+    except Exception as e:
+        print(f"   ✗ 获取 K 线数据失败: {e}")
+    
+    # 5. 关闭连接
+    print("\n5. 关闭连接:")
+    await adapter.close()
+    print("   ✓ TickFlow 连接已关闭")
+    
+    print("\n" + "=" * 60)
+    print("测试完成")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(test_tickflow())

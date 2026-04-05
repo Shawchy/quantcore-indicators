@@ -22,8 +22,8 @@ class MarketTurnoverService:
     def __init__(self):
         # 反风控设置
         self._request_delay_range = (2.0, 4.0)  # 请求间隔（秒）
-        self._retry_base_delay = 3.0  # 重试基础延迟（秒）
-        self._max_retries = 5  # 最大重试次数
+        self._retry_base_delay = 3.0  # 增加基础延迟到 3 秒
+        self._max_retries = 2  # 减少重试次数到 2 次
         self._consecutive_failures = 0  # 连续失败次数
         self._adaptive_delay_enabled = True  # 启用自适应延迟
         
@@ -47,10 +47,10 @@ class MarketTurnoverService:
         
         # 交易时段（9:30-11:30, 13:00-15:00）使用较长延迟
         if (9 <= current_hour <= 11) or (13 <= current_hour <= 14):
-            return (2.0, 4.0)
+            return (4.0, 7.0)  # 增加延迟
         # 非交易时段使用较短延迟
         else:
-            return (1.0, 2.0)
+            return (3.0, 5.0)  # 增加延迟
     
     async def _rate_limit(self):
         """异步请求限流"""
@@ -250,12 +250,19 @@ class MarketTurnoverService:
         """获取并保存最新成交额数据（带反风控策略）"""
         try:
             from app.services.trading_calendar import trading_calendar
+            from app.adapters.factory import DataSourceFactory
+            
             trade_date = await trading_calendar.get_latest_trading_day()
             
             existing = await MarketTurnoverService.get_turnover_data(session, trade_date)
             if existing:
                 logger.info(f"数据库已有 {trade_date} 成交额数据")
                 return existing
+            
+            # 确保凭证注入和 TLS 指纹伪装已启用
+            logger.info("正在确保 akshare 凭证注入和 TLS 指纹伪装...")
+            akshare_adapter = DataSourceFactory.get_adapter('akshare')
+            await akshare_adapter._ensure_credentials()
             
             logger.info(f"从 akshare 获取 {trade_date} 成交额数据（带反风控）...")
             

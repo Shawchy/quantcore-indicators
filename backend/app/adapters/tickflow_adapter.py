@@ -184,9 +184,16 @@ class TickFlowAdapter(BaseDataAdapter):
     
     async def close(self) -> None:
         """关闭 TickFlow 客户端"""
-        self._tf = None
-        self._is_initialized = False
-        logger.info("TickFlow 已关闭")
+        try:
+            # 关闭底层会话
+            if self._tf and hasattr(self._tf, '_session'):
+                await self._tf._session.close()
+        except Exception:
+            pass
+        finally:
+            self._tf = None
+            self._is_initialized = False
+            logger.info("TickFlow 已关闭")
     
     @property
     def is_free_service(self) -> bool:
@@ -228,13 +235,21 @@ class TickFlowAdapter(BaseDataAdapter):
             # if cached:
             #     return cached
             
-            # 获取标的信息
-            instruments = self._tf.instruments.get(symbols=[symbol])
+            # 获取标的信息 - TickFlow 返回的是单个对象或列表
+            result = self._tf.instruments.get(symbol)
             
-            if not instruments or len(instruments) == 0:
+            # 处理返回结果
+            if result is None:
                 return None
             
-            inst = instruments[0]
+            # 如果是字典，直接使用
+            if isinstance(result, dict):
+                inst = result
+            # 如果是列表，取第一个
+            elif isinstance(result, (list, tuple)) and len(result) > 0:
+                inst = result[0]
+            else:
+                return None
             
             # 解析数据
             stock_info = StockBasicInfo(

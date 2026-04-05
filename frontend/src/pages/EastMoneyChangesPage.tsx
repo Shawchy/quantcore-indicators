@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 东方财富盘口异动页面
  */
 import React, { useState, useEffect } from 'react';
@@ -17,14 +17,13 @@ import {
   Badge,
   Spinner,
   Center,
-  VStack,
-  HStack,
+
   Button,
   Grid,
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText,
+
 } from '@chakra-ui/react';
 import { eastMoneyApi, type StockChange, type ChangeType, type MarketChangesSummary } from '@/services/akshare/index';
 
@@ -40,7 +39,7 @@ const EastMoneyChangesPage: React.FC = () => {
     const fetchChangeTypes = async () => {
       try {
         const result = await eastMoneyApi.getChangeTypes();
-        setChangeTypes(result);
+        setChangeTypes(result.data || []);
       } catch (error) {
         console.error('获取异动类型失败:', error);
       }
@@ -53,7 +52,7 @@ const EastMoneyChangesPage: React.FC = () => {
     const fetchSummary = async () => {
       try {
         const result = await eastMoneyApi.getMarketChangesSummary();
-        setSummary(result);
+        setSummary(result.data || null);
       } catch (error) {
         console.error('获取市场异动汇总失败:', error);
       }
@@ -66,7 +65,7 @@ const EastMoneyChangesPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockChanges(type);
-      setChanges(result);
+      setChanges(result.data || []);
     } catch (error) {
       console.error('获取盘口异动数据失败:', error);
     } finally {
@@ -81,7 +80,7 @@ const EastMoneyChangesPage: React.FC = () => {
   // 刷新数据
   const handleRefresh = () => {
     fetchChanges(selectedType);
-    eastMoneyApi.getMarketChangesSummary().then(setSummary);
+    eastMoneyApi.getMarketChangesSummary().then(r => setSummary(r.data || null));
   };
 
   return (

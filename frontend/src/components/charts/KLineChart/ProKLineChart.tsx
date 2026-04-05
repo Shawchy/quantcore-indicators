@@ -19,8 +19,6 @@ interface ProKLineChartProps {
   type?: KLineType
   height?: string
   showVolume?: boolean
-  showIndicators?: boolean
-  indicators?: string[]
 }
 
 export const ProKLineChart: React.FC<ProKLineChartProps> = ({
@@ -28,9 +26,7 @@ export const ProKLineChart: React.FC<ProKLineChartProps> = ({
   loading = false,
   type = 'daily',
   height = '500px',
-  showVolume = true,
-  showIndicators = true,
-  indicators = ['MA', 'MACD', 'RSI']
+  showVolume = true
 }) => {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<any>(null)
@@ -101,20 +97,20 @@ export const ProKLineChart: React.FC<ProKLineChartProps> = ({
     }
 
     // 1. 创建图表实例，使用自定义布局
-    const chart = init(chartRef.current, {
+    const chart = init(chartRef.current as HTMLElement, {
       layout: [
         {
-          type: 'candle',
-          content: ['MA', { name: 'EMA', calcParams: [10, 30] }],
+          type: 'candle' as const,
+          content: ['MA'],
           options: { order: Number.MIN_SAFE_INTEGER }
         },
         ...(showVolume ? [{
-          type: 'indicator',
+          type: 'indicator' as const,
           content: ['VOL'],
           options: { order: 10 }
         }] : []),
         {
-          type: 'xAxis',
+          type: 'xAxis' as const,
           options: { order: 9 }
         }
       ]
@@ -135,16 +131,16 @@ export const ProKLineChart: React.FC<ProKLineChartProps> = ({
     })
 
     // 3. 设置周期
-    const periodMap = {
-      daily: { span: 1, type: 'day' },
-      weekly: { span: 1, type: 'week' },
-      monthly: { span: 1, type: 'month' }
+    const periodMap: Record<string, { span: number; type: 'day' | 'week' | 'month' }> = {
+      daily: { span: 1, type: 'day' as const },
+      weekly: { span: 1, type: 'week' as const },
+      monthly: { span: 1, type: 'month' as const }
     }
     chart.setPeriod(periodMap[type])
 
     // 4. 设置数据加载器
     chart.setDataLoader({
-      getBars: ({ callback }) => {
+      getBars: ({ callback }: { callback: (data: any[]) => void }) => {
         // 如果有数据，返回数据
         if (klineData && klineData.length > 0) {
           console.log('[ProKLineChart] 加载数据:', klineData.length, '条')
@@ -160,7 +156,7 @@ export const ProKLineChart: React.FC<ProKLineChartProps> = ({
     return () => {
       console.log('[ProKLineChart] 销毁图表')
       if (chartInstance.current) {
-        dispose(chartRef.current!)
+        dispose(chartRef.current as unknown as string)
         chartInstance.current = null
       }
     }
@@ -174,7 +170,7 @@ export const ProKLineChart: React.FC<ProKLineChartProps> = ({
     
     // 重新加载数据
     chartInstance.current.setDataLoader({
-      getBars: ({ callback }) => {
+      getBars: ({ callback }: { callback: (data: any[]) => void }) => {
         callback(klineData)
       }
     })

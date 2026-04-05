@@ -17,7 +17,6 @@ interface KLineChartProps {
   showVolume?: boolean
   showIndicators?: boolean
   useWorker?: boolean
-  useWebSocket?: boolean
   onZoom?: (scale: number) => void
   onPan?: (offset: number) => void
 }
@@ -30,7 +29,6 @@ export const KLineChart: React.FC<KLineChartProps> = ({
   showVolume = true,
   showIndicators = true,
   useWorker = true,
-  useWebSocket = true,
   onZoom,
   onPan
 }) => {
@@ -47,8 +45,7 @@ export const KLineChart: React.FC<KLineChartProps> = ({
     code,
     kType,
     indicators,
-    useWorker,
-    useWebSocket
+    useWorker
   })
 
   // 生成渲染数据

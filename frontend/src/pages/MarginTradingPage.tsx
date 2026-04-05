@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 融资融券页面
  * 包含：保证金比例查询、两融账户统计
  */
@@ -87,9 +87,9 @@ const MarginTradingPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginRatioPa(symbol, date);
-      setRatioData(result);
+      setRatioData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -107,9 +107,9 @@ const MarginTradingPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginAccountInfo();
-      setAccountInfoData(result);
+      setAccountInfoData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -131,9 +131,9 @@ const MarginTradingPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginSse(startDate, endDate);
-      setMarginSseData(result);
+      setMarginSseData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -155,9 +155,9 @@ const MarginTradingPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginDetailSse(date);
-      setMarginDetailSseData(result);
+      setMarginDetailSseData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -179,9 +179,9 @@ const MarginTradingPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginSzse(date);
-      setMarginSzseData(result);
+      setMarginSzseData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -203,9 +203,9 @@ const MarginTradingPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginDetailSzse(date);
-      setMarginDetailSzseData(result);
+      setMarginDetailSzseData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 

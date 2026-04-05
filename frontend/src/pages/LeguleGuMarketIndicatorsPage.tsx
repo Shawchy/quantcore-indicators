@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 乐咕乐股市场指标页面
  * 包含：大盘拥挤度、股债利差、巴菲特指标
  */
@@ -14,9 +14,7 @@ import {
   Td,
   TableContainer,
   Button,
-  Input,
-  InputGroup,
-  InputLeftAddon,
+
   Tabs,
   TabList,
   TabPanels,
@@ -60,9 +58,9 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockAConestionLG();
-      setCongestionData(result);
+      setCongestionData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -80,9 +78,9 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockEBSLG();
-      setEbsData(result);
+      setEbsData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -100,9 +98,9 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockBuffettIndexLG();
-      setBuffettData(result);
+      setBuffettData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -130,12 +128,6 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
       fetchBuffettData();
     }
   }, [activeTab]);
-
-  // 获取最新数据
-  const getLatestData = (data: any[]) => {
-    if (data.length === 0) return null;
-    return data[0];
-  };
 
   // 格式化日期显示
   const formatDate = (dateStr: string) => {

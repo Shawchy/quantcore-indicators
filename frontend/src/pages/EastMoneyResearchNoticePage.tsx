@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 东方财富个股研报和公告页面
  */
 import React, { useState, useEffect } from 'react';
@@ -26,7 +26,7 @@ import {
   Tab,
   TabPanel,
   Select,
-  InputRightAddon,
+
   Link,
   useToast,
 } from '@chakra-ui/react';
@@ -49,7 +49,7 @@ const noticeTypes = [
 ];
 
 const EastMoneyResearchNoticePage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   
   // 研报相关状态
@@ -78,9 +78,9 @@ const EastMoneyResearchNoticePage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockResearchReport(code);
-      setResearchReports(result);
+      setResearchReports(result.data || []);
       toast({
-        title: `获取成功，共${result.length}条研报`,
+        title: `获取成功，共${result.data?.length || 0}条研报`,
         status: 'success',
         duration: 2000,
         isClosable: true,
@@ -103,9 +103,9 @@ const EastMoneyResearchNoticePage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockNoticeReport(noticeType, noticeDate);
-      setNotices(result);
+      setNotices(result.data || []);
       toast({
-        title: `获取成功，共${result.length}条公告`,
+        title: `获取成功，共${result.data?.length || 0}条公告`,
         status: 'success',
         duration: 2000,
         isClosable: true,

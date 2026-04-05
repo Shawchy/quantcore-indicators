@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 股东人数及持股集中度页面
  * 展示股东人数变化和持股集中度分析
  */
@@ -50,9 +50,9 @@ const StockHolderPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockHoldNumCNInfo(date);
-      setHolderData(result);
+      setHolderData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 

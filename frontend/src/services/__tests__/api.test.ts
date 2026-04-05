@@ -1,7 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-// axios 被 mock，但需要在模块中导入以启用 mock
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import axios from 'axios'
 import { authApi, stockApi, watchlistApi, sectorApi, type AuthToken } from '../api'
 
 // Mock axios
@@ -21,14 +18,6 @@ vi.mock('axios', () => ({
 }))
 
 describe('API Service', () => {
-  // mockToken 用于类型检查
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const mockToken: AuthToken = {
-    access_token: 'test-access-token',
-    refresh_token: 'test-refresh-token',
-    token_type: 'bearer',
-  }
-
   beforeEach(() => {
     vi.clearAllMocks()
   })

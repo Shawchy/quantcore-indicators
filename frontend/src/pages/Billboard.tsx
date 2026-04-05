@@ -18,11 +18,6 @@ import {
   Alert,
   AlertIcon,
   useColorModeValue,
-  NumberDecrementStepper,
-  NumberIncrementStepper,
-  NumberInput,
-  NumberInputField,
-  NumberInputStepper,
 } from '@chakra-ui/react'
 import { billboardApi } from '../services/api'
 
@@ -53,8 +48,8 @@ const Billboard: React.FC = () => {
     setError(null)
     try {
       const res = await billboardApi.getDaily(date)
-      if (res.success && res.data) {
-        setData(res.data)
+      if ((res as any).success && (res as any).data) {
+        setData((res as any).data)
       } else {
         setData([])
       }

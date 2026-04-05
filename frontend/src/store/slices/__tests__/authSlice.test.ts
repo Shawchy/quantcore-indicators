@@ -4,9 +4,9 @@ import authReducer, {
   logout,
   clearError,
   localLogout,
-  setToken,
-  type AuthState,
+  setToken
 } from '../authSlice'
+import type { AuthState } from '../authSlice'
 
 const initialState: AuthState = {
   user: null,

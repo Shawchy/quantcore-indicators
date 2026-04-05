@@ -47,7 +47,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
           py={2}
           px={3}
         >
-          {formatPrice(item.price)}
+          {item && formatPrice(item.price)}
         </Td>
         <Td 
           color="gray.600" 
@@ -56,7 +56,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
           py={2}
           px={3}
         >
-          {formatVolume(item.volume)}
+          {item && formatVolume(item.volume)}
         </Td>
       </Tr>
     )

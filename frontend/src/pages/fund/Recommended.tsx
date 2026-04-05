@@ -38,12 +38,11 @@ interface RecommendedFund extends FundInfo {
 }
 
 const FundRecommended: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [starFunds, setStarFunds] = useState<RecommendedFund[]>([]);
-  const [steadyFunds, setSteadyFunds] = useState<RecommendedFund[]>([]);
-  const [highElasticFunds, setHighElasticFunds] = useState<RecommendedFund[]>([]);
-  const [valueFunds, setValueFunds] = useState<RecommendedFund[]>([]);
-  const cardHoverBg = useColorModeValue('gray.50', 'gray.700');
+  const [starFunds, setStarFunds] = useState<RecommendedFund[]>([])
+  const [steadyFunds, setSteadyFunds] = useState<RecommendedFund[]>([])
+  const [highElasticFunds, setHighElasticFunds] = useState<RecommendedFund[]>([])
+  const [valueFunds, setValueFunds] = useState<RecommendedFund[]>([])
+  const cardHoverBg = useColorModeValue('gray.50', 'gray.700')
 
   // 模拟数据（实际应从 API 获取）
   useEffect(() => {

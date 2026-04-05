@@ -64,42 +64,47 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
     """性能监控中间件"""
     
     async def dispatch(self, request: Request, call_next) -> Response:
-        # 跳过静态文件和监控端点
         path = request.url.path
-        if path.startswith('/docs') or path.startswith('/redoc') or path.startswith('/openapi.json'):
+        if path.startswith('/docs') or path.startswith('/redoc') or path.startswith('/openapi.json') or path == '/health':
             return await call_next(request)
         
-        # 记录开始时间
         start_time = time.time()
         
-        # 处理请求
-        response = await call_next(request)
+        client_ip = request.client.host if request.client else 'unknown'
+        query_params = str(request.query_params) if request.query_params else ''
         
-        # 计算耗时
-        duration = time.time() - start_time
-        
-        # 记录性能数据
         endpoint = f"{request.method}:{path}"
-        performance_monitor.record_request(endpoint, duration)
+        logger.info(f"API请求开始: {endpoint} | 客户端: {client_ip} | 参数: {query_params}")
         
-        # 记录慢请求
-        if duration > 1.0:
-            logger.warning(
-                f"慢请求：{endpoint} - {duration:.3f}s",
-                extra={
-                    'method': request.method,
-                    'path': path,
-                    'duration': duration,
-                    'client_ip': request.client.host if request.client else 'unknown'
-                }
+        try:
+            response = await call_next(request)
+            
+            duration = time.time() - start_time
+            performance_monitor.record_request(endpoint, duration)
+            
+            status_code = response.status_code
+            
+            if duration > 1.0:
+                logger.warning(
+                    f"慢请求: {endpoint} | 状态: {status_code} | 耗时: {duration:.3f}s | 客户端: {client_ip}"
+                )
+            elif status_code >= 400:
+                logger.warning(
+                    f"请求异常: {endpoint} | 状态: {status_code} | 耗时: {duration:.3f}s | 客户端: {client_ip}"
+                )
+            else:
+                logger.info(f"API请求完成: {endpoint} | 状态: {status_code} | 耗时: {duration:.3f}s")
+            
+            response.headers['X-Process-Time'] = str(duration)
+            
+            return response
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(
+                f"请求异常: {endpoint} | 耗时: {duration:.3f}s | 客户端: {client_ip} | 错误: {str(e)}"
             )
-        else:
-            logger.debug(f"请求：{endpoint} - {duration:.3f}s")
-        
-        # 添加响应头
-        response.headers['X-Process-Time'] = str(duration)
-        
-        return response
+            raise
 
 
 async def get_performance_stats() -> Dict:

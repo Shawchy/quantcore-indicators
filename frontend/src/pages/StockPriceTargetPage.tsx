@@ -16,10 +16,8 @@ import {
   Text,
   Spinner,
   Center,
-  Button,
   Badge,
   useToast,
-  Select,
   Tab,
   Tabs,
   TabList,
@@ -33,7 +31,7 @@ import {
 
 const StockPriceTargetPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState(0);
   const [usData, setUsData] = useState<StockPriceJS[]>([]);
   const [hkData, setHkData] = useState<StockPriceJS[]>([]);
   
@@ -44,9 +42,9 @@ const StockPriceTargetPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockPriceJS('us');
-      setUsData(result);
+      setUsData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条美股数据`, 
+        title: `获取成功，共${result.data?.length || 0}条美股数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -64,9 +62,9 @@ const StockPriceTargetPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockPriceJS('hk');
-      setHkData(result);
+      setHkData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条港股数据`, 
+        title: `获取成功，共${result.data?.length || 0}条港股数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 

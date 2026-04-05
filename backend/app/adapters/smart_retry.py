@@ -112,31 +112,79 @@ class SmartRetryStrategy:
     """
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        config = config or {}
+        
+        # 默认配置
+        default_max_retries = {
+            ErrorType.NETWORK_ERROR: 2,
+            ErrorType.TIMEOUT: 2,
+            ErrorType.SERVER_ERROR: 2,
+            ErrorType.RATE_LIMITED: 1,
+            ErrorType.CONNECTION_CLOSED: 0,
+            ErrorType.TLS_FINGERPRINT: 0,
+            ErrorType.IP_BLOCKED: 0,
+            ErrorType.CLIENT_ERROR: 0,
+        }
+        
+        default_base_wait = {
+            ErrorType.NETWORK_ERROR: 2.0,
+            ErrorType.TIMEOUT: 3.0,
+            ErrorType.SERVER_ERROR: 5.0,
+            ErrorType.RATE_LIMITED: 30.0,
+            ErrorType.CONNECTION_CLOSED: 0,
+            ErrorType.TLS_FINGERPRINT: 0,
+            ErrorType.IP_BLOCKED: 0,
+            ErrorType.CLIENT_ERROR: 0,
+        }
+        
+        # 处理简化的配置格式：如果传入数字，应用到所有可重试的错误类型
+        max_retries_config = config.get('max_retries', {})
+        if isinstance(max_retries_config, int):
+            # 将数字应用到所有可重试的错误类型
+            max_retries_config = {
+                ErrorType.NETWORK_ERROR: max_retries_config,
+                ErrorType.TIMEOUT: max_retries_config,
+                ErrorType.SERVER_ERROR: max_retries_config,
+                ErrorType.RATE_LIMITED: max_retries_config,
+                ErrorType.UNKNOWN: max_retries_config,  # 未知错误也重试
+                ErrorType.CONNECTION_CLOSED: 0,
+                ErrorType.TLS_FINGERPRINT: 0,
+                ErrorType.IP_BLOCKED: 0,
+                ErrorType.CLIENT_ERROR: 0,
+            }
+        else:
+            # 合并配置，确保所有错误类型都有默认值
+            max_retries_config = {**default_max_retries, **max_retries_config}
+            # 确保 UNKNOWN 类型有默认值
+            if ErrorType.UNKNOWN not in max_retries_config:
+                max_retries_config[ErrorType.UNKNOWN] = 2
+        
+        base_wait_config = config.get('base_wait_seconds', {})
+        if isinstance(base_wait_config, (int, float)):
+            base_wait_config = {
+                ErrorType.NETWORK_ERROR: base_wait_config,
+                ErrorType.TIMEOUT: base_wait_config,
+                ErrorType.SERVER_ERROR: base_wait_config,
+                ErrorType.RATE_LIMITED: max(base_wait_config, 30.0),
+                ErrorType.UNKNOWN: base_wait_config,
+                ErrorType.CONNECTION_CLOSED: 0,
+                ErrorType.TLS_FINGERPRINT: 0,
+                ErrorType.IP_BLOCKED: 0,
+                ErrorType.CLIENT_ERROR: 0,
+            }
+        else:
+            # 合并配置，确保所有错误类型都有默认值
+            base_wait_config = {**default_base_wait, **base_wait_config}
+            # 确保 UNKNOWN 类型有默认值
+            if ErrorType.UNKNOWN not in base_wait_config:
+                base_wait_config[ErrorType.UNKNOWN] = 2.0
+        
         self._config = {
-            'max_retries': {
-                ErrorType.NETWORK_ERROR: 2,
-                ErrorType.TIMEOUT: 2,
-                ErrorType.SERVER_ERROR: 2,
-                ErrorType.RATE_LIMITED: 1,
-                ErrorType.CONNECTION_CLOSED: 0,
-                ErrorType.TLS_FINGERPRINT: 0,
-                ErrorType.IP_BLOCKED: 0,
-                ErrorType.CLIENT_ERROR: 0,
-            },
-            'base_wait_seconds': {
-                ErrorType.NETWORK_ERROR: 2.0,
-                ErrorType.TIMEOUT: 3.0,
-                ErrorType.SERVER_ERROR: 5.0,
-                ErrorType.RATE_LIMITED: 30.0,
-                ErrorType.CONNECTION_CLOSED: 0,
-                ErrorType.TLS_FINGERPRINT: 0,
-                ErrorType.IP_BLOCKED: 0,
-                ErrorType.CLIENT_ERROR: 0,
-            },
-            'jitter_range': (0.8, 1.2),
-            'exponential_backoff': True,
-            'max_wait_seconds': 60.0,
-            **(config or {})
+            'max_retries': max_retries_config,
+            'base_wait_seconds': base_wait_config,
+            'jitter_range': config.get('jitter_range', (0.8, 1.2)),
+            'exponential_backoff': config.get('exponential_backoff', True),
+            'max_wait_seconds': config.get('max_wait_seconds', 60.0),
         }
         
         self._retry_counts: Dict[str, int] = {}

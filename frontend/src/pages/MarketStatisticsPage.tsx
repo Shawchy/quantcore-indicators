@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 市场统计页面
  * 包含：创新高/新低统计、破净股统计
  */
@@ -74,9 +74,9 @@ const MarketStatisticsPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockAHighLowStatistics(hlSymbol);
-      setHighLowData(result);
+      setHighLowData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -94,9 +94,9 @@ const MarketStatisticsPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockABelowNetAssetStatistics(bnSymbol);
-      setBelowNetAssetData(result);
+      setBelowNetAssetData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 

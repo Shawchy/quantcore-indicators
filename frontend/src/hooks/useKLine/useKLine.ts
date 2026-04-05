@@ -15,7 +15,6 @@ interface UseKLineOptions {
   indicators?: IndicatorType[]
   adjust?: 'qfq' | 'hfq' | 'no'
   useWorker?: boolean
-  useWebSocket?: boolean
   useCache?: boolean
   enabled?: boolean
 }
@@ -27,7 +26,6 @@ export function useKLine(options: UseKLineOptions): UseKLineReturn {
     indicators = ['MA', 'MACD', 'RSI'],
     adjust = 'qfq',
     useWorker = true,
-    useWebSocket = true,
     useCache = true,
     enabled = true
   } = options
@@ -39,7 +37,6 @@ export function useKLine(options: UseKLineOptions): UseKLineReturn {
     loading,
     error,
     refetch,
-    metadata
   } = useKLineData({
     code,
     kType,
@@ -53,7 +50,7 @@ export function useKLine(options: UseKLineOptions): UseKLineReturn {
   const {
     indicators: calculatedIndicators,
     calculating,
-    calculate
+    // calculate - 暂时不需要
   } = useKLineCalc({
     data,
     indicators,
@@ -64,7 +61,6 @@ export function useKLine(options: UseKLineOptions): UseKLineReturn {
   const {
     renderData,
     rendering,
-    config
   } = useKLineRender({
     data,
     indicators: backendIndicators || calculatedIndicators
@@ -90,7 +86,10 @@ export function useKLine(options: UseKLineOptions): UseKLineReturn {
     rendering,
     error,
     refresh: refetch,
-    calculate
+    calculate: async (_: IndicatorType[]) => {
+      // 目前指标计算主要由后端完成，前端暂不需要额外计算
+      // 保留此函数用于未来扩展
+    },
   }
 }
 

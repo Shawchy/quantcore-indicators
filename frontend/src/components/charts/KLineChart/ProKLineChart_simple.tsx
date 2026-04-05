@@ -16,18 +16,12 @@ interface ProKLineChartProps {
   loading?: boolean
   type?: KLineType
   height?: string
-  showVolume?: boolean
-  showIndicators?: boolean
-  indicators?: string[]
 }
 
 export const ProKLineChart: React.FC<ProKLineChartProps> = ({
   data = [],
   loading = false,
   height = '400px',
-  showVolume = true,
-  showIndicators = true,
-  indicators = ['MA', 'MACD', 'RSI']
 }) => {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<any>(null)

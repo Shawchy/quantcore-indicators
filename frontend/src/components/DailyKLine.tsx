@@ -141,18 +141,18 @@ const DailyKLine: React.FC<DailyKLineProps> = ({
 
 
   // 计算移动平均线
-  const calculateMA = (data: KLineData[], period: number): (number | '-')[] => {
-    const result: (number | '-')[] = []
-    for (let i = 0; i < data.length; i++) {
-      if (i < period - 1) {
-        result.push('-')
-        continue
-      }
-      const sum = data.slice(i - period + 1, i + 1).reduce((s, d) => s + d.close, 0)
-      result.push(+(sum / period).toFixed(2))
-    }
-    return result
-  }
+  // const calculateMA = (data: KLineData[], period: number): (number | '-')[] => {
+  //   const result: (number | '-')[] = []
+  //   for (let i = 0; i < data.length; i++) {
+  //     if (i < period - 1) {
+  //       result.push('-')
+  //       continue
+  //     }
+  //     const sum = data.slice(i - period + 1, i + 1).reduce((s, d) => s + d.close, 0)
+  //     result.push(+(sum / period).toFixed(2))
+  //   }
+  //   return result
+  // }
 
   // 格式化数据
   const formatPrice = (price: number) => price.toFixed(2)

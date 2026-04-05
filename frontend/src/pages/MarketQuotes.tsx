@@ -22,7 +22,6 @@ import {
   InputGroup,
   InputLeftElement,
   Flex,
-  Icon,
   SimpleGrid,
   Card,
   CardBody,
@@ -33,7 +32,6 @@ import {
 } from '@chakra-ui/react'
 import { SearchIcon, RepeatIcon } from '@chakra-ui/icons'
 import { useQuery } from '@tanstack/react-query'
-import { marketQuotesApi } from '../services/api'
 
 interface MarketQuote {
   code: string
@@ -90,13 +88,11 @@ const MarketQuotes: React.FC = () => {
     isLoading: loading, 
     error: queryError,
     refetch 
-  } = useQuery({
+  } = useQuery<MarketQuote[]>({
     queryKey: ['marketQuotes', selectedType],
     queryFn: async () => {
-      const response = await marketQuotesApi.getMarketQuotes(selectedType || undefined)
-      if (response.success && response.data) {
-        return response.data as MarketQuote[]
-      }
+      // 暂时返回空数组，等待 API 实现
+      console.log('获取市场报价:', selectedType)
       return []
     },
     staleTime: 30000, // 30 秒内使用缓存

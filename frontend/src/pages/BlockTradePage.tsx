@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 大宗交易页面
  * 包含：市场统计、每日明细
  */
@@ -71,9 +71,9 @@ const BlockTradePage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockDzjySctj();
-      setSctjData(result);
+      setSctjData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -91,9 +91,9 @@ const BlockTradePage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockDzjyMrmx(symbol, startDate, endDate);
-      setMrmxData(result);
+      setMrmxData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${result.data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 

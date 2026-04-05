@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 新浪财经财务指标页面
  * 展示 86 个财务指标数据
  */
@@ -43,7 +43,7 @@ const SinaFinancialIndicatorPage: React.FC = () => {
   const [stockCode, setStockCode] = useState('600004');
   const [startYear, setStartYear] = useState('2020');
   const [indicatorData, setIndicatorData] = useState<StockFinancialIndicator[]>([]);
-  const [activeTab, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState(0);
   
   const toast = useToast();
 
@@ -56,9 +56,9 @@ const SinaFinancialIndicatorPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getFinancialIndicator(code, year);
-      setIndicatorData(result);
+      setIndicatorData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 东方财富涨停板行情页面
  */
 import React, { useState, useEffect } from 'react';
@@ -37,7 +37,7 @@ const EastMoneyZtPoolPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getZtPool(selectedDate);
-      setZtStocks(result);
+      setZtStocks(result.data || []);
     } catch (error) {
       console.error('获取涨停股池数据失败:', error);
     } finally {

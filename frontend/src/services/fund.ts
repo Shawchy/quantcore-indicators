@@ -19,6 +19,14 @@ export interface FundInfo {
   description?: string            // 简介
   type?: string                   // 基金类型
   fund_scale?: number             // 基金规模（亿元）
+  rank?: number                   // 同类排行
+  performance?: {                 // 阶段涨跌幅
+    '1w'?: number                 // 近 1 周
+    '1m'?: number                 // 近 1 月
+    '3m'?: number                 // 近 3 月
+    '6m'?: number                 // 近 6 月
+    '1y'?: number                 // 近 1 年
+  }
 }
 
 /** 基金代码信息 */
@@ -35,6 +43,7 @@ export interface FundPositionInfo {
   position_ratio?: number         // 持仓占比（%）
   change?: number                 // 较上期变化（%）
   report_date?: string            // 公开日期
+  ratio?: number                  // 占比（%）
 }
 
 /** 基金历史净值信息 */
@@ -76,6 +85,8 @@ export interface FundAssetsAllocationInfo {
   cash_ratio?: number             // 现金比重（%）
   other_ratio?: number            // 其他比重（%）
   total_scale?: number            // 总规模（亿元）
+  asset_name?: string             // 资产名称
+  ratio?: number                  // 占比（%）
 }
 
 /** 基金列表查询参数 */

@@ -73,7 +73,7 @@ loguru>=0.7.2             # 日志库
 python-dotenv>=1.0.1      # 环境变量管理
 httpx>=0.28.0             # HTTP 客户端
 aiohttp>=3.11.0           # 异步 HTTP 客户端（东方财富数据源需要）
-websockets>=14.1          # WebSocket 支持
+# websockets>=14.1        # WebSocket 支持（已移除）
 # redis>=5.2.0            # Redis 缓存（可选）
 
 # -----------------------------------------------------------------------------

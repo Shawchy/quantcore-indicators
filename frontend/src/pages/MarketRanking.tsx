@@ -10,7 +10,7 @@ import {
 import { RepeatIcon } from '@chakra-ui/icons'
 import { useQuery } from '@tanstack/react-query'
 import { marketApi } from '../services/api'
-import MarketQuotesWS from '../components/MarketQuotesWS'
+import MarketQuotes from './MarketQuotes'
 import type { MarketRankingData, MarketOverviewData } from '../types'
 import MarketSentimentCard from '../components/MarketSentimentCard'
 import StockRankingTable from '../components/StockRankingTable'
@@ -36,15 +36,17 @@ const MarketRankingPage: React.FC = () => {
   // 使用 React Query 获取市场概览数据（自动缓存和去重）
   const { 
     data: overviewData, 
-    isLoading: loadingOverview,
-    refetch: refetchOverview 
-  } = useQuery({
+    isLoading: loadingOverview
+  } = useQuery<MarketOverviewData>({
     queryKey: ['marketOverview'],
-    queryFn: () => marketApi.getOverview(),
+    queryFn: async () => {
+      const response = await marketApi.getOverview()
+      return response.data as MarketOverviewData
+    },
     staleTime: 30000,  // 30 秒内使用缓存
     gcTime: 120000,    // 缓存 2 分钟
     refetchOnWindowFocus: false,
-    refetchInterval: false, // 禁用轮询，使用 WebSocket
+    refetchInterval: 30000, // 30 秒轮询一次
   })
 
   // 手动刷新
@@ -52,8 +54,13 @@ const MarketRankingPage: React.FC = () => {
     refetchRanking()
   }
 
+  // 获取数据
+  const rankingData = marketData as MarketRankingData | undefined
+  const overview = overviewData as MarketOverviewData | undefined
+  const lastUpdateTime = new Date().toLocaleTimeString()
+
   // 渲染加载状态
-  if (loading && !marketData?.data) {
+  if (loading && !marketData) {
     return (
       <Flex justify="center" align="center" h="400px">
         <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
@@ -62,7 +69,7 @@ const MarketRankingPage: React.FC = () => {
   }
 
   // 渲染错误状态
-  if (rankingError && !marketData?.data) {
+  if (rankingError && !marketData) {
     return (
       <Alert status="error" borderRadius="lg" p={6}>
         <AlertIcon />
@@ -74,10 +81,6 @@ const MarketRankingPage: React.FC = () => {
       </Alert>
     )
   }
-
-  const rankingData = marketData?.data as MarketRankingData | undefined
-  const overview = overviewData?.data as MarketOverviewData | undefined
-  const lastUpdateTime = new Date().toLocaleTimeString()
 
   return (
     <Box>
@@ -210,13 +213,9 @@ const MarketRankingPage: React.FC = () => {
         </GridItem>
       </Grid>
 
-      {/* 市场排行榜 - 使用 WebSocket 实时推送 */}
+      {/* 市场排行榜 */}
       <Box bg="white" p={4} borderRadius="lg" boxShadow="md" mb={4}>
-        <MarketQuotesWS
-          marketTypes={['沪深 A 股']}
-          limit={topN}
-          autoRefresh={true}
-        />
+        <MarketQuotes />
       </Box>
 
       {/* 原有的排行榜表格作为备用 */}

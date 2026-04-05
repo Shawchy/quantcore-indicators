@@ -33,8 +33,7 @@ export function useKLineCalc(options: UseKLineCalcOptions): UseKLineCalcReturn {
 
   // 计算指标
   const calculate = useCallback(async (
-    klineData: KLineData[],
-    indicatorTypes: IndicatorType[]
+    klineData: KLineData[]
   ) => {
     if (!klineData || klineData.length === 0) {
       setCalculatedIndicators(null)
@@ -46,13 +45,13 @@ export function useKLineCalc(options: UseKLineCalcOptions): UseKLineCalcReturn {
 
     try {
       if (useWorker) {
-        // 使用 Worker 处理数据 - 传入K线数据和指标类型
+        // 使用 Worker 处理数据 - 传入 K 线数据和指标类型
         const result = await workerPool.postMessage({
           type: 'PROCESS_DATA',
           data: klineData
         })
 
-        // Worker只处理数据格式化，指标计算由后端完成
+        // Worker 只处理数据格式化，指标计算由后端完成
         // 这里可以添加额外的客户端指标计算逻辑
         setCalculatedIndicators(result)
       } else {

@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any, Tuple, Callable
+from typing import Optional, List, Dict, Any, Tuple, Callable, Union
 import akshare as ak
 import pandas as pd
 from loguru import logger
@@ -52,7 +52,7 @@ class AkShareAdapter(BaseDataAdapter):
         # 反风控设置
         self._request_delay_range = (2.0, 4.0)  # 请求间隔（秒），默认更保守
         self._retry_base_delay = 3.0  # 重试基础延迟（秒）
-        self._max_retries = 5  # 最大重试次数
+        self._max_retries = 2  # 减少重试次数到 2 次
         self._consecutive_failures = 0  # 连续失败次数
         self._adaptive_delay_enabled = True  # 启用自适应延迟
         self._is_initialized = False
@@ -96,34 +96,50 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def _ensure_credentials(self) -> bool:
         """确保凭证有效（懒加载获取）"""
+        logger.info(f"_ensure_credentials 开始，hasattr(_injector)={hasattr(self, '_injector')}")
+        
         if not hasattr(self, '_injector') or self._injector is None:
+            logger.warning("_injector 不存在")
             return False
         
-        # 如果已有有效凭证，跳过
+        logger.info(f"检查 _is_patched={self._injector._is_patched}")
         if self._injector._is_patched:
+            logger.info("凭证已注入，跳过获取")
             return True
         
-        # 首次获取凭证
-        try:
-            logger.info("正在获取凭证（首次请求）...")
+        async with self._injector._init_lock:
+            logger.info(f"✅ 获取到锁，检查 _is_patched={self._injector._is_patched}")
+            if self._injector._is_patched:
+                logger.info("凭证已注入（并发检查），跳过获取")
+                return True
             
-            # 初始化 Playwright（懒加载）
-            if not await self._injector.initialize():
-                logger.warning("Playwright 初始化失败，使用普通模式")
+            logger.info("🔧 开始初始化凭证注入...")
+            try:
+                logger.info("正在获取凭证（首次请求）...")
+                
+                init_result = await self._injector.initialize()
+                logger.info(f"injector.initialize() 返回：{init_result}")
+                
+                if not init_result:
+                    logger.warning("Playwright 初始化失败，使用普通模式")
+                    return False
+                
+                logger.info("正在获取凭证...")
+                fetch_result = await self._injector.fetch_credentials('eastmoney.com')
+                logger.info(f"injector.fetch_credentials() 返回：{fetch_result}")
+                
+                logger.info("正在进行 TLS 指纹伪装...")
+                patch_result = self._injector.patch_requests_with_tls()
+                logger.info(f"✅ TLS 指纹伪装结果：{patch_result}")
+                
+                logger.info("✅ 凭证获取并注入成功")
+                return True
+                
+            except Exception as e:
+                logger.warning(f"❌ 获取凭证失败：{e}，使用普通模式")
+                import traceback
+                logger.error(traceback.format_exc())
                 return False
-            
-            # 获取凭证
-            await self._injector.fetch_credentials('eastmoney.com')
-            
-            # 注入 TLS 指纹
-            self._injector.patch_requests_with_tls()
-            
-            logger.info("凭证获取并注入成功")
-            return True
-            
-        except Exception as e:
-            logger.warning(f"获取凭证失败：{e}，使用普通模式")
-            return False
     
     async def close(self) -> None:
         self._is_initialized = False
@@ -423,21 +439,18 @@ class AkShareAdapter(BaseDataAdapter):
     async def initialize(self) -> bool:
         """初始化 AkShare 适配器，集成凭证注入和 TLS 指纹伪装"""
         try:
-            # 集成凭证注入器（带 TLS 指纹伪装）
-            from .credential_injector import CredentialInjector
+            from .credential_injector import get_global_injector
             
-            self._injector = CredentialInjector({
+            self._injector = await get_global_injector({
                 'tls_patch_mode': 'curl_cffi',
-                'impersonate': 'chrome120',
+                'impersonate': 'chrome131',  # 更新到最新的 Chrome 131
                 'headless': True,
             })
             
-            # 懒加载：不立即初始化 Playwright，仅在需要时获取凭证
-            # 懒加载 HybridTLSClient（仅在需要时初始化）
             self._hybrid_client: Optional[HybridTLSClient] = None
             
             logger.info("AkShare 适配器初始化成功（凭证注入模式待命 + 智能重试）")
-            logger.info(f"  - TLS 指纹：curl_cffi (chrome120)")
+            logger.info(f"  - TLS 指纹：curl_cffi (chrome131)")
             logger.info(f"  - 智能重试：已启用（自动切换模式）")
             logger.info(f"  - 降级方案：HybridTLSClient（懒加载，tls-client → curl_cffi → Playwright）")
             logger.info(f"  - 请求频率：自适应延迟（根据时间段和失败次数调整）")
@@ -464,6 +477,10 @@ class AkShareAdapter(BaseDataAdapter):
             logger.info("HybridTLSClient 初始化完成")
         
         logger.info("检测到 TLS 指纹错误，降级到 HybridTLSClient...")
+        
+        # 添加延迟，避免重试过快
+        import asyncio
+        await asyncio.sleep(3.0)  # 延迟 3 秒
         
         try:
             result = await self._hybrid_client.get(
@@ -1582,3 +1599,109 @@ class AkShareAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"获取东方财富行业板块成份股失败：{e}")
             return []
+    
+    # ========== 基金 API ==========
+    
+    async def get_fund_base_info(
+        self,
+        fund_codes: Union[str, List[str]]
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """获取基金基本信息（使用 akshare）
+        
+        Args:
+            fund_codes: 6 位基金代码或多个 6 位基金代码构成的列表
+                示例：'161725' 或 ['161725', '005827']
+        
+        Returns:
+            单只基金返回字典，多只基金返回字典列表
+        """
+        try:
+            # 处理单只基金
+            if isinstance(fund_codes, str):
+                code = fund_codes.strip()
+                cache_key = self._get_cache_key('fund_info', code=code)
+                cached = self._get_from_cache(cache_key, 'fund_info')
+                if cached:
+                    return cached
+                
+                # 频率控制
+                await self._rate_limit()
+                
+                # 使用 akshare 获取基金信息
+                import akshare as ak
+                df = ak.fund_open_fund_info_em(fund=code)
+                
+                if df is None or (hasattr(df, 'empty') and df.empty):
+                    return None
+                
+                # 解析数据
+                row = df.iloc[0] if len(df) > 0 else None
+                if row is None:
+                    return None
+                
+                fund_info = {
+                    'code': code,
+                    'name': str(row.get('基金简称', '')),
+                    'establish_date': str(row.get('成立日期', '')),
+                    'change_pct': float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None,
+                    'net_asset_value': float(row.get('单位净值', 0)) if pd.notna(row.get('单位净值')) else None,
+                    'fund_company': str(row.get('基金公司', '')),
+                    'nav_update_date': str(row.get('净值日期', '')),
+                    'description': ''
+                }
+                
+                self._save_to_cache(cache_key, fund_info, 'fund_info')
+                logger.info(f"获取基金 {code} 基本信息成功")
+                return fund_info
+            
+            # 处理多只基金（列表）
+            else:
+                valid_codes = [c.strip() for c in fund_codes if c and len(c.strip()) >= 6]
+                
+                if not valid_codes:
+                    return []
+                
+                cache_key = self._get_cache_key('fund_info_batch', codes=','.join(sorted(valid_codes)))
+                cached = self._get_from_cache(cache_key, 'fund_info')
+                if cached:
+                    return cached
+                
+                # 频率控制
+                await self._rate_limit()
+                
+                # 批量获取基金信息
+                import akshare as ak
+                fund_list = []
+                for code in valid_codes:
+                    try:
+                        df = ak.fund_open_fund_info_em(fund=code)
+                        if df is not None and len(df) > 0:
+                            row = df.iloc[0]
+                            fund_info = {
+                                'code': code,
+                                'name': str(row.get('基金简称', '')),
+                                'establish_date': str(row.get('成立日期', '')),
+                                'change_pct': float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None,
+                                'net_asset_value': float(row.get('单位净值', 0)) if pd.notna(row.get('单位净值')) else None,
+                                'fund_company': str(row.get('基金公司', '')),
+                                'nav_update_date': str(row.get('净值日期', '')),
+                                'description': ''
+                            }
+                            fund_list.append(fund_info)
+                    except Exception as e:
+                        logger.error(f"获取基金 {code} 信息失败：{e}")
+                        continue
+                
+                self._save_to_cache(cache_key, fund_list, 'fund_info')
+                logger.info(f"获取基金基本信息成功：{len(fund_list)}条")
+                return fund_list
+        
+        except Exception as e:
+            logger.error(f"获取基金基本信息失败 {fund_codes}: {e}")
+            # 返回空列表而不是 None，避免前端解析错误
+            if isinstance(fund_codes, str):
+                # 单只基金返回空字典
+                return {'code': fund_codes, 'name': '', 'establish_date': '', 'change_pct': None, 'net_asset_value': None, 'fund_company': '', 'nav_update_date': '', 'description': ''}
+            else:
+                # 多只基金返回空列表
+                return []

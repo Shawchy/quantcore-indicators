@@ -36,13 +36,12 @@ import {
 } from '@chakra-ui/react'
 import { FiArrowLeft } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
-import { stockApi, realtimeApi, boardApi, capitalFlowApi, shareholderApi } from '../services/api'
+import { stockApi, realtimeApi, boardApi } from '../services/api'
 import RealtimeQuotePanel from '../components/RealtimeQuote'
 import RealtimeQuoteWS from '../components/RealtimeQuoteWS'
 import TickDataTable from '../components/TickDataTable'
 import { ProKLineChart as KLineChart } from '../components/charts/KLineChart'
-import { IndicatorChart } from '../components/KLineChart'
-import type { RealtimeQuoteData, TickData, StockBasic, KLineData, TechnicalIndicator, RealtimeQuote } from '../types'
+import type { RealtimeQuoteData, TickData, StockBasic, RealtimeQuote } from '../types'
 import { useEffect, useState } from 'react'
 
 const queryEnabled = (code: string | undefined, valid: boolean) => Boolean(code && valid)
@@ -52,7 +51,7 @@ const StockDetail = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
-  const [wsQuoteData, setWsQuoteData] = useState<RealtimeQuoteData | null>(null)
+  const [wsQuoteData] = useState<RealtimeQuoteData | null>(null)
   
   // 判断是否来自自选股页面
   const isFromWatchlist = location.state?.from === 'watchlist'
@@ -84,7 +83,7 @@ const StockDetail = () => {
     enabled,
   })
 
-  const { data: indicatorData, isLoading: indicatorLoading } = useQuery({
+  const { data: indicatorData } = useQuery({
     queryKey: ['stockIndicators', code],
     queryFn: () => stockApi.getIndicators(code!),
     enabled,
@@ -97,16 +96,16 @@ const StockDetail = () => {
     refetchInterval: 30000,
   })
 
-  // 使用 WebSocket 实时推送替代 HTTP 轮询
-  const { data: realtimeQuoteData, isLoading: quoteLoading, error: quoteError } = useQuery<RealtimeQuoteData>({
+  // 实时行情数据
+  const { data: realtimeQuoteData, isLoading: quoteLoading } = useQuery<RealtimeQuoteData>({
     queryKey: ['realtimeQuote', code],
     queryFn: () => realtimeApi.getQuote(code!) as unknown as Promise<RealtimeQuoteData>,
     enabled,
-    refetchInterval: false,  // 禁用轮询，使用 WebSocket
+    refetchInterval: 30000,  // 30 秒轮询一次
     staleTime: 5 * 60 * 1000,  // 5 分钟内有效
   })
 
-  const { data: tickData, isLoading: tickLoading, error: tickError } = useQuery<TickData>({
+  const { data: tickData, isLoading: tickLoading } = useQuery<TickData>({
     queryKey: ['tickData', code],
     queryFn: () => realtimeApi.getTickData(code!, 'dc', 100) as unknown as Promise<TickData>,
     enabled,
@@ -118,18 +117,6 @@ const StockDetail = () => {
   const { data: boardData } = useQuery({
     queryKey: ['stockBoards', code],
     queryFn: () => boardApi.getStockBoards(code!),
-    enabled,
-  })
-
-  const { data: capitalFlowData } = useQuery({
-    queryKey: ['stockCapitalFlow', code],
-    queryFn: () => capitalFlowApi.getStockHistory(code!),
-    enabled,
-  })
-
-  const { data: shareholderData } = useQuery({
-    queryKey: ['stockShareholders', code],
-    queryFn: () => shareholderApi.getTop10(code!),
     enabled,
   })
   
@@ -218,8 +205,10 @@ const StockDetail = () => {
   
   const indicators = ((indicatorData as any)?.data) || []
   const boards = ((boardData as any)?.data) || []
-  const capitalFlows = ((capitalFlowData as any)?.data) || []
-  const shareholders = ((shareholderData as any)?.data) || []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const capitalFlows: any[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const shareholders: any[] = []
 
   // 调试日志
   useEffect(() => {
@@ -229,19 +218,20 @@ const StockDetail = () => {
     }
   }, [klines])
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getKlineOption = () => {
-    if (!klines.length) {
-      return {
-        title: {
-          text: '暂无数据',
-          left: 'center',
-          top: 'center',
-          textStyle: { color: '#a0aec0', fontSize: 14 }
-        },
-        xAxis: { show: false },
-        yAxis: { show: false }
-      }
-    }
+  //   if (!klines.length) {
+  //     return {
+  //       title: {
+  //         text: '暂无数据',
+  //         left: 'center',
+  //         top: 'center',
+  //         textStyle: { color: '#a0aec0', fontSize: 14 }
+  //       },
+  //       xAxis: { show: false },
+  //       yAxis: { show: false }
+  //     }
+  //   }
 
     const dates = klines.map((k: any) => k.date)
     const ohlc = klines.map((k: any) => [k.open, k.close, k.low, k.high])
@@ -302,6 +292,7 @@ const StockDetail = () => {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getWeeklyKlineOption = () => {
     if (!weeklyKlines.length) {
       return {
@@ -375,6 +366,7 @@ const StockDetail = () => {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getMonthlyKlineOption = () => {
     if (!monthlyKlines.length) {
       return {
@@ -448,6 +440,7 @@ const StockDetail = () => {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getIndicatorOption = () => {
     if (!indicators.length) {
       return {
@@ -636,38 +629,26 @@ const StockDetail = () => {
         </CardBody>
       </Card>
 
-      {/* 实时盘口 - 使用 WebSocket 实时推送 */}
+      {/* 实时盘口 */}
       <Card>
         <CardHeader pb={2}>
           <Flex justify="space-between" align="center">
             <Heading size="sm" color="light.text">
               实时盘口
             </Heading>
-            <HStack spacing={2}>
-              {wsQuoteData && (
-                <Badge fontSize="xs" colorScheme="green">
-                  WebSocket 实时更新
-                </Badge>
-              )}
-              {realtimeQuoteData && (
-                <Badge fontSize="xs" colorScheme="blue">
-                  更新：{realtimeQuoteData.update_time}
-                </Badge>
-              )}
-            </HStack>
+            {realtimeQuoteData && (
+              <Badge fontSize="xs" colorScheme="blue">
+                更新：{realtimeQuoteData.update_time}
+              </Badge>
+            )}
           </Flex>
         </CardHeader>
         <CardBody>
-          {/* 优先使用 WebSocket 数据，否则降级到 HTTP 数据 */}
-          {enabled && wsQuoteData ? (
-            <RealtimeQuoteWS code={code!} name={stock?.name} />
-          ) : (
-            <RealtimeQuotePanel
-              data={realtimeQuoteData ?? null}
-              loading={quoteLoading}
-              error={null}
-            />
-          )}
+          <RealtimeQuotePanel
+            data={realtimeQuoteData ?? null}
+            loading={quoteLoading}
+            error={null}
+          />
         </CardBody>
       </Card>
 
@@ -831,6 +812,7 @@ const StockDetail = () => {
         </Card>
       )}
 
+      {/* 技术指标图表 - 暂时未实现
       <Card>
         <CardHeader pb={2}>
           <Heading size="sm" color="light.text">技术指标</Heading>
@@ -843,6 +825,7 @@ const StockDetail = () => {
           />
         </CardBody>
       </Card>
+      */}
 
       <Card>
         <CardHeader pb={2}>

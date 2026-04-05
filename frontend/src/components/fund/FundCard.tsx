@@ -16,10 +16,8 @@ import {
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText,
   SimpleGrid,
   Divider,
-  Tooltip,
   useColorModeValue,
   Icon,
 } from '@chakra-ui/react';

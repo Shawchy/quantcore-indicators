@@ -3,7 +3,7 @@ import { authApi, type ApiUser, type AuthToken } from '../../services/api'
 
 export type User = ApiUser
 
-interface AuthState {
+export interface AuthState {
   user: User | null
   token: string | null
   refreshToken: string | null

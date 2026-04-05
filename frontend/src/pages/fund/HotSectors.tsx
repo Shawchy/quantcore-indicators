@@ -3,7 +3,7 @@
  * 
  * 展示涨幅领先、资金流入、估值低位等热门板块
  */
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
   Card,
@@ -46,7 +46,6 @@ interface SectorInfo {
 }
 
 const HotSectors: React.FC = () => {
-  const [loading, setLoading] = useState(false);
 
   // 模拟数据（实际应从 API 获取）
   const riseLeadingSectors: SectorInfo[] = [

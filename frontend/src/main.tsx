@@ -28,7 +28,7 @@ if (sentryDsn && sentryDsn !== 'https://your-dsn-key@o0.ingest.sentry.io/0' && s
     tracesSampleRate: 0.1,        // 10% 性能监控
     replaysSessionSampleRate: 0.1, // 10% 会话回放
     replaysOnErrorSampleRate: 1.0, // 100% 错误回放
-    beforeSend(event, hint) {
+    beforeSend(event) {
       // 在发送前过滤某些错误
       if (event.exception?.values?.[0]?.value?.includes('Network request failed')) {
         return null // 忽略网络错误
@@ -56,7 +56,6 @@ const queryClient = new QueryClient({
       retry: 2, // 失败重试 2 次
       staleTime: 30 * 1000, // 30 秒内使用缓存（优化后）
       gcTime: 2 * 60 * 1000, // 缓存 2 分钟（优化后）
-      timeout: 15000, // 15 秒超时
     },
   },
 })

@@ -21,7 +21,7 @@ import {
 } from '@chakra-ui/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dataSourceApi } from '../services/api'
-import { FiDatabase, FiWifi, FiWifiOff, FiRefreshCw } from 'react-icons/fi'
+import { FiWifi, FiWifiOff, FiRefreshCw } from 'react-icons/fi'
 
 interface DataSourceStatus {
   mode: 'online' | 'offline'

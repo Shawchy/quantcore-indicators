@@ -1,13 +1,14 @@
+import sys
+import os
+import warnings
+from pathlib import Path
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
-import sys
-import os
-import warnings
-from pathlib import Path
 
 # 设置 pandas 环境变量以消除 pandas_ta 的警告
 os.environ['PANDAS_MODE'] = 'copy_on_write'
@@ -35,9 +36,7 @@ def setup_logging():
     log_path = Path(settings.LOG_FILE)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # 添加过滤器以过滤 pandas_ta 的警告
     def pandas_warning_filter(record):
-        # 过滤 pandas_ta 的 Pandas4Warning
         if 'Pandas4Warning' in record['message']:
             return False
         if 'copy_on_write' in record['message']:
@@ -57,7 +56,8 @@ def setup_logging():
         retention="7 days",
         level=settings.LOG_LEVEL,
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        filter=pandas_warning_filter
+        filter=pandas_warning_filter,
+        enqueue=True
     )
 
 
@@ -87,61 +87,61 @@ async def lifespan(app: FastAPI):
     # 数据加载器已初始化为按需模式（不自动预加载）
     logger.info("数据加载模式：按需加载（用户请求时才拉取数据）")
     
-    # 缓存预热（可选，提升热点数据访问速度）
-    try:
-        from app.storage.cache_optimizer import cache_optimizer
-        
-        # 定义热门股票（沪深龙头股）
-        HOT_STOCKS = [
-            "600000",  # 浦发银行
-            "600036",  # 招商银行
-            "000001",  # 平安银行
-            "601318",  # 中国平安
-            "600519",  # 贵州茅台
-            "000858",  # 五粮液
-            "601398",  # 工商银行
-            "600030",  # 中信证券
-            "000333",  # 美的集团
-            "601888",  # 中国中免
-        ]
-        
-        # 定义热门板块
-        HOT_SECTORS = [
-            "industry_银行",
-            "industry_证券",
-            "industry_保险",
-            "industry_房地产",
-            "industry_食品饮料",
-            "industry_医药生物",
-            "industry_电子",
-            "industry_计算机",
-        ]
-        
-        # 后台异步预热，不阻塞启动
-        async def warmup_task():
-            try:
-                logger.info("开始缓存预热...")
-                
-                # 预热热门股票 K 线（最近 90 天）
-                logger.info(f"预热热门股票 K 线：{len(HOT_STOCKS)}只")
-                await cache_optimizer.warmup_cache("kline", HOT_STOCKS)
-                
-                # 预热热门板块成分股
-                logger.info(f"预热热门板块：{len(HOT_SECTORS)}个")
-                await cache_optimizer.warmup_cache("sector", HOT_SECTORS)
-                
-                logger.info("缓存预热完成")
-                
-            except Exception as e:
-                logger.warning(f"缓存预热失败：{e}")
-        
-        # 启动后台预热任务
-        import asyncio
-        asyncio.create_task(warmup_task())
-        logger.info("缓存预热任务已启动（后台运行）")
-        
-    except Exception as e:
-        logger.warning(f"缓存预热初始化失败：{e}")
+    # 缓存预热（已禁用，改为按需加载）
+    # try:
+    #     from app.storage.cache_optimizer import cache_optimizer
+    #     
+    #     # 定义热门股票（沪深龙头股）
+    #     HOT_STOCKS = [
+    #         "600000",  # 浦发银行
+    #         "600036",  # 招商银行
+    #         "000001",  # 平安银行
+    #         "601318",  # 中国平安
+    #         "600519",  # 贵州茅台
+    #         "000858",  # 五粮液
+    #         "601398",  # 工商银行
+    #         "600030",  # 中信证券
+    #         "000333",  # 美的集团
+    #         "601888",  # 中国中免
+    #     ]
+    #     
+    #     # 定义热门板块
+    #     HOT_SECTORS = [
+    #         "industry_银行",
+    #         "industry_证券",
+    #         "industry_保险",
+    #         "industry_房地产",
+    #         "industry_食品饮料",
+    #         "industry_医药生物",
+    #         "industry_电子",
+    #         "industry_计算机",
+    #     ]
+    #     
+    #     # 后台异步预热，不阻塞启动
+    #     async def warmup_task():
+    #         try:
+    #             logger.info("开始缓存预热...")
+    #             
+    #             # 预热热门股票 K 线（最近 90 天）
+    #             logger.info(f"预热热门股票 K 线：{len(HOT_STOCKS)}只")
+    #             await cache_optimizer.warmup_cache("kline", HOT_STOCKS)
+    #             
+    #             # 预热热门板块成分股
+    #             logger.info(f"预热热门板块：{len(HOT_SECTORS)}个")
+    #             await cache_optimizer.warmup_cache("sector", HOT_SECTORS)
+    #             
+    #             logger.info("缓存预热完成")
+    #             
+    #         except Exception as e:
+    #             logger.warning(f"缓存预热失败：{e}")
+    #     
+    #     # 启动后台预热任务
+    #     import asyncio
+    #     asyncio.create_task(warmup_task())
+    #     logger.info("缓存预热任务已启动（后台运行）")
+    #     
+    # except Exception as e:
+    #     logger.warning(f"缓存预热初始化失败：{e}")
     
     # 初始化中间件（限流器、断路器）
     from app.middleware import init_middleware
@@ -153,11 +153,6 @@ async def lifespan(app: FastAPI):
     from app.middleware.performance import periodic_performance_report
     asyncio.create_task(periodic_performance_report())
     logger.info("性能监控已启动")
-    
-    # 启动 WebSocket 推送服务
-    from app.websocket import start_pusher_service
-    await start_pusher_service()
-    logger.info("WebSocket 推送服务已启动")
     
     # 初始化本地数据库服务
     from app.services.local_database import local_db_service
@@ -191,10 +186,6 @@ async def lifespan(app: FastAPI):
     
     # 关闭本地数据库服务
     await local_db_service.close()
-    
-    # 停止 WebSocket 推送服务
-    from app.websocket import stop_pusher_service
-    await stop_pusher_service()
     
     # 按需加载模式无需停止数据加载器
     logger.info("数据加载器已停止（按需模式）")
@@ -304,7 +295,6 @@ def create_app() -> FastAPI:
             {"name": "机构推荐", "description": "机构推荐股票"},
             {"name": "技术指标", "description": "技术指标计算 (MA/MACD/RSI/KDJ 等)"},
             {"name": "K 线图表", "description": "K 线数据获取和图表展示"},
-            {"name": "WebSocket", "description": "WebSocket 实时推送"},
         ]
     )
     
@@ -313,8 +303,8 @@ def create_app() -> FastAPI:
     
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

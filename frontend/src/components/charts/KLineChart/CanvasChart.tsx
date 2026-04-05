@@ -3,7 +3,7 @@
  * 基于 Canvas 的高性能 K 线图渲染引擎
  */
 
-import React, { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import type { RenderData, KLineData } from '@/types/chart'
 
 interface CanvasChartProps {
@@ -12,24 +12,34 @@ interface CanvasChartProps {
   onPan?: (offset: number) => void
 }
 
+interface InternalConfig {
+  scrollOffset: number
+  visibleCount: number
+  zoom: number
+}
+
 export const CanvasChart: React.FC<CanvasChartProps> = ({
   data,
   onZoom,
   onPan
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const animationFrameRef = useRef<number>()
   const isDragging = useRef(false)
   const lastMouseX = useRef(0)
-  const [scrollOffset, setScrollOffset] = useState(0)
-  const [visibleCount, setVisibleCount] = useState(100)
+  
+  // 内部状态
+  const [config] = useState<InternalConfig>({
+    scrollOffset: 0,
+    visibleCount: 100,
+    zoom: 1
+  })
 
   // 计算可见区域的数据
   const visibleData = useMemo(() => {
     if (!data?.kline) return null
     
-    const startIndex = Math.max(0, scrollOffset)
-    const endIndex = Math.min(data.kline.length, scrollOffset + visibleCount)
+    const startIndex = Math.max(0, config.scrollOffset)
+    const endIndex = Math.min(data.kline.length, config.scrollOffset + config.visibleCount)
     const sliced = data.kline.slice(startIndex, endIndex)
     
     // 保留原始索引用于绘制
@@ -37,7 +47,7 @@ export const CanvasChart: React.FC<CanvasChartProps> = ({
       ...item,
       _originalIndex: startIndex + idx
     }))
-  }, [data, scrollOffset, visibleCount])
+  }, [data, config.scrollOffset, config.visibleCount])
 
   // 价格转 Y 坐标
   const priceToY = useCallback((price: number, config: any) => {

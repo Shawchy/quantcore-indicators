@@ -181,7 +181,7 @@ class FundDataUpdater {
    */
   async updateWatchlistRealtimeData(
     fundCodes: string[],
-    onUpdate: (data: any[]) => void
+    onUpdate?: (code: string, data: any) => void
   ): Promise<void> {
     if (fundCodes.length === 0) {
       console.log('[数据更新] 自选列表为空，跳过更新');
@@ -189,20 +189,10 @@ class FundDataUpdater {
     }
     
     try {
-      // 先从后端获取全部有效基金代码
-      const fundModule = await import('./fund');
-      const allValidCodes = await fundModule.fundApi.getAllFundCodes();
-      
-      if (allValidCodes.length === 0) {
-        console.warn('[数据更新] 未能从后端获取有效基金代码，使用传入的列表');
-        // 降级处理：使用传入的列表（但会过滤无效代码）
-        await this.updateWithValidation(fundCodes, onUpdate);
-        return;
-      }
-      
-      // 使用从后端获取的有效代码列表
-      console.log(`[数据更新] 使用后端获取的 ${allValidCodes.length} 只有效基金代码`);
-      await this.updateWithValidation(allValidCodes, onUpdate);
+      // 只更新传入的自选基金列表，不获取所有基金代码
+      // 这样可以避免一次性更新 2 万多只基金
+      console.log(`[数据更新] 更新 ${fundCodes.length} 只自选基金的实时数据`);
+      await this.updateWithValidation(fundCodes, onUpdate);
     } catch (error) {
       console.error('[数据更新] 更新失败:', error);
     }
@@ -247,14 +237,14 @@ class FundDataUpdater {
         console.log(`[数据更新] 更新批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(validCodes.length / batchSize)}`);
         
         // 强制刷新缓存
-        const { data } = await import('./fund');
-        const response = await data.fundApi.getFundRealtimeRate(batch);
+        const fundModule = await import('./fund');
+        const response = await fundModule.fundApi.getFundRealtimeRate(batch);
         
         const dataList = Array.isArray(response.data) ? response.data : [response.data];
         
         // 调用更新回调
         if (onUpdate) {
-          dataList.forEach(item => onUpdate(item.code, item));
+          dataList.forEach((item: any) => onUpdate(item.code, item));
         }
       }
 
@@ -275,8 +265,8 @@ class FundDataUpdater {
 
     try {
       // 先从后端获取全部有效基金代码
-      const { data } = await import('./fund');
-      const allValidCodes = await data.fundApi.getAllFundCodes();
+      const fundModule = await import('./fund');
+      const allValidCodes = await fundModule.fundApi.getAllFundCodes();
       
       if (allValidCodes.length === 0) {
         console.warn('[数据更新] 未能从后端获取有效基金代码，使用传入的列表');
@@ -308,7 +298,7 @@ class FundDataUpdater {
    * 执行后台更新
    */
   private async performBackgroundUpdate(fundCodes: string[]): Promise<void> {
-    const { data } = await import('./fund');
+    const fundModule = await import('./fund');
     
     // 过滤掉无效的基金代码
     const validCodes = fundCodes.filter((code) => {
@@ -317,8 +307,7 @@ class FundDataUpdater {
       // 不能包含 'nan'（不区分大小写）
       if (code.toLowerCase().includes('nan')) return false;
       // 必须是 6 位数字
-      if (!/^\d{6}$/.test(code)) return false;
-      return true;
+      if (!/^\d{6}$/.test(code)) return true;
     });
     
     if (validCodes.length === 0) {
@@ -332,8 +321,8 @@ class FundDataUpdater {
       try {
         // 并行更新不同类型的数据
         await Promise.all([
-          data.fundApi.getFundHistory(code).catch(() => {}),
-          data.fundApi.getFundPeriodChange(code).catch(() => {}),
+          fundModule.fundApi.getFundHistory(code).catch(() => {}),
+          fundModule.fundApi.getFundPeriodChange(code).catch(() => {}),
         ]);
       } catch (error) {
         console.warn(`[数据更新] 更新基金 ${code} 失败:`, error);

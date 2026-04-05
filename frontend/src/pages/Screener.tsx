@@ -16,7 +16,7 @@ import {
   Flex,
 } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { screenerApi } from '../services/api'
 import { StatCard } from '../components/StatCard'
 import { PresetCondition, MarketIndustryStats } from '../types'
@@ -40,6 +40,7 @@ const Screener = () => {
     control_degree_min: '',
   })
   const [hasSearched, setHasSearched] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   const { data: presetsData } = useQuery({
     queryKey: ['presetConditions'],
@@ -80,8 +81,11 @@ const Screener = () => {
       pe_max: String(raw.pe_max ?? ''),
       control_degree_min: String(raw.control_degree_min ?? ''),
     }
-    setConditions(next)
-    setHasSearched(true)
+    // 使用 startTransition 优化非紧急更新
+    startTransition(() => {
+      setConditions(next)
+      setHasSearched(true)
+    })
     setTimeout(() => refetch(), 100)
   }
 
@@ -136,6 +140,7 @@ const Screener = () => {
                 borderColor="light.border"
                 _hover={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
                 onClick={() => handlePresetSelect(preset)}
+                isLoading={isPending}
               >
                 {preset.name}
               </Button>

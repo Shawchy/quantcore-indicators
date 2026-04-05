@@ -1,4 +1,4 @@
-﻿/**
+/**
  * A 股估值指标页面
  * 包含：百度估值、个股估值、涨跌投票
  */
@@ -17,7 +17,7 @@ import {
   Input,
   InputGroup,
   InputLeftAddon,
-  InputRightAddon,
+
   Tabs,
   TabList,
   TabPanels,
@@ -79,9 +79,9 @@ const AShareValuationPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockZhValuationBaidu(symbol, indicator, period);
-      setValuationData(result);
+      setValuationData((result as any).data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${(result as any).data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -104,9 +104,9 @@ const AShareValuationPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockValueEM(symbol);
-      setValueData(result);
+      setValueData((result as any).data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${(result as any).data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -129,9 +129,9 @@ const AShareValuationPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockZhVoteBaidu(symbol, voteIndicator);
-      setVoteData(result);
+      setVoteData((result as any).data || []);
       toast({ 
-        title: `获取成功，共${result.length}条`, 
+        title: `获取成功，共${(result as any).data?.length || 0}条`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -167,7 +167,7 @@ const AShareValuationPage: React.FC = () => {
   };
 
   // 渲染投票比例
-  const renderVoteRatio = (ratio: number | null) => {
+  const renderVoteRatio = (ratio: number | string | null) => {
     if (ratio === null) return '-';
     
     const ratioNum = typeof ratio === 'string' ? parseFloat(ratio.replace('%', '')) : ratio;

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 行业分类页面
  * 包含：申万行业分类变动历史、行业市盈率
  */
@@ -55,9 +55,9 @@ const IndustryClassificationPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockIndustryClfHistSW();
-      setIndustryClfData(result);
+      setIndustryClfData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 
@@ -75,9 +75,9 @@ const IndustryClassificationPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockIndustryPERatio(peClassType, peDate || undefined);
-      setPeRatioData(result);
+      setPeRatioData(result.data || []);
       toast({ 
-        title: `获取成功，共${result.length}条数据`, 
+        title: `获取成功，共${result.data?.length || 0}条数据`, 
         status: 'success', 
         duration: 2000, 
         isClosable: true 

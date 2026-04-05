@@ -1,8 +1,9 @@
 import { Card, CardBody, Stat, StatLabel, StatNumber, StatHelpText, Flex, Icon, BoxProps } from '@chakra-ui/react'
+import type { ReactNode } from 'react'
 
 interface StatCardProps extends BoxProps {
   label: string
-  value: string | number
+  value: string | number | ReactNode
   helpText?: string
   size?: 'sm' | 'md' | 'lg'
   colorScheme?: 'default' | 'primary' | 'success' | 'warning' | 'danger'

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 东方财富综合涨停板行情页面
  * 包含：涨停股池、昨日涨停、强势股、次新股
  */
@@ -30,7 +30,7 @@ import {
   TabPanels,
   Tab,
   TabPanel,
-  HStack,
+
 } from '@chakra-ui/react';
 import {
   eastMoneyApi,
@@ -47,13 +47,13 @@ const EastMoneyZtBoardPage: React.FC = () => {
   const [ztStrong, setZtStrong] = useState<StockZtStrong[]>([]);
   const [ztSubNew, setZtSubNew] = useState<StockZtSubNew[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0].replace(/-/g, ''));
-  const [activeTab, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState(0);
 
   // 获取涨停股池数据
   const fetchZtPool = async (selectedDate: string) => {
     try {
       const result = await eastMoneyApi.getZtPool(selectedDate);
-      setZtPool(result);
+      setZtPool(result.data || []);
     } catch (error) {
       console.error('获取涨停股池数据失败:', error);
     }
@@ -63,7 +63,7 @@ const EastMoneyZtBoardPage: React.FC = () => {
   const fetchZtPrevious = async (selectedDate: string) => {
     try {
       const result = await eastMoneyApi.getZtPoolPrevious(selectedDate);
-      setZtPrevious(result);
+      setZtPrevious(result.data || []);
     } catch (error) {
       console.error('获取昨日涨停数据失败:', error);
     }
@@ -73,7 +73,7 @@ const EastMoneyZtBoardPage: React.FC = () => {
   const fetchZtStrong = async (selectedDate: string) => {
     try {
       const result = await eastMoneyApi.getZtPoolStrong(selectedDate);
-      setZtStrong(result);
+      setZtStrong(result.data || []);
     } catch (error) {
       console.error('获取强势股数据失败:', error);
     }
@@ -83,7 +83,7 @@ const EastMoneyZtBoardPage: React.FC = () => {
   const fetchZtSubNew = async (selectedDate: string) => {
     try {
       const result = await eastMoneyApi.getZtPoolSubNew(selectedDate);
-      setZtSubNew(result);
+      setZtSubNew(result.data || []);
     } catch (error) {
       console.error('获取次新股数据失败:', error);
     }

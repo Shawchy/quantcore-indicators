@@ -18,7 +18,6 @@ import {
   StatLabel,
   StatNumber,
   StatHelpText,
-  StatArrow,
   Button,
   useColorModeValue,
 } from '@chakra-ui/react';

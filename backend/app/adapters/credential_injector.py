@@ -73,6 +73,9 @@ class CredentialInjector:
     """
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        # 自动检测 Edge 浏览器路径
+        default_browser_path = self._detect_edge_path()
+        
         self._config = {
             'headless': True,
             'cookie_max_age_hours': 24,
@@ -85,6 +88,7 @@ class CredentialInjector:
             ],
             'tls_patch_mode': TLSPatchMode.CURL_CFFI,
             'impersonate': 'chrome120',
+            'browser_path': default_browser_path,  # 自动检测 Edge 路径
             **(config or {})
         }
         
@@ -128,19 +132,55 @@ class CredentialInjector:
         self._last_warning_time: Dict[str, float] = {}
         self._warning_cooldown = 10.0  # 同 URL 10 秒内只打印一次
     
+    def _detect_edge_path(self) -> Optional[str]:
+        """自动检测 Microsoft Edge 浏览器路径"""
+        import os
+        
+        # 常见的 Edge 安装路径
+        edge_paths = [
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%PROGRAMFILES%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe"),
+        ]
+        
+        for path in edge_paths:
+            if os.path.exists(path):
+                logger.debug(f"检测到 Edge 浏览器：{path}")
+                return path
+        
+        logger.warning("未检测到 Microsoft Edge 浏览器，将使用系统默认 Chrome")
+        return None
+    
     async def initialize(self) -> bool:
-        """初始化凭证注入器（三级降级检测）
+        """初始化凭证注入器（四级降级检测，2026 优化版）
         
         优先级：
+        0. 手动 Cookie（最高优先级，零开销）
         1. DrissionPage（最优，自动绕过反爬）
-        2. Playwright 同步 + 线程池（稳定可靠）
-        3. curl_cffi（无需浏览器，TLS 指纹伪装）
+        2. undetected-chromedriver（强反爬场景）
+        3. Playwright 同步 + 线程池（稳定可靠）
+        4. curl_cffi（无需浏览器，TLS 指纹伪装）
         """
         if self._is_initialized:
             return True
         
         async with self._init_lock:
             if self._is_initialized:
+                return True
+            
+            # Level 0: 检测手动 Cookie（新增，2026 优化）
+            manual_cookie_loaded = False
+            for domain in self._config['target_domains']:
+                if await self._load_manual_cookies(domain):
+                    manual_cookie_loaded = True
+                    logger.info(f"✅ Level 0: 加载手动 Cookie 成功：{domain}")
+            
+            if manual_cookie_loaded:
+                self._browser_mode = "manual_cookie"
+                logger.info("🚀 使用手动 Cookie 模式（零开销，推荐）")
+                self._is_initialized = True
                 return True
             
             # Level 1: 检测 DrissionPage
@@ -152,23 +192,36 @@ class CredentialInjector:
                 logger.info("⚠️  Level 1: DrissionPage 不可用，尝试 Level 2")
                 self._drission_available = False
             
-            # Level 2: 检测 Playwright 同步
+            # Level 2: 检测 undetected-chromedriver（新增，2026 优化）
+            uc_available = False
             if not self._drission_available:
+                try:
+                    import undetected_chromedriver as uc
+                    uc_available = True
+                    logger.info("✅ Level 2: undetected-chromedriver 可用（强反爬模式）")
+                except ImportError:
+                    logger.info("⚠️  Level 2: undetected-chromedriver 不可用，尝试 Level 3")
+            
+            # Level 3: 检测 Playwright 同步
+            if not self._drission_available and not uc_available:
                 try:
                     from playwright.sync_api import sync_playwright
                     self._playwright_sync_available = True
-                    logger.info("✅ Level 2: Playwright 同步可用（稳定模式）")
+                    logger.info("✅ Level 3: Playwright 同步可用（稳定模式）")
                 except ImportError:
-                    logger.info("⚠️  Level 2: Playwright 同步不可用，降级到 Level 3")
+                    logger.info("⚠️  Level 3: Playwright 同步不可用，降级到 Level 4")
                     self._playwright_sync_available = False
             
-            # Level 3: curl_cffi（总是可用）
-            logger.info("✅ Level 3: curl_cffi 可用（降级模式）")
+            # Level 4: curl_cffi（总是可用）
+            logger.info("✅ Level 4: curl_cffi 可用（降级模式）")
             
             # 确定使用哪个模式
             if self._drission_available:
                 self._browser_mode = "drission"
                 logger.info("🚀 使用 DrissionPage 模式（推荐）")
+            elif uc_available:
+                self._browser_mode = "uc"
+                logger.info("🚀 使用 undetected-chromedriver 模式（强反爬）")
             elif self._playwright_sync_available:
                 self._browser_mode = "playwright_sync"
                 logger.info("🚀 使用 Playwright 同步模式")
@@ -199,11 +252,12 @@ class CredentialInjector:
             logger.info("凭证注入器已关闭")
     
     async def fetch_credentials(self, domain: str) -> bool:
-        """获取凭证（三级降级）
+        """获取凭证（四级降级，2026 优化版）
         
         1. DrissionPage（最优）
-        2. Playwright 同步 + 线程池
-        3. curl_cffi（无需浏览器）
+        2. undetected-chromedriver（强反爬）
+        3. Playwright 同步 + 线程池
+        4. curl_cffi（无需浏览器）
         """
         if not self._is_initialized:
             await self.initialize()
@@ -219,12 +273,91 @@ class CredentialInjector:
             # 根据模式选择获取方式
             if self._browser_mode == "drission":
                 return await self._fetch_with_drission(domain)
+            elif self._browser_mode == "uc":
+                return await self._fetch_with_undetected_chromedriver(domain)
             elif self._browser_mode == "playwright_sync":
                 return await self._fetch_with_playwright_sync(domain)
             else:
                 # curl_cffi 模式，不需要获取凭证
                 logger.info(f"curl_cffi 模式：跳过凭证获取，使用 TLS 指纹伪装")
                 return True
+    
+    async def _load_manual_cookies(self, domain: str) -> bool:
+        """加载手动获取的 Cookie（优先级最高，零开销）"""
+        try:
+            # 检查手动配置文件
+            safe_domain = domain.replace('.', '_').replace(':', '_')
+            manual_cookie_file = os.path.join(
+                self._config['cookie_storage_dir'],
+                f"{safe_domain}_manual.json"
+            )
+            
+            if os.path.exists(manual_cookie_file):
+                with open(manual_cookie_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                # 检查是否过期
+                captured_at = datetime.fromisoformat(data['captured_at'])
+                expires_in_days = data.get('expires_in_days', 7)
+                
+                if (datetime.now() - captured_at).days < expires_in_days:
+                    self._cookies[domain] = data['cookies']
+                    self._cookies_updated_at[domain] = captured_at
+                    logger.info(f"✅ 加载手动 Cookie 成功：{domain} (过期时间：{expires_in_days}天)")
+                    return True
+                else:
+                    logger.warning(f"⚠️  手动 Cookie 已过期：{domain}，请重新获取")
+                    # 删除过期文件
+                    try:
+                        os.remove(manual_cookie_file)
+                        logger.info(f"已删除过期的手动 Cookie 文件：{manual_cookie_file}")
+                    except:
+                        pass
+                    
+        except FileNotFoundError:
+            # 文件不存在是正常情况
+            pass
+        except Exception as e:
+            logger.error(f"加载手动 Cookie 失败：{e}")
+        
+        return False
+    
+    async def save_manual_cookies(self, domain: str, cookies: List[Dict], expires_in_days: int = 7) -> bool:
+        """保存手动获取的 Cookie 到配置文件
+        
+        Args:
+            domain: 域名
+            cookies: Cookie 列表
+            expires_in_days: 有效期（天）
+        """
+        try:
+            safe_domain = domain.replace('.', '_').replace(':', '_')
+            manual_cookie_file = os.path.join(
+                self._config['cookie_storage_dir'],
+                f"{safe_domain}_manual.json"
+            )
+            
+            data = {
+                'domain': domain,
+                'cookies': cookies,
+                'captured_at': datetime.now().isoformat(),
+                'expires_in_days': expires_in_days,
+            }
+            
+            with open(manual_cookie_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            
+            # 同时加载到内存
+            self._cookies[domain] = cookies
+            self._cookies_updated_at[domain] = datetime.now()
+            
+            logger.info(f"✅ 手动 Cookie 已保存：{domain} (有效期：{expires_in_days}天)")
+            logger.info(f"   文件路径：{manual_cookie_file}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"保存手动 Cookie 失败：{e}")
+            return False
     
     async def _fetch_with_drission(self, domain: str) -> bool:
         """使用 DrissionPage 获取凭证（最优模式）"""
@@ -243,13 +376,19 @@ class CredentialInjector:
                 options.set_argument('--disable-dev-shm-usage')
                 options.set_argument('--no-sandbox')
                 
+                # 配置浏览器路径
+                browser_path = self._config.get('browser_path')
+                if browser_path:
+                    logger.debug(f"使用浏览器路径：{browser_path}")
+                    options.set_paths(browser_path=browser_path)
+                
                 # 启动浏览器
                 page = ChromiumPage(options)
                 
                 try:
-                    # 访问东方财富
+                    # 访问东方财富网
                     if 'eastmoney' in domain:
-                        page.get('https://fund.eastmoney.com/')
+                        page.get('https://www.eastmoney.com/')
                     
                     # 等待页面加载
                     import time
@@ -296,6 +435,98 @@ class CredentialInjector:
             logger.error(f"DrissionPage 获取凭证异常：{e}")
             return False
     
+    async def _fetch_with_undetected_chromedriver(self, domain: str) -> bool:
+        """使用 undetected-chromedriver 获取凭证（强反爬模式）"""
+        logger.info(f"使用 undetected-chromedriver 获取 {domain} 凭证...")
+        
+        loop = asyncio.get_event_loop()
+        
+        def sync_fetch():
+            try:
+                import undetected_chromedriver as uc
+                from selenium.webdriver.common.by import By
+                from selenium.webdriver.support.ui import WebDriverWait
+                from selenium.webdriver.support import expected_conditions as EC
+                
+                # 配置浏览器选项
+                options = uc.ChromeOptions()
+                
+                if self._config['headless']:
+                    options.add_argument('--headless=new')
+                
+                # 关键反爬配置
+                options.add_argument('--disable-blink-features=AutomationControlled')
+                options.add_argument('--disable-dev-shm-usage')
+                options.add_argument('--no-sandbox')
+                options.add_argument('--disable-gpu')
+                
+                # 随机化指纹
+                options.add_argument(f'--user-agent={self._get_random_user_agent()}')
+                options.add_argument('--window-size=1920,1080')
+                
+                # 禁用自动化特征
+                options.add_experimental_option('excludeSwitches', ['enable-automation'])
+                options.add_experimental_option('useAutomationExtension', False)
+                
+                # 启动浏览器
+                driver = uc.Chrome(
+                    options=options,
+                    use_subprocess=False,  # 禁用子进程，提高稳定性
+                    auto_load_extensions=False
+                )
+                
+                try:
+                    # 访问东方财富网
+                    if 'eastmoney' in domain:
+                        driver.get('https://www.eastmoney.com/')
+                        
+                        # 等待页面加载
+                        WebDriverWait(driver, 10).until(
+                            EC.presence_of_element_located((By.TAG_NAME, "body"))
+                        )
+                    
+                    # 获取 Cookie
+                    cookies = driver.get_cookies()
+                    
+                    # 转换为标准格式
+                    cookie_list = []
+                    for cookie in cookies:
+                        cookie_list.append({
+                            'name': cookie.get('name', ''),
+                            'value': cookie.get('value', ''),
+                            'domain': cookie.get('domain', domain),
+                            'path': cookie.get('path', '/'),
+                        })
+                    
+                    return cookie_list
+                    
+                finally:
+                    driver.quit()
+                    
+            except Exception as e:
+                logger.error(f"undetected-chromedriver 获取凭证失败：{e}")
+                return None
+        
+        try:
+            # 在线程池中运行
+            cookie_list = await loop.run_in_executor(
+                self._browser_executor,
+                sync_fetch
+            )
+            
+            if cookie_list:
+                self._cookies[domain] = cookie_list
+                self._cookies_updated_at[domain] = datetime.now()
+                logger.info(f"✅ undetected-chromedriver 成功获取 {domain} 凭证")
+                return True
+            else:
+                logger.warning("undetected-chromedriver 获取凭证返回空列表")
+                return False
+                
+        except Exception as e:
+            logger.error(f"undetected-chromedriver 获取凭证异常：{e}")
+            return False
+    
     async def _fetch_with_playwright_sync(self, domain: str) -> bool:
         """使用 Playwright 同步 API 获取凭证（稳定模式）"""
         logger.info(f"使用 Playwright 同步 API 获取 {domain} 凭证...")
@@ -327,9 +558,9 @@ class CredentialInjector:
                         page = context.new_page()
                         
                         try:
-                            # 访问东方财富
+                            # 访问东方财富网
                             if 'eastmoney' in domain:
-                                page.goto('https://fund.eastmoney.com/')
+                                page.goto('https://www.eastmoney.com/')
                                 page.wait_for_load_state('networkidle')
                             
                             # 获取 Cookie
@@ -417,13 +648,109 @@ class CredentialInjector:
             logger.warning(f"提取 Headers 失败: {e}")
     
     def _get_random_user_agent(self) -> str:
+        """获取随机 User-Agent（2026 增强版，基于真实设备信息）"""
         import random
         user_agents = [
+            # Windows + Chrome（主力，50% 概率）
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            
+            # macOS + Chrome（20% 概率）
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            
+            # Windows + Edge（15% 概率）
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+            
+            # Windows + Firefox（10% 概率）
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+            
+            # macOS + Safari（5% 概率）
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
         ]
         return random.choice(user_agents)
+    
+    def _get_realistic_headers(self, rotate: bool = True) -> Dict[str, str]:
+        """生成真实的请求头（基于真实设备信息，2026 增强版）
+        
+        Args:
+            rotate: 是否轮换设备信息（默认 True）
+        """
+        import random
+        
+        # 真实设备信息池
+        devices = [
+            {
+                # Windows + Chrome
+                'ua': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                'platform': "Win32",
+                'languages': "zh-CN,zh;q=0.9,en;q=0.8",
+                'sec_ch_ua_platform': '"Windows"',
+                'sec_ch_ua_mobile': '?0',
+                'sec_ch_ua': '"Not A(Brand";v="8", "Chromium";v="122", "Google Chrome";v="122"',
+            },
+            {
+                # macOS + Chrome
+                'ua': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                'platform': "MacIntel",
+                'languages': "zh-CN,zh;q=0.9,en;q=0.8",
+                'sec_ch_ua_platform': '"macOS"',
+                'sec_ch_ua_mobile': '?0',
+                'sec_ch_ua': '"Not A(Brand";v="8", "Chromium";v="122", "Google Chrome";v="122"',
+            },
+            {
+                # Windows + Edge
+                'ua': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+                'platform': "Win32",
+                'languages': "zh-CN,zh;q=0.9,en;q=0.8",
+                'sec_ch_ua_platform': '"Windows"',
+                'sec_ch_ua_mobile': '?0',
+                'sec_ch_ua': '"Not A(Brand";v="8", "Chromium";v="122", "Microsoft Edge";v="122"',
+            },
+            {
+                # Windows + Firefox
+                'ua': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+                'platform': "Win32",
+                'languages': "zh-CN,zh;q=0.9,en;q=0.8",
+                # Firefox 不使用 Sec-CH-UA
+            },
+            {
+                # macOS + Safari
+                'ua': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
+                'platform': "MacIntel",
+                'languages': "zh-CN,zh;q=0.9,en;q=0.8",
+                # Safari 不使用 Sec-CH-UA
+            },
+        ]
+        
+        device = random.choice(devices)
+        
+        # 基础请求头
+        headers = {
+            'User-Agent': device['ua'],
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': device['languages'],
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+        }
+        
+        # Chrome/Edge 特有请求头
+        if 'Chrome' in device['ua'] or 'Edg' in device['ua']:
+            headers.update({
+                'Sec-Ch-Ua-Platform': device.get('sec_ch_ua_platform', ''),
+                'Sec-Ch-Ua-Mobile': device.get('sec_ch_ua_mobile', '?0'),
+                'Sec-Ch-Ua': device.get('sec_ch_ua', ''),
+            })
+        
+        return headers
     
     def get_cookies(self, domain: str) -> List[Dict]:
         cookies = self._cookies.get(domain, [])
@@ -1048,6 +1375,66 @@ class UnifiedCredentialManager:
 
 _global_injector: Optional[CredentialInjector] = None
 _injector_lock = asyncio.Lock()
+
+
+class CookieMonitor:
+    """Cookie 监听器，自动续期"""
+    
+    def __init__(self, injector: CredentialInjector):
+        self._injector = injector
+        self._monitoring = False
+        self._monitor_task: Optional[asyncio.Task] = None
+    
+    async def start_monitoring(self, check_interval_minutes: int = 60):
+        """启动监听
+        
+        Args:
+            check_interval_minutes: 检查间隔（分钟），默认 60 分钟
+        """
+        if self._monitoring:
+            logger.warning("Cookie 监听器已在运行")
+            return
+        
+        self._monitoring = True
+        self._monitor_task = asyncio.create_task(
+            self._monitor_loop(check_interval_minutes)
+        )
+        logger.info(f"✅ Cookie 监听器已启动（检查间隔：{check_interval_minutes}分钟）")
+    
+    async def _monitor_loop(self, check_interval_minutes: int):
+        """监听循环"""
+        while self._monitoring:
+            await asyncio.sleep(check_interval_minutes * 60)
+            
+            for domain in list(self._injector._cookies.keys()):
+                updated_at = self._injector._cookies_updated_at.get(domain)
+                
+                if updated_at:
+                    age = datetime.now() - updated_at
+                    max_age_hours = self._injector._config['cookie_max_age_hours']
+                    
+                    # 提前 1 小时续期
+                    if age.total_seconds() > (max_age_hours - 1) * 3600:
+                        logger.info(f"⚠️  Cookie 即将过期，自动续期：{domain}")
+                        
+                        try:
+                            # 后台刷新凭证
+                            success = await self._injector.fetch_credentials(domain)
+                            
+                            if success:
+                                logger.info(f"✅ Cookie 已续期：{domain}")
+                            else:
+                                logger.error(f"❌ Cookie 续期失败：{domain}")
+                        except Exception as e:
+                            logger.error(f"Cookie 续期异常：{domain}, 错误：{e}")
+    
+    def stop_monitoring(self):
+        """停止监听"""
+        self._monitoring = False
+        
+        if self._monitor_task:
+            self._monitor_task.cancel()
+            logger.info("Cookie 监听器已停止")
 
 
 async def get_global_injector(config: Optional[Dict[str, Any]] = None) -> CredentialInjector:

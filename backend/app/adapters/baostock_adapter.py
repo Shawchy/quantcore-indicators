@@ -50,39 +50,104 @@ class BaostockAdapter(BaseDataAdapter):
             return f"sz.{code}"
     
     async def get_stock_list(self, market: Optional[str] = None) -> List[StockBasicInfo]:
+        """
+        获取股票列表（包含所有基本信息）
+        
+        Returns:
+            List[StockBasicInfo]: 股票列表，包含 code, name, market, type, status, 
+                                 list_date, delist_date 等完整字段
+        """
         try:
             rs = bs.query_stock_basic()
             stocks = []
             while (rs.error_code == "0") & rs.next():
                 row = rs.get_row_data()
-                code = row[0]
-                if code.startswith(("sh.6", "sz.0", "sz.3")):
-                    stocks.append(StockBasicInfo(
-                        code=code.split(".")[1],
-                        name=row[1],
-                        market=code.split(".")[0].upper(),
-                        industry=row[7] if len(row) > 7 else None,
-                        list_date=row[4] if len(row) > 4 else None
-                    ))
+                code_full = row[0]  # sh.600000
+                name = row[1]
+                
+                # 转换代码格式
+                if '.' in code_full:
+                    market_code, stock_code = code_full.split('.')
+                    code = stock_code
+                    market_tag = market_code.upper()
+                else:
+                    code = code_full
+                    market_tag = 'UNKNOWN'
+                
+                # 解析其他字段
+                list_date = row[2] if len(row) > 2 and row[2] else None
+                delist_date = row[3] if len(row) > 3 and row[3] else None
+                stock_type = int(row[4]) if len(row) > 4 and row[4] else 1
+                status = int(row[5]) if len(row) > 5 and row[5] else 1
+                
+                stocks.append(StockBasicInfo(
+                    code=code,
+                    name=name,
+                    market=market_tag,
+                    type=stock_type,
+                    status=status,
+                    list_date=list_date,
+                    delist_date=delist_date,
+                    industry=None,  # Baostock 不提供行业信息
+                    sector=None,
+                    area=None,
+                    total_shares=None,
+                    float_shares=None
+                ))
+            
+            logger.info(f"成功获取 {len(stocks)} 只股票信息")
             return stocks
         except Exception as e:
-            logger.error(f"获取股票列表失败: {e}")
+            logger.error(f"获取股票列表失败：{e}")
             return []
     
     async def get_stock_info(self, code: str) -> Optional[StockBasicInfo]:
+        """
+        获取单只股票详细信息
+        
+        Args:
+            code: 股票代码
+            
+        Returns:
+            Optional[StockBasicInfo]: 股票详细信息，包含完整字段
+        """
         try:
             bs_code = self._get_bs_code(code)
             rs = bs.query_stock_basic(code=bs_code)
             if rs.error_code != "0":
+                logger.warning(f"获取股票信息失败 {code}: {rs.error_msg}")
                 return None
             
             row = rs.get_row_data()
+            code_full = row[0]
+            name = row[1]
+            
+            # 转换代码格式
+            if '.' in code_full:
+                market_code, _ = code_full.split('.')
+                market_tag = market_code.upper()
+            else:
+                market_tag = 'SH' if code.startswith('6') else 'SZ'
+            
+            # 解析其他字段
+            list_date = row[2] if len(row) > 2 and row[2] else None
+            delist_date = row[3] if len(row) > 3 and row[3] else None
+            stock_type = int(row[4]) if len(row) > 4 and row[4] else 1
+            status = int(row[5]) if len(row) > 5 and row[5] else 1
+            
             return StockBasicInfo(
                 code=code,
-                name=row[1],
-                market=code.split(".")[0].upper() if "." in code else ("SH" if code.startswith("6") else "SZ"),
-                industry=row[7] if len(row) > 7 else None,
-                list_date=row[4] if len(row) > 4 else None
+                name=name,
+                market=market_tag,
+                type=stock_type,
+                status=status,
+                list_date=list_date,
+                delist_date=delist_date,
+                industry=None,
+                sector=None,
+                area=None,
+                total_shares=None,
+                float_shares=None
             )
         except Exception as e:
             logger.error(f"获取股票信息失败 {code}: {e}")

@@ -1,11 +1,11 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Box, ColorModeScript, Spinner, Flex } from '@chakra-ui/react'
 import { useEffect, Suspense, lazy } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import ProtectedRoute from './components/ProtectedRoute'
 // 基金数据管理
-import { useFundDataManagement } from './hooks/useFundDataManagement'
+import { FundDataManager } from './hooks/useFundDataManagement'
 import fundStorage from './services/fundStorage'
 import theme from './theme'
 
@@ -60,42 +60,22 @@ const PageLoading = () => (
 )
 
 function App() {
-  // 初始化基金数据管理
-  const { getStorageStats } = useFundDataManagement({
-    enableCleanup: true,
-    cleanupInterval: 60 * 60 * 1000, // 1 小时清理一次
-    enableBackgroundUpdate: true,
-    backgroundUpdateInterval: 5 * 60 * 1000, // 5 分钟更新一次
-    watchlistCodes: fundStorage.getWatchlist(),
-  });
-
-  // 打印存储统计信息
-  useEffect(() => {
-    const printStats = async () => {
-      const stats = await getStorageStats();
-      console.log('[基金数据] 存储统计:', stats);
-    };
-    
-    // 延迟打印统计信息
-    const timer = setTimeout(printStats, 5000);
-    
-    return () => clearTimeout(timer);
-  }, [getStorageStats]);
-
-  // 预加载关键路由（延迟 2 秒后预加载）
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      prefetchDashboard()
-      prefetchStockDetail()
-      prefetchScreener()
-      console.log('[路由预加载] 关键路由已预加载')
-    }, 2000)
-    
-    return () => clearTimeout(timer)
-  }, [])
+  // 获取自选基金列表
+  const watchlistCodes = fundStorage.getWatchlist();
 
   return (
     <Box>
+      {/* 基金数据管理组件 - 自动检测路由并启用/禁用后台更新 */}
+      <FundDataManager
+        options={{
+          enableCleanup: true,
+          cleanupInterval: 60 * 60 * 1000, // 1 小时清理一次
+          enableBackgroundUpdate: true,
+          backgroundUpdateInterval: 5 * 60 * 1000, // 5 分钟更新一次
+          watchlistCodes: watchlistCodes,
+        }}
+      />
+      
       <ColorModeScript initialColorMode={theme.config.initialColorMode} />
       <BrowserRouter>
         <Routes>

@@ -250,7 +250,7 @@ class MarketTurnoverService:
         """获取并保存最新成交额数据（带反风控策略）"""
         try:
             from app.services.trading_calendar import trading_calendar
-            from app.adapters.factory import DataSourceFactory
+            import asyncio
             
             trade_date = await trading_calendar.get_latest_trading_day()
             
@@ -259,52 +259,74 @@ class MarketTurnoverService:
                 logger.info(f"数据库已有 {trade_date} 成交额数据")
                 return existing
             
-            # 确保凭证注入和 TLS 指纹伪装已启用
-            logger.info("正在确保 akshare 凭证注入和 TLS 指纹伪装...")
-            akshare_adapter = DataSourceFactory.get_adapter('akshare')
-            await akshare_adapter._ensure_credentials()
+            logger.info(f"从 akshare 获取 {trade_date} 成交额数据（带反风控，超时 15 秒）...")
             
-            logger.info(f"从 akshare 获取 {trade_date} 成交额数据（带反风控）...")
-            
-            # 使用反风控封装获取沪市数据
-            df_sh = await self._fetch_with_anti_wind(ak.stock_sh_a_spot_em)
-            if df_sh is None:
-                logger.error("获取沪市成交额数据失败")
+            # 使用 asyncio.wait_for 添加超时保护
+            try:
+                result = await asyncio.wait_for(
+                    self._fetch_turnover_data(trade_date),
+                    timeout=15.0  # 15 秒超时
+                )
+                
+                if result:
+                    sh_turnover, sz_turnover, total_turnover, stock_count = result
+                    
+                    success = await MarketTurnoverService.save_turnover_data(
+                        session, trade_date, sh_turnover, sz_turnover, total_turnover, stock_count
+                    )
+                    
+                    if success:
+                        logger.info(f"✅ 保存 {trade_date} 成交额数据成功")
+                        return {
+                            'trade_date': trade_date,
+                            'sh_turnover': sh_turnover,
+                            'sz_turnover': sz_turnover,
+                            'total_turnover': total_turnover,
+                            'stock_count': stock_count
+                        }
+                
+                logger.error(f"获取 {trade_date} 成交额数据失败")
                 return None
-            
-            # 再次限流后获取深市数据
-            df_sz = await self._fetch_with_anti_wind(ak.stock_sz_a_spot_em)
-            if df_sz is None:
-                logger.error("获取深市成交额数据失败")
-                return None
-            
-            sh_turnover = df_sh['成交额'].sum()
-            sz_turnover = df_sz['成交额'].sum()
-            total_turnover = sh_turnover + sz_turnover
-            stock_count = len(df_sh) + len(df_sz)
-            
-            logger.info(f"沪市：{sh_turnover/100000000:.2f}亿，深市：{sz_turnover/100000000:.2f}亿")
-            
-            success = await MarketTurnoverService.save_turnover_data(
-                session, trade_date, sh_turnover, sz_turnover, total_turnover, stock_count
-            )
-            
-            if success:
-                logger.info(f"✅ 保存 {trade_date} 成交额数据成功")
+                
+            except asyncio.TimeoutError:
+                logger.error(f"获取成交额数据超时（15 秒），返回默认值")
+                # 超时返回默认值，避免阻塞 UI
                 return {
                     'trade_date': trade_date,
-                    'sh_turnover': sh_turnover,
-                    'sz_turnover': sz_turnover,
-                    'total_turnover': total_turnover,
-                    'stock_count': stock_count
+                    'sh_turnover': 0.0,
+                    'sz_turnover': 0.0,
+                    'total_turnover': 0.0,
+                    'stock_count': 0
                 }
-            else:
-                logger.error(f"保存 {trade_date} 成交额数据失败")
-                return None
                 
         except Exception as e:
             logger.error(f"获取并保存成交额数据失败：{e}")
             return None
+    
+    async def _fetch_turnover_data(self, trade_date: str):
+        """获取成交额数据（内部方法）"""
+        import akshare as ak
+        
+        # 使用反风控封装获取沪市数据
+        df_sh = await self._fetch_with_anti_wind(ak.stock_sh_a_spot_em)
+        if df_sh is None:
+            logger.error("获取沪市成交额数据失败")
+            return None
+        
+        # 再次限流后获取深市数据
+        df_sz = await self._fetch_with_anti_wind(ak.stock_sz_a_spot_em)
+        if df_sz is None:
+            logger.error("获取深市成交额数据失败")
+            return None
+        
+        sh_turnover = df_sh['成交额'].sum()
+        sz_turnover = df_sz['成交额'].sum()
+        total_turnover = sh_turnover + sz_turnover
+        stock_count = len(df_sh) + len(df_sz)
+        
+        logger.info(f"沪市：{sh_turnover/100000000:.2f}亿，深市：{sz_turnover/100000000:.2f}亿")
+        
+        return (sh_turnover, sz_turnover, total_turnover, stock_count)
 
 
 market_turnover_service = MarketTurnoverService()

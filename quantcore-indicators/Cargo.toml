@@ -1,0 +1,62 @@
+[package]
+name = "quantcore-indicators"
+version = "0.1.0"
+edition = "2021"
+authors = ["QuantCore Team"]
+description = "High-performance financial indicators library powered by Rust"
+license = "MIT"
+repository = "https://github.com/quantcore/indicators"
+documentation = "https://docs.rs/quantcore-indicators"
+readme = "README.md"
+keywords = ["finance", "indicators", "trading", "quant", "pyo3"]
+categories = ["finance", "science"]
+
+[lib]
+name = "quantcore_indicators"
+crate-type = ["cdylib"]
+
+[dependencies]
+# PyO3 for Python bindings (0.28.3 - latest stable, fixes Windows issues)
+pyo3 = { version = "0.28.3", features = ["extension-module"] }
+numpy = { version = "0.28", optional = true }
+
+# Apache Arrow for zero-copy high-performance computing
+arrow = { version = "58", default-features = false, optional = true }
+arrow-array = { version = "58", optional = true }
+arrow-buffer = { version = "58", optional = true }
+arrow-schema = { version = "58", optional = true }
+pyo3-arrow = { version = "0.17", optional = true }
+
+# Numerical computing
+ndarray = "0.16"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+
+[dev-dependencies]
+criterion = "0.5"
+rand = "0.8"
+
+[build-dependencies]
+pyo3-build-config = "0.28"
+
+# 暂时注释掉基准测试
+# [[bench]]
+# name = "indicators_benchmark"
+# harness = false
+
+[features]
+default = ["numpy-backend"]
+numpy-backend = ["numpy"]
+arrow-backend = ["arrow", "arrow-array", "arrow-buffer", "arrow-schema", "pyo3-arrow"]
+all-backends = ["numpy-backend", "arrow-backend"]
+extension-module = ["pyo3/extension-module"]

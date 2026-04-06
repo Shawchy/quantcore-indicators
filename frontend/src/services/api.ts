@@ -21,7 +21,7 @@ export interface ApiUser {
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 60 秒超时（数据加载需要更长时间）
+  timeout: 30000, // 30 秒超时
   headers: {
     'Content-Type': 'application/json',
   },
@@ -80,7 +80,11 @@ api.interceptors.request.use(
 
 // 响应拦截器 - 处理 401 错误和 Token 刷新
 api.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    // 后端返回格式：{ success: true, code: 'SUCCESS', message: '...', data: {...} }
+    // 直接返回 data 字段，方便组件使用
+    return response.data?.data ?? response.data
+  },
   async (error) => {
     const originalRequest = error.config
     

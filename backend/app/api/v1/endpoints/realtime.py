@@ -54,17 +54,17 @@ async def get_realtime_quote(
         # 获取实时数据（添加超时控制）
         start_time = time.time()
         try:
-            # 使用 akshare 获取实时行情
+            # 使用 akshare 新浪接口获取实时行情（东方财富接口已失效）
             import akshare as ak
             # 使用 asyncio.wait_for 添加超时控制
             df = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ak.stock_zh_a_spot_em()
+                    None, lambda: ak.stock_zh_a_spot()
                 ),
                 timeout=REALTIME_TIMEOUT
             )
-            # 过滤出指定股票
-            df = df[df['代码'] == code]
+            # 过滤出指定股票（新浪接口字段是 code）
+            df = df[df['code'] == code]
         except asyncio.TimeoutError:
             raise HTTPException(
                 status_code=504,

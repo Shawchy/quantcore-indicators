@@ -1,0 +1,8 @@
+[dependencies]
+criterion = "0.5"
+rand = "0.8"
+quantcore-indicators = { path = ".." }
+
+[[bench]]
+name = "indicators_benchmark"
+harness = false

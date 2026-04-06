@@ -1,0 +1,65 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "quantcore-indicators"
+version = "0.1.0"
+description = "High-performance financial indicators library powered by Rust"
+authors = [
+    {name = "QuantCore Team", email = "quantcore@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+keywords = [
+    "finance",
+    "indicators",
+    "trading",
+    "quant",
+    "technical-analysis",
+    "rust",
+    "performance",
+]
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/quantcore/indicators"
+Documentation = "https://docs.rs/quantcore-indicators"
+Repository = "https://github.com/quantcore/indicators"
+Changelog = "https://github.com/quantcore/indicators/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-benchmark>=4.0.0",
+    "numpy>=1.20.0",
+    "pandas>=1.3.0",
+]
+
+[tool.maturin]
+features = ["pyo3/extension-module", "all-backends"]
+python-source = "python"
+module-name = "quantcore_indicators"
+include = [
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+]

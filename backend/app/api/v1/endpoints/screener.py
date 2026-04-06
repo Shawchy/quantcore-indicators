@@ -78,38 +78,25 @@ async def get_market_statistics(
         industries = {ind: cnt for ind, cnt in result.all() if ind}
         
         # 计算市场总成交额：优先从数据库获取历史数据
+        total_turnover = 0.0  # 默认值
+        
         try:
-            # 尝试从数据库获取
-            turnover_data = await market_turnover_service.fetch_and_save_latest(session)
+            # 尝试从数据库获取（带超时保护）
+            turnover_data = await asyncio.wait_for(
+                market_turnover_service.fetch_and_save_latest(session),
+                timeout=10.0  # 10 秒超时
+            )
             
             if turnover_data:
-                total_turnover = turnover_data['total_turnover']
+                total_turnover = turnover_data.get('total_turnover', 0.0)
                 logger.info(f"从数据库获取成交额：{total_turnover/100000000:.2f}亿")
             else:
-                # 如果数据库没有，直接从 akshare 获取（备用方案）
-                logger.warning("数据库无数据，从 akshare 获取...")
-                import akshare as ak
+                logger.info("数据库无成交额数据，使用默认值 0")
                 
-                max_retries = 3
-                total_turnover = 0.0
-                
-                for retry_attempt in range(max_retries):
-                    try:
-                        df_sh = ak.stock_sh_a_spot_em()
-                        df_sz = ak.stock_sz_a_spot_em()
-                        total_turnover = df_sh['成交额'].sum() + df_sz['成交额'].sum()
-                        break
-                    except Exception as retry_e:
-                        if retry_attempt < max_retries - 1:
-                            delay = (2 ** retry_attempt) * 1.0 + random.uniform(0, 0.5)
-                            logger.warning(f"获取成交额失败，{delay:.1f}秒后重试（{retry_attempt+1}/{max_retries}）: {retry_e}")
-                            await asyncio.sleep(delay)
-                        else:
-                            raise retry_e
-                
+        except asyncio.TimeoutError:
+            logger.warning("获取成交额超时，使用默认值 0")
         except Exception as e:
             logger.error(f"获取成交额失败：{e}")
-            total_turnover = 0.0
     
     # 获取交易日期（带超时保护）
     try:
@@ -127,10 +114,12 @@ async def get_market_statistics(
     result_data = {
         "total_stocks": total_count or 0,
         "industry_distribution": industries,
-        "top_industries": sorted(industries.items(), key=lambda x: x[1], reverse=True)[:10],
+        "top_industries": sorted(industries.items(), key=lambda x: x[1], reverse=True)[:10] if industries else [],
         "turnover": total_turnover,  # 市场总成交额（元）
         "trade_date": trade_date or effective_trade_date
     }
+    
+    logger.info(f"市场统计数据：total_stocks={total_count}, industries={len(industries)}")
     
     # 缓存 5 分钟（300 秒）
     await api_cache.set('api_stats', cache_key, result_data, ttl=300)

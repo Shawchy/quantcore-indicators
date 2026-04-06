@@ -1,0 +1,17 @@
+# QuantCore Python Dependencies
+# Core
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Data sources
+baostock>=0.8.8
+
+# Technical analysis (optional)
+# ta-lib  # Requires TA-Lib C library installation
+
+# Development
+pytest>=7.4.0
+pytest-benchmark>=4.0.0
+
+# Utilities
+typing-extensions>=4.0.0

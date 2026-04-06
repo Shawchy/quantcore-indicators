@@ -503,7 +503,18 @@ class AkShareAdapter(BaseDataAdapter):
         logger.info("AkShare 适配器已关闭")
     
     async def get_stock_list(self, market: Optional[str] = None) -> List[StockBasicInfo]:
-        """获取 A 股股票列表（带 TLS 指纹伪装 + 凭证注入）"""
+        """
+        获取 A 股股票列表
+        
+        ⚠️ 注意：此方法已废弃，建议使用 Baostock 适配器获取股票列表
+        Akshare 只提供 code 和 name 两个字段，缺少 type, status, list_date, delist_date 等关键字段
+        
+        Returns:
+            List[StockBasicInfo]: 股票列表（仅包含 code, name, market）
+        """
+        logger.warning("⚠️ akshare 适配器 get_stock_list 方法已废弃，建议使用 Baostock 适配器")
+        logger.warning("⚠️ akshare 只提供 code 和 name 字段，缺少 type, status, list_date, delist_date 等关键字段")
+        
         # 确保凭证有效（TLS 指纹伪装）
         await self._ensure_credentials()
         
@@ -511,12 +522,17 @@ class AkShareAdapter(BaseDataAdapter):
         await self._rate_limit()
         
         def fetch_sync():
-            df = ak.stock_zh_a_spot_em()
+            # 使用新浪接口替代东方财富接口（stock_zh_a_spot_em 已失效）
+            df = ak.stock_zh_a_spot()
             stocks = []
             for _, row in df.iterrows():
-                code = str(row["代码"])
-                name = str(row["名称"])
-                market_tag = "SH" if code.startswith("6") else "SZ"
+                code = str(row.get("code", ""))
+                if not code:
+                    continue
+                # 补齐 6 位代码
+                code = code.zfill(6)
+                name = str(row.get("name", ""))
+                market_tag = "SH" if code.startswith("6") or code.startswith("9") else "SZ"
                 stocks.append(StockBasicInfo(code=code, name=name, market=market_tag))
             return stocks
         
@@ -570,6 +586,141 @@ class AkShareAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"获取股票信息失败 {code}: {e}")
             return None
+    
+    async def get_stock_individual_info_em(self, code: str) -> Optional[Dict[str, Any]]:
+        """获取个股详细资料（高危反爬 API，使用全部反爬策略）
+        
+        策略说明：
+        1. 凭证注入（Cookie + Headers）
+        2. TLS 指纹伪装（curl_cffi）
+        3. 智能重试（自动降级）
+        4. 请求限流（自适应延迟）
+        5. User-Agent 轮换
+        6. 缓存保护（5 分钟）
+        
+        Args:
+            code: 股票代码（6 位）
+        
+        Returns:
+            个股详细资料字典，包含：
+            - 最新价、涨跌幅、涨跌额
+            - 总市值、流通市值
+            - 市盈率、市净率
+            - 每股收益、净资产收益率
+            - 所属行业、地区
+            - 上市日期等
+        """
+        logger.info(f"🔍 开始获取个股详细资料：{code}（高危 API，启用全部反爬策略）")
+        
+        # 生成缓存键（缓存 5 分钟，避免频繁请求）
+        cache_key = self._get_cache_key('stock_individual_info_em', code=code)
+        cached = self._get_from_cache(cache_key, 'stock_info_em')
+        if cached:
+            logger.info(f"✅ 缓存命中：{code}")
+            return cached
+        
+        # 1. 确保凭证有效（TLS 指纹伪装 + Cookie 注入）
+        if not await self._ensure_credentials():
+            logger.warning(f"⚠️  凭证注入失败，尝试直接请求：{code}")
+        
+        # 2. 请求前限流（根据时间段和失败次数自适应）
+        await self._rate_limit()
+        
+        # 3. 轮换 User-Agent
+        self._rotate_user_agent()
+        logger.debug(f"使用 User-Agent: {self._current_user_agent[:50]}...")
+        
+        def fetch_sync():
+            """同步获取数据（带重试装饰器）"""
+            try:
+                # 4. 调用 akshare API（高危接口）
+                logger.info(f"📞 调用 ak.stock_individual_info_em('{code}')...")
+                df = ak.stock_individual_info_em(symbol=code)
+                
+                if df is None or df.empty:
+                    logger.warning(f"⚠️  API 返回空数据：{code}")
+                    return None
+                
+                # 5. 解析数据
+                info_dict = dict(zip(df["item"], df["value"]))
+                
+                # 6. 转换为标准格式
+                result = {
+                    'code': code,
+                    'latest_price': float(info_dict.get('最新价', 0)) if info_dict.get('最新价') else None,
+                    'change_pct': float(info_dict.get('涨跌幅', 0)) if info_dict.get('涨跌幅') else None,
+                    'change_amount': float(info_dict.get('涨跌额', 0)) if info_dict.get('涨跌额') else None,
+                    'total_market_cap': float(info_dict.get('总市值', 0)) if info_dict.get('总市值') else None,
+                    'float_market_cap': float(info_dict.get('流通市值', 0)) if info_dict.get('流通市值') else None,
+                    'pe_ratio': float(info_dict.get('市盈率 - 动态', 0)) if info_dict.get('市盈率 - 动态') else None,
+                    'pb_ratio': float(info_dict.get('市净率', 0)) if info_dict.get('市净率') else None,
+                    'eps': float(info_dict.get('每股收益', 0)) if info_dict.get('每股收益') else None,
+                    'roe': float(info_dict.get('净资产收益率', 0)) if info_dict.get('净资产收益率') else None,
+                    'bps': float(info_dict.get('每股净资产', 0)) if info_dict.get('每股净资产') else None,
+                    'industry': info_dict.get('所属行业', ''),
+                    'area': info_dict.get('地区', ''),
+                    'list_date': info_dict.get('上市时间', ''),
+                    'total_shares': float(info_dict.get('总股本', 0)) if info_dict.get('总股本') else None,
+                    'float_shares': float(info_dict.get('流通股本', 0)) if info_dict.get('流通股本') else None,
+                    'revenue': float(info_dict.get('营业收入', 0)) if info_dict.get('营业收入') else None,
+                    'net_profit': float(info_dict.get('净利润', 0)) if info_dict.get('净利润') else None,
+                    'gross_margin': float(info_dict.get('毛利率', 0)) if info_dict.get('毛利率') else None,
+                }
+                
+                logger.info(f"✅ 获取成功：{code} - {info_dict.get('股票简称', 'Unknown')}")
+                return result
+                
+            except Exception as e:
+                error_msg = str(e).lower()
+                
+                # 7. 检测是否被限流
+                if self._detect_rate_limit(e):
+                    logger.warning(f"⚠️  检测到限流：{code}，轮换 User-Agent 并增加延迟")
+                    self._rotate_user_agent()
+                    self._consecutive_failures += 1
+                
+                # 8. 重新抛出异常，让重试机制处理
+                raise Exception(f"stock_individual_info_em 失败 {code}: {e}")
+        
+        try:
+            # 9. 使用智能重试执行器（自动降级）
+            result = await self._retry_executor.execute(
+                func=fetch_sync,
+                context="get_stock_individual_info_em",
+                on_switch_mode=lambda: logger.info(f"🔄 切换到降级模式：{code}")
+            )
+            
+            # 10. 保存到缓存（缓存 5 分钟）
+            if result:
+                self._save_to_cache(cache_key, result, 'stock_info_em', ttl=300)
+                logger.info(f"💾 已保存到缓存：{code}")
+                
+                # 11. 成功后重置状态
+                self._consecutive_failures = 0
+                if self._rate_limit_detected:
+                    self.reset_rate_limit_status()
+            
+            return result
+            
+        except Exception as e:
+            # 12. 最终失败处理
+            logger.error(f"❌ 获取个股详细资料失败 {code}（已尝试所有重试和降级）: {e}")
+            
+            # 增加失败计数
+            self._consecutive_failures += 1
+            
+            # 返回空字典而不是 None，避免前端解析错误
+            return {
+                'code': code,
+                'error': str(e),
+                'latest_price': None,
+                'change_pct': None,
+                'total_market_cap': None,
+                'float_market_cap': None,
+                'pe_ratio': None,
+                'pb_ratio': None,
+                'industry': None,
+            }
     
     async def get_kline(
         self,
@@ -702,21 +853,22 @@ class AkShareAdapter(BaseDataAdapter):
         await self._rate_limit()
         
         def fetch_sync():
-            df = ak.stock_zh_a_spot_em()
-            row = df[df["代码"] == code]
+            # 使用新浪接口替代东方财富接口（stock_zh_a_spot_em 已失效）
+            df = ak.stock_zh_a_spot()
+            row = df[df["code"] == code]
             if row.empty:
                 return None
             row = row.iloc[0]
             return {
                 "code": code,
-                "name": row["名称"],
-                "price": float(row["最新价"]),
-                "change": float(row["涨跌额"]),
-                "change_pct": float(row["涨跌幅"]),
-                "volume": float(row["成交量"]),
-                "amount": float(row["成交额"]),
-                "high": float(row["最高"]),
-                "low": float(row["最低"]),
+                "name": row.get("name", ""),
+                "price": float(row.get("最新价", 0)),
+                "change": float(row.get("涨跌额", 0)),
+                "change_pct": float(row.get("涨跌幅", 0)),
+                "volume": float(row.get("成交量", 0)),
+                "amount": float(row.get("成交额", 0)),
+                "high": float(row.get("最高", 0)),
+                "low": float(row.get("最低", 0)),
                 "open": float(row["今开"]),
                 "prev_close": float(row["昨收"]),
                 "turnover_rate": float(row["换手率"]) if "换手率" in row else None
@@ -747,7 +899,8 @@ class AkShareAdapter(BaseDataAdapter):
         await self._rate_limit()
         
         def fetch_sync():
-            df = ak.stock_zh_a_spot_em()
+            # 使用新浪接口替代东方财富接口（stock_zh_a_spot_em 已失效）
+            df = ak.stock_zh_a_spot()
             
             if df is None or df.empty:
                 return []
@@ -762,13 +915,13 @@ class AkShareAdapter(BaseDataAdapter):
                     except (ValueError, TypeError):
                         return default
                 
-                code = str(row.get("代码", "")).zfill(6)
+                code = str(row.get("code", "")).zfill(6)
                 if not code:
                     continue
                 
                 quotes.append(MarketQuote(
                     code=code,
-                    name=str(row.get("名称", "")),
+                    name=str(row.get("name", "")),
                     change_pct=safe_float(row.get("涨跌幅")),
                     price=safe_float(row.get("最新价")),
                     high=safe_float(row.get("最高")),

@@ -1,0 +1,13 @@
+# QuantCore 可视化模块依赖
+
+# 核心可视化库
+matplotlib>=3.5.0
+
+# 数值计算
+numpy>=1.20.0
+
+# 统计分析（可选，用于收益分布的正态拟合）
+scipy>=1.7.0
+
+# 安装命令：
+# pip install -r requirements_visualization.txt

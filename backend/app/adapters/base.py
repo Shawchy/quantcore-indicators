@@ -20,6 +20,7 @@ class DataSourceType(str, Enum):
 
 @dataclass
 class StockBasicInfo:
+    """股票基本信息"""
     code: str
     name: str
     market: str
@@ -27,8 +28,11 @@ class StockBasicInfo:
     sector: Optional[str] = None
     area: Optional[str] = None
     list_date: Optional[str] = None
+    delist_date: Optional[str] = None  # 退市日期
     total_shares: Optional[float] = None
     float_shares: Optional[float] = None
+    type: Optional[int] = None  # 证券类型：1-股票，2-指数，3-其它，4-可转债，5-ETF
+    status: Optional[int] = None  # 上市状态：1-上市，0-退市
 
 
 @dataclass

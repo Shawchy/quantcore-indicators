@@ -108,22 +108,21 @@ export const SmartDateSelector = ({
       
       // 从服务器加载（并行请求，带超时处理）
       try {
-        const [effectiveResult, tradingDaysResult] = await Promise.race([
-          Promise.allSettled([
+        // 使用 Promise.race 实现超时，Promise.all 并行请求两个 API
+        const results = await Promise.race([
+          Promise.all([
             screenerApi.getEffectiveDate(),
             screenerApi.getTradingDays(20)
           ]),
-          new Promise((_, reject) =>
+          new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('请求超时')), API_TIMEOUT)
           )
-        ]) as [PromiseSettledResult<{ data: EffectiveDateInfo }>, PromiseSettledResult<{ data: TradingDay[] }>]
+        ]) as [EffectiveDateInfo, TradingDay[]]
         
-        const effectiveData = effectiveResult.status === 'fulfilled' 
-          ? effectiveResult.value.data 
-          : null
-        const tradingDaysData = tradingDaysResult.status === 'fulfilled' 
-          ? tradingDaysResult.value.data 
-          : []
+        const [effectiveDataRaw, tradingDaysRaw] = results
+        
+        const effectiveData = effectiveDataRaw
+        const tradingDaysData = tradingDaysRaw || []
         
         if (!effectiveData && tradingDaysData.length === 0) {
           throw new Error('所有 API 请求失败')

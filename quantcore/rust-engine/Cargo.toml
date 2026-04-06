@@ -1,0 +1,65 @@
+[package]
+name = "quantcore-engine"
+version = "0.1.0"
+edition = "2021"
+authors = ["QuantCore Team"]
+description = "High-performance quantitative trading engine written in Rust"
+license = "MIT"
+repository = "https://github.com/quantcore/quantcore"
+keywords = ["quant", "trading", "backtest", "finance", "python"]
+
+[lib]
+name = "quantcore_engine"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["pyo3/extension-module"]
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+# Python 互操作
+pyo3 = { version = "0.20", features = ["extension-module"] }
+
+# 序列化/反序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 异步运行时
+tokio = { version = "1.35", features = ["full"] }
+
+# 并行计算
+rayon = "1.8"
+
+# 数值计算
+ndarray = "0.15"
+rust_decimal = { version = "1.33", features = ["serde"] }
+
+# 日期时间
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.8"
+
+# 错误处理
+thiserror = "1.0"
+anyhow = "1.0"
+
+# 日志
+log = "0.4"
+env_logger = "0.10"
+
+# 数据处理（可选）
+# polars = { version = "0.36", optional = true }
+
+# 哈希
+fxhash = "0.2"
+
+# 正则表达式
+regex = "1.10"
+
+[dev-dependencies]
+criterion = "0.5"
+pyo3 = { version = "0.20", features = ["auto-initialize"] }
+
+# Benchmark 配置（暂时注释）
+# [[bench]]
+# name = "backtest_benchmark"
+# harness = false

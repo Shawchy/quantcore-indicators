@@ -31,12 +31,14 @@ const Dashboard = () => {
   const cardBg = useColorModeValue('white', 'gray.800')
 
   // 获取市场统计数据
-  const { data: marketStats, isLoading: statsLoading } = useQuery({
+  const { data: marketStats, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: ['marketStats', selectedDate],
     queryFn: () => screenerApi.getMarketStats(selectedDate),
     refetchInterval: false, // 禁用自动轮询
     staleTime: 5 * 60 * 1000, // 5 分钟内使用缓存
     gcTime: 10 * 60 * 1000, // 缓存 10 分钟
+    retry: 2, // 失败重试 2 次
+    retryDelay: 1000, // 重试间隔 1 秒
   })
 
   // 获取板块排行
@@ -76,6 +78,11 @@ const Dashboard = () => {
 
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate)
+  }
+
+  // 调试：打印错误信息
+  if (statsError) {
+    console.error('市场统计数据获取失败:', statsError)
   }
 
   // 获取上证指数实时数据
@@ -179,14 +186,14 @@ const Dashboard = () => {
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
         <StatCard
           label="市场股票数"
-          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.data?.total_stocks || 0)}
+          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.total_stocks || 0)}
           helpText="A 股市场"
           icon={FiActivity}
           accentColor="blue"
         />
         <StatCard
           label="行业板块数"
-          value={marketStats?.data?.industry_distribution ? Object.keys(marketStats.data.industry_distribution).length : 0}
+          value={marketStats?.industry_distribution ? Object.keys(marketStats.industry_distribution).length : 0}
           helpText="申万一级行业"
           icon={FiPieChart}
           accentColor="purple"
@@ -200,7 +207,7 @@ const Dashboard = () => {
         />
         <StatCard
           label="市场成交额"
-          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.data?.turnover ? `${(marketStats.data.turnover / 100000000).toFixed(2)}亿` : '-')}
+          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.turnover ? `${(marketStats.turnover / 100000000).toFixed(2)}亿` : '-')}
           helpText="全市场"
           icon={FiTrendingUp}
           accentColor="orange"

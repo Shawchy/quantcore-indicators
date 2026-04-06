@@ -17,16 +17,34 @@ class Base(DeclarativeBase):
 class StockInfo(Base):
     __tablename__ = "stock_info"
     
+    # 主键
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    
+    # 基本信息
     code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     market: Mapped[str] = mapped_column(String(10))
+    
+    # 证券类型（1：股票，2：指数，3：其它，4：可转债，5：ETF）
+    type: Mapped[Optional[int]] = mapped_column(Integer, default=1, index=True)
+    
+    # 上市状态（1：上市，0：退市）
+    status: Mapped[Optional[int]] = mapped_column(Integer, default=1, index=True)
+    
+    # 上市/退市日期
+    list_date: Mapped[Optional[str]] = mapped_column(String(20))
+    delist_date: Mapped[Optional[str]] = mapped_column(String(20))
+    
+    # 行业/板块/地区
     industry: Mapped[Optional[str]] = mapped_column(String(50), index=True)
     sector: Mapped[Optional[str]] = mapped_column(String(50), index=True)
     area: Mapped[Optional[str]] = mapped_column(String(50), index=True)
-    list_date: Mapped[Optional[str]] = mapped_column(String(20))
+    
+    # 股本信息（单位：股）
     total_shares: Mapped[Optional[float]] = mapped_column(Float)
     float_shares: Mapped[Optional[float]] = mapped_column(Float)
+    
+    # 更新时间
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
     
     __table_args__ = (
@@ -289,13 +307,19 @@ async def init_database():
     db_file = db_path / "quant.db"
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_file}",
-        echo=settings.DEBUG
+        echo=settings.DEBUG,
+        pool_size=20,  # 增加连接池大小
+        max_overflow=20,  # 增加最大溢出连接数
+        pool_pre_ping=True,  # 连接前 ping 测试
+        pool_recycle=3600,  # 1 小时回收连接
     )
 
     async_session_maker = async_sessionmaker(
         engine,
         class_=AsyncSession,
-        expire_on_commit=False
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
     )
     
     # 只创建表结构，不删除现有数据
@@ -304,6 +328,9 @@ async def init_database():
     
     # 创建默认用户
     await create_default_users()
+    
+    # 自动检查和同步股票列表
+    await auto_sync_stock_list_on_startup()
 
 
 async def create_default_users():
@@ -345,6 +372,41 @@ async def create_default_users():
         
         if settings.DEBUG:
             logger.info(f"已创建默认用户：admin/{settings.DEFAULT_ADMIN_PASSWORD}, user/{settings.DEFAULT_USER_PASSWORD}")
+
+
+async def auto_sync_stock_list_on_startup():
+    """
+    应用启动时自动同步股票列表
+    
+    检查数据库状态，如果为空或数据过期则自动同步
+    """
+    try:
+        from app.services.stock_list_sync import stock_list_sync
+        
+        # 检查数据库状态
+        status = await stock_list_sync.check_database_status()
+        
+        logger.info(
+            f"启动时检查股票列表：{status['total_count']}只股票，"
+            f"最后更新：{status['last_update'] or '从未'}，"
+            f"距今：{status['days_since_update'] or 'N/A'}天"
+        )
+        
+        # 如果数据库为空或数据过期，触发同步
+        if status['needs_update']:
+            logger.warning("股票列表数据过期或为空，触发自动同步...")
+            success = await stock_list_sync.auto_sync()
+            
+            if success:
+                logger.info("股票列表自动同步成功")
+            else:
+                logger.error("股票列表自动同步失败，但应用将继续启动")
+        else:
+            logger.info("股票列表数据有效，无需同步")
+            
+    except Exception as e:
+        logger.error(f"启动时自动同步股票列表失败：{e}")
+        # 不阻塞应用启动
 
 
 @asynccontextmanager

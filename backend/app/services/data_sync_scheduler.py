@@ -10,6 +10,7 @@ from loguru import logger
 
 from app.adapters.factory import data_source_manager
 from app.services.local_database import local_db_service
+from app.services.stock_list_sync import stock_list_sync
 from app.storage.unified_storage import storage_manager, DataCategory
 
 
@@ -81,7 +82,12 @@ class DataSyncScheduler:
                 
                 # 执行同步
                 if self._running:
-                    await self._do_sync_stock_list()
+                    # 使用新的同步工具（不依赖数据源适配器）
+                    success = await stock_list_sync.auto_sync()
+                    if success:
+                        logger.info("定时任务：股票列表同步成功")
+                    else:
+                        logger.error("定时任务：股票列表同步失败")
                 
             except asyncio.CancelledError:
                 break
@@ -121,28 +127,7 @@ class DataSyncScheduler:
                 logger.error(f"实时行情同步任务异常：{e}")
                 await asyncio.sleep(300)
     
-    async def _do_sync_stock_list(self):
-        """执行股票列表同步"""
-        logger.info("开始同步股票列表...")
-        
-        try:
-            # 从数据源获取股票列表
-            stock_list = await data_source_manager.get_stock_list()
-            
-            if stock_list:
-                # 同步到本地数据库（UnifiedStorage 会自动同步到数据库）
-                # 股票列表使用 SECTOR 分类存储
-                stock_storage = storage_manager.get_storage(
-                    category=DataCategory.SECTOR,
-                    cache_ttl=86400  # 24 小时缓存
-                )
-                await stock_storage.set("stock_list", stock_list)
-                logger.info(f"股票列表同步完成：{len(stock_list)}只股票")
-            else:
-                logger.warning("未获取到股票列表数据")
-                
-        except Exception as e:
-            logger.error(f"股票列表同步失败：{e}")
+
     
     async def _do_sync_kline_data(self, limit_stocks: int = 100):
         """执行 K 线数据同步

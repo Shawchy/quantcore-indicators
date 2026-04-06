@@ -6,12 +6,16 @@
 from fastapi import APIRouter, Query, Path, HTTPException
 from typing import List, Optional, Union, Dict
 from loguru import logger
+import asyncio
 
 from app.models.schemas import ResponseModel, FundInfo
 from app.adapters.factory import data_source_manager
 from app.services.smart_loader import smart_loader
 
 router = APIRouter(tags=["基金信息"])
+
+# 基金 API 超时配置（秒）
+FUND_API_TIMEOUT = 45  # 基金数据获取超时时间
 
 
 # ===== 具体路径放在前面 =====
@@ -130,9 +134,13 @@ async def get_fund_realtime_increase_rate(
                     message="基金代码不能为空"
                 )
             
-            rate_list = await data_source_manager.get_fund_realtime_increase_rate(
-                fund_codes=fund_code_list,
-                source_type="efinance"
+            # 使用异步超时控制
+            rate_list = await asyncio.wait_for(
+                data_source_manager.get_fund_realtime_increase_rate(
+                    fund_codes=fund_code_list,
+                    source_type="efinance"
+                ),
+                timeout=FUND_API_TIMEOUT
             )
             
             if not rate_list:
@@ -154,9 +162,13 @@ async def get_fund_realtime_increase_rate(
                     message="基金代码不能为空"
                 )
             
-            rate_info = await data_source_manager.get_fund_realtime_increase_rate(
-                fund_codes=fund_code,
-                source_type="efinance"
+            # 使用异步超时控制
+            rate_info = await asyncio.wait_for(
+                data_source_manager.get_fund_realtime_increase_rate(
+                    fund_codes=fund_code,
+                    source_type="efinance"
+                ),
+                timeout=FUND_API_TIMEOUT
             )
             
             if not rate_info:
@@ -168,6 +180,12 @@ async def get_fund_realtime_increase_rate(
             
             return ResponseModel(data=rate_info)
     
+    except asyncio.TimeoutError:
+        logger.warning(f"获取基金实时估算涨跌幅超时 {fund_codes}（超过{FUND_API_TIMEOUT}秒）")
+        raise HTTPException(
+            status_code=504,
+            detail=f"数据源响应超时（{FUND_API_TIMEOUT}秒），请稍后重试"
+        )
     except Exception as e:
         logger.error(f"获取基金实时估算涨跌幅失败 {fund_codes}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

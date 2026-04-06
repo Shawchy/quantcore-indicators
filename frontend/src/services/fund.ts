@@ -319,7 +319,9 @@ export const fundApi = {
     // 从 API 获取缺失的数据
     const codeParam = missingCodes.join(',')
     console.log(`[API] 获取 ${missingCodes.length} 只基金实时估算`)
-    const response = await api.get<FundRealtimeRateInfo | FundRealtimeRateInfo[]>(`/fund/realtime-rate/${codeParam}`)
+    const response = await api.get<FundRealtimeRateInfo | FundRealtimeRateInfo[]>(`/fund/realtime-rate/${codeParam}`, {
+      timeout: 90000,  // 90 秒超时（基金数据获取可能较慢）
+    })
     
     // 保存到缓存
     if (response.data) {

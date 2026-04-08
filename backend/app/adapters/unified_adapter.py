@@ -22,7 +22,7 @@ from .base import (
 )
 from .akshare_adapter import AkShareAdapter
 from .enhanced_playwright_adapter import EnhancedPlaywrightAdapter
-from .anti_wind_control import AntiWindControlManager
+from .anti_wind import AntiWindFacade
 
 
 class UnifiedDataAdapter(BaseDataAdapter):
@@ -48,7 +48,17 @@ class UnifiedDataAdapter(BaseDataAdapter):
         
         self._api_adapter: Optional[AkShareAdapter] = None
         self._browser_adapter: Optional[EnhancedPlaywrightAdapter] = None
-        self._anti_wind = AntiWindControlManager()
+        
+        # 使用新的 AntiWindFacade 统一管理反爬策略
+        self._anti_wind = AntiWindFacade({
+            'enable_cookie_inject': True,
+            'enable_tls_fingerprint': True,
+            'enable_rate_limit': True,
+            'enable_ua_rotation': True,
+            'enable_smart_retry': True,
+            'enable_proxy_pool': self._config.get('share_proxy', True),
+            'max_retries': 2,
+        })
         
         self._is_initialized = False
         self._current_source = "api"
@@ -61,6 +71,10 @@ class UnifiedDataAdapter(BaseDataAdapter):
     
     async def initialize(self) -> bool:
         try:
+            # 初始化 AntiWindFacade
+            self._anti_wind.initialize()
+            logger.info("反爬策略管理器初始化成功")
+            
             self._api_adapter = AkShareAdapter()
             await self._api_adapter.initialize()
             logger.info("AKShare 适配器初始化成功")
@@ -76,7 +90,7 @@ class UnifiedDataAdapter(BaseDataAdapter):
             return True
             
         except Exception as e:
-            logger.error(f"统一适配器初始化失败: {e}")
+            logger.error(f"统一适配器初始化失败：{e}")
             return False
     
     async def _ensure_browser_ready(self) -> bool:

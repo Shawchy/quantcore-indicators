@@ -24,7 +24,14 @@ from .base import (
     ChipData,
     IndexComponent
 )
-from .smart_retry import SmartRetryExecutor, ErrorClassifier, ErrorType
+from .anti_wind import (
+    AntiWindFacade,
+    CookieInjectStrategy,
+    TLSFingerprintStrategy,
+    RateLimitStrategy,
+    UARotatorStrategy,
+    SmartRetryStrategy,
+)
 from .hybrid_tls_client import HybridTLSClient
 from app.models.schemas import (
     BillboardEntry,
@@ -163,51 +170,56 @@ class EFinanceAdapter(BaseDataAdapter):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
-        self._is_initialized = False
         
-        # 反风控设置
-        self._request_delay_range = (1.0, 2.0)  # 请求间隔（秒）
-        self._max_retries = 3  # 最大重试次数
-        self._retry_base_delay = 2.0  # 重试基础延迟（秒）
-        
-        # 请求头轮换池（简化版：4 个主流浏览器）
-        self._user_agents = [
-            # Chrome 最新版（主力，60% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            
-            # Chrome 上一版（20% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            
-            # Edge（10% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
-            
-            # Firefox（10% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-        ]
-        
-        # 当前使用的 User-Agent 索引
-        self._current_ua_index = 0
-        
-        # 请求统计
-        self._request_count = 0
-        self._fail_count = 0
-        self._last_request_time = 0
-        
-        # 动态调整参数
-        self._adaptive_delay_enabled = True  # 启用自适应延迟
-        self._consecutive_failures = 0  # 连续失败次数
-        
-        # 智能重试执行器
-        self._retry_executor = SmartRetryExecutor({
+        # 反风控门面（统一管理所有策略）
+        self.anti_wind = AntiWindFacade({
+            'enable_cookie_inject': True,
+            'enable_tls_fingerprint': True,
+            'enable_rate_limit': True,
+            'enable_ua_rotation': True,
+            'enable_smart_retry': True,
             'max_retries': 3,
-            'base_wait_seconds': 2.0,
+            'rate_limit_config': {
+                'base_delay_range': (1.0, 2.0),  # efinance 请求较快
+                'adaptive_delay_enabled': True,
+            },
+            'retry_config': {
+                'max_retries': 3,
+                'base_wait_seconds': 2.0,
+            },
         })
         
         # 混合 TLS 客户端（用于降级）
         self._hybrid_client: Optional[HybridTLSClient] = None
         
-        # 设置模式切换回调
-        self._retry_executor.set_switch_mode_callback(self._fallback_to_hybrid_client)
+        self._is_initialized = False
+        
+        logger.info("EFinance 适配器已初始化（使用 AntiWindFacade 统一管理反爬策略）")
+    
+    async def _execute_with_anti_wind(
+        self,
+        request_func: Callable,
+        url: str = "",
+        method: str = "GET",
+        **kwargs
+    ) -> Any:
+        """使用 AntiWindFacade 执行请求
+        
+        Args:
+            request_func: 请求函数（同步或异步）
+            url: 请求 URL（可选）
+            method: 请求方法（可选）
+            **kwargs: 其他参数
+        
+        Returns:
+            请求结果
+        """
+        return await self.anti_wind.execute_with_strategies(
+            request_func=request_func,
+            url=url,
+            method=method,
+            **kwargs
+        )
     
     @property
     def source_type(self) -> DataSourceType:
@@ -241,16 +253,6 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.warning(f"获取本地 User-Agent 失败：{e}")
             return "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     
-    def _rotate_user_agent(self) -> str:
-        """轮换 User-Agent（降低频率：每 10 次请求轮换一次）
-        
-        Returns:
-            str: 轮换后的 User-Agent
-        """
-        # 每 10 次请求轮换一次（而非每次）
-        if self._request_count % 10 == 0:
-            self._current_ua_index = (self._current_ua_index + 1) % len(self._user_agents)
-        return self._user_agents[self._current_ua_index]
     
     def _get_time_based_delay(self) -> Tuple[float, float]:
         """根据时间段获取延迟范围
@@ -290,11 +292,14 @@ class EFinanceAdapter(BaseDataAdapter):
             rotate: 是否轮换 User-Agent，默认 True
         """
         try:
-            # 轮换或选择 User-Agent
-            if rotate:
-                user_agent = self._rotate_user_agent()
+            # 使用新的 AntiWindFacade 获取 UA（如果 UA 轮换策略启用）
+            ua_strategy = self.anti_wind.get_strategy('UARotator')
+            if ua_strategy and ua_strategy.is_enabled():
+                # 从策略获取当前 UA
+                user_agent = ua_strategy._user_agents[0] if ua_strategy._user_agents else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             else:
-                user_agent = self._user_agents[0]
+                # 使用默认 UA
+                user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             
             # 配置全局请求头（模拟浏览器）
             headers = {
@@ -427,8 +432,7 @@ class EFinanceAdapter(BaseDataAdapter):
             "consecutive_failures": self._consecutive_failures,
             "current_delay_range": self._get_time_based_delay() if self._adaptive_delay_enabled else self._request_delay_range,
             "adaptive_delay_enabled": self._adaptive_delay_enabled,
-            "user_agents_count": len(self._user_agents),
-            "current_ua_index": self._current_ua_index
+            "anti_wind_strategies": len(self.anti_wind.strategies) if hasattr(self, 'anti_wind') else 0,
         }
     
     def enable_adaptive_delay(self, enabled: bool = True) -> None:
@@ -480,14 +484,13 @@ class EFinanceAdapter(BaseDataAdapter):
             
             time_period = "交易时段" if ((9*60+30 <= current_time <= 11*60+30) or (13*60 <= current_time <= 15*60)) else "非交易时段"
             
-            logger.info("efinance 适配器初始化成功（凭证注入 + 智能重试）")
-            logger.info(f"  - 请求头：已配置（{len(self._user_agents)}个主流浏览器，每 10 次轮换）")
+            logger.info("efinance 适配器初始化成功（使用 AntiWindFacade 统一管理）")
+            logger.info(f"  - 反爬策略：AntiWindFacade（{len(self.anti_wind.strategies)}个策略）")
             logger.info(f"  - TLS 指纹：curl_cffi (chrome131)")
-            logger.info(f"  - 智能重试：已启用（自动切换模式）")
+            logger.info(f"  - 智能重试：已启用（最大{self.anti_wind.config.get('max_retries', 3)}次）")
             logger.info(f"  - 降级方案：HybridTLSClient（懒加载，tls-client → curl_cffi → Playwright）")
             logger.info(f"  - 当前时间段：{time_period}")
             logger.info(f"  - 请求频率：自适应延迟（根据时间段和失败次数调整）")
-            logger.info(f"  - 最大重试：{self._max_retries}次（指数退避）")
             logger.info(f"  - 缓存策略：实时行情 60 秒，股票信息 10 分钟")
             logger.info(f"  - 失败统计：已启用（自动调整策略）")
             return True
@@ -531,108 +534,8 @@ class EFinanceAdapter(BaseDataAdapter):
         self._is_initialized = False
         logger.info("efinance 适配器已关闭")
     
-    async def _ensure_credentials(self) -> bool:
-        """确保凭证有效（懒加载获取）"""
-        if not hasattr(self, '_injector') or self._injector is None:
-            return False
-        
-        logger.debug(f"检查 _is_patched 标志：{self._injector._is_patched}")
-        if self._injector._is_patched:
-            logger.info("凭证已注入，跳过获取")
-            return True
-        
-        async with self._injector._init_lock:
-            logger.debug(f"获取锁后检查 _is_patched 标志：{self._injector._is_patched}")
-            if self._injector._is_patched:
-                logger.info("凭证已注入（并发检查），跳过获取")
-                return True
-            
-            try:
-                logger.info("正在获取凭证（首次请求）...")
-                
-                logger.info("开始调用 injector.initialize()...")
-                init_result = await self._injector.initialize()
-                logger.info(f"injector.initialize() 返回：{init_result}")
-                if not init_result:
-                    logger.warning("Playwright 初始化失败，使用普通模式")
-                    return False
-                logger.info("Playwright 初始化成功")
-                
-                logger.info("开始调用 injector.fetch_credentials()...")
-                fetch_result = await self._injector.fetch_credentials('eastmoney.com')
-                logger.info(f"injector.fetch_credentials() 返回：{fetch_result}")
-                if not fetch_result:
-                    logger.warning("凭证获取失败，使用普通模式")
-                    return False
-                logger.info("凭证获取成功")
-                
-                logger.info("开始调用 injector.patch_requests_with_tls()...")
-                patch_result = self._injector.patch_requests_with_tls()
-                logger.info(f"injector.patch_requests_with_tls() 返回：{patch_result}")
-                if not patch_result:
-                    logger.warning("TLS 指纹伪装失败，使用普通模式")
-                    return False
-                logger.info("TLS 指纹伪装成功")
-                
-                logger.info("凭证获取并注入成功")
-                return True
-                
-            except Exception as e:
-                logger.warning(f"获取凭证失败：{e}，使用普通模式")
-                import traceback
-                logger.error(traceback.format_exc())
-                return False
-    
-    def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3) -> Callable:
-        """请求频率控制装饰器（带重试机制）
-        
-        Args:
-            min_delay: 最小延迟（秒）
-            max_delay: 最大延迟（秒）
-            retries: 重试次数
-            
-        Usage:
-            @rate_limit_decorator(min_delay=1.5, max_delay=2.5, retries=3)
-            async def get_data(...):
-                ...
-        """
-        def decorator(func: Callable) -> Callable:
-            @wraps(func)
-            async def wrapper(*args, **kwargs):
-                self = args[0] if args else None
-                
-                # 1. 频率控制
-                if isinstance(self, EFinanceAdapter):
-                    await self._rate_limit()
-                else:
-                    await asyncio.sleep(random.uniform(min_delay, max_delay))
-                
-                # 2. 执行请求，带重试机制
-                last_error = None
-                for attempt in range(retries):
-                    try:
-                        return await func(*args, **kwargs)
-                    except Exception as e:
-                        last_error = e
-                        if attempt < retries - 1:
-                            # 指数退避：2s -> 4s -> 8s
-                            delay = (2 ** attempt) * min_delay + random.uniform(0, 1)
-                            logger.debug(f"{func.__name__} 请求失败，{delay:.1f}秒后重试（{attempt+1}/{retries}）: {e}")
-                            await asyncio.sleep(delay)
-                        else:
-                            logger.error(f"{func.__name__} 请求失败，已重试{retries}次：{e}")
-                
-                # 所有重试都失败
-                raise last_error if last_error else Exception("请求失败")
-            
-            return wrapper
-        return decorator
-    
     async def get_stock_list(self) -> List[StockBasicInfo]:
-        """获取股票列表（高敏感 API，带 TLS 指纹伪装 + 凭证注入 + 智能重试）"""
-        # 确保凭证有效（懒加载）
-        if not await self._ensure_credentials():
-            logger.warning("凭证注入失败，尝试直接请求")
+        """获取股票列表（高敏感 API，使用 AntiWindFacade 统一管理）"""
         
         async def fetch_async():
             if not EF_AVAILABLE:
@@ -684,8 +587,8 @@ class EFinanceAdapter(BaseDataAdapter):
             return stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_async,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_async,
                 context="get_stock_list"
             )
             return result or []
@@ -705,12 +608,8 @@ class EFinanceAdapter(BaseDataAdapter):
         Note:
             使用 efinance.stock.get_base_info 接口，获取更详细的股票信息
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         if not EF_AVAILABLE:
             return None
         
@@ -767,12 +666,8 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_stocks_base_info(self, stock_codes: List[str]) -> List[StockBasicInfo]:
         """批量获取多只股票的基本信息（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         if not stock_codes:
             return []
         
@@ -823,8 +718,8 @@ class EFinanceAdapter(BaseDataAdapter):
             return stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_async,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_async,
                 context="get_stocks_base_info"
             )
             stocks = result or []
@@ -855,15 +750,11 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for deal in deals[:5]:
             ...     print(f"{deal.trade_time} - {deal.price:.2f}元 - {deal.volume}手")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_data"
             )
             if not EF_AVAILABLE:
@@ -937,15 +828,11 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for bill in bills[:5]:
             ...     print(f"{bill.date} - 主力净流入：{bill.main_net_amount/1e8:.2f}亿")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_deal_detail"
             )
 
@@ -1032,12 +919,8 @@ class EFinanceAdapter(BaseDataAdapter):
             efinance 不支持指数 K 线数据，使用 AkShare 替代（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             # efinance 不支持指数 K 线数据，动态导入 AkShare
             try:
                 import akshare as ak
@@ -1157,15 +1040,11 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> hourly = await adapter.get_kline('600519', klt=60)（带 TLS 指纹伪装 + 凭证注入）
 """
         #
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_history_bill"
             )
 
@@ -1262,8 +1141,8 @@ class EFinanceAdapter(BaseDataAdapter):
                 return klines
             
             # 使用智能重试执行器
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_kline"
             )
             klines = result or []
@@ -1320,14 +1199,10 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for code, data in klines.items():
             ...     print(f"{code}: {len(data)}条 K 线数据")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
         
-        # 限流
-        await self._rate_limit()
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_data"
             )
             if not EF_AVAILABLE:
@@ -1459,12 +1334,8 @@ class EFinanceAdapter(BaseDataAdapter):
             周 K 线数据列表（带 TLS 指纹伪装 + 凭证注入）
 """
         #
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         # 直接调用优化后的 get_kline 方法
         return await self.get_kline(
             code=code,
@@ -1504,12 +1375,8 @@ class EFinanceAdapter(BaseDataAdapter):
             月 K 线数据列表（带 TLS 指纹伪装 + 凭证注入）
 """
         #
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         # 直接调用优化后的 get_kline 方法
         return await self.get_kline(
             code=code,
@@ -1556,12 +1423,8 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> quote = await adapter.get_realtime_quote('600519')
             >>> print(f"贵州茅台最新价：{quote['price']}元，涨跌幅：{quote['change_pct']}%")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
             # 检测是否为指数代码（000001=上证指数，399001=深证成指等）
             # efinance 不支持指数实时行情，使用 akshare 替代
@@ -1661,9 +1524,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取实时行情快照
             series = ef.stock.get_quote_snapshot(code.zfill(6))
             
@@ -1770,15 +1631,11 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for quote in quotes:
             ...     print(f"{quote['name']}: {quote['price']}元 ({quote['change_pct']}%)")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_multi_kline"
             )
 
@@ -1846,12 +1703,8 @@ class EFinanceAdapter(BaseDataAdapter):
         """获取板块列表（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -1898,12 +1751,8 @@ class EFinanceAdapter(BaseDataAdapter):
         """获取筹码数据（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -1970,15 +1819,11 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> # 获取指定日期区间
             >>> bills = await adapter.get_daily_billboard('2021-08-20', '2021-08-27')
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info"
             )
             
@@ -2057,15 +1902,11 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for board in boards:
             ...     print(f"{board.name} - {board.board_type} - {board.change_pct}%")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info"
             )
             
@@ -2074,9 +1915,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取股票所属板块
             df = ef.stock.get_belong_board(code.zfill(6))
             
@@ -2128,12 +1967,8 @@ class EFinanceAdapter(BaseDataAdapter):
             指数成分股列表（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -2142,9 +1977,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取指数成分股
             df = ef.stock.get_members(index_code)
             
@@ -2192,12 +2025,8 @@ class EFinanceAdapter(BaseDataAdapter):
             资金流向数据列表（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -2206,9 +2035,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取当日资金流向
             df = ef.stock.get_today_bill(trade_date)
             
@@ -2276,15 +2103,11 @@ class EFinanceAdapter(BaseDataAdapter):
                 print(f"主力净流入：{latest['main_net_amount']}元")
                 print(f"超大单净流入：{latest['elg_net_amount']}元")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info"
             )
             
@@ -2346,12 +2169,8 @@ class EFinanceAdapter(BaseDataAdapter):
             历史资金流向数据列表（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -2435,12 +2254,8 @@ class EFinanceAdapter(BaseDataAdapter):
             - fall_count: 下跌家数（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return {}
             
@@ -2450,9 +2265,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # if cached:
             #     return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # efinance 没有直接的大盘资金流向接口
             # 尝试使用 get_today_bill 获取全市场数据（不需要参数版本）
             try:
@@ -2545,15 +2358,11 @@ class EFinanceAdapter(BaseDataAdapter):
             # 获取前 1 大股东
             shareholders = await adapter.get_top10_stock_holder_info("600519", top=1)
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info"
             )
             
@@ -2568,9 +2377,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取前十大股东信息（efinance 的 top 参数支持 1-10）
             df = ef.stock.get_top10_stock_holder_info(code.zfill(6), top=top)
             
@@ -2697,12 +2504,8 @@ class EFinanceAdapter(BaseDataAdapter):
             公司业绩表现数据列表（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -2775,12 +2578,8 @@ class EFinanceAdapter(BaseDataAdapter):
             报告日期列表，格式：YYYY-MM-DD（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -2873,15 +2672,11 @@ class EFinanceAdapter(BaseDataAdapter):
             # 获取沪深 300 指数成分股
             quotes = await adapter.get_market_realtime_quotes(fs="000300")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info"
             )
             
@@ -3036,12 +2831,8 @@ class EFinanceAdapter(BaseDataAdapter):
             支持获取历史多个季度的数据（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -3050,9 +2841,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取指定报告期的数据
             # efinance 的 get_all_company_performance 可以指定 date 参数
             # 如果不指定，默认获取最新季报
@@ -3125,12 +2914,8 @@ class EFinanceAdapter(BaseDataAdapter):
             ]（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -3178,12 +2963,8 @@ class EFinanceAdapter(BaseDataAdapter):
             会自动获取所有可用的报告期，然后依次获取每个报告期的数据（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -3267,12 +3048,8 @@ class EFinanceAdapter(BaseDataAdapter):
             funds = await adapter.get_fund_codes('etf')（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -3282,9 +3059,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # if cached:
             #     return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金代码列表
             df = ef.fund.get_fund_codes(ft=fund_type)
             
@@ -3350,12 +3125,8 @@ class EFinanceAdapter(BaseDataAdapter):
             positions = await adapter.get_fund_invest_position('161725', ['2021-12-31', '2021-09-30'])（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -3371,9 +3142,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金持仓数据
             df = ef.fund.get_invest_position(fund_code, dates=dates)
             
@@ -3436,12 +3205,8 @@ class EFinanceAdapter(BaseDataAdapter):
             history = await adapter.get_fund_quote_history('161725', pz=100)（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -3451,9 +3216,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金历史净值
             df = ef.fund.get_quote_history(fund_code, pz=pz)
             
@@ -3516,12 +3279,8 @@ class EFinanceAdapter(BaseDataAdapter):
             history_005918 = history_dict['005918']（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return {}
             
@@ -3534,9 +3293,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 批量获取基金历史净值
             result_dict = ef.fund.get_quote_history_multi(fund_codes, pz=pz)
             
@@ -3608,12 +3365,8 @@ class EFinanceAdapter(BaseDataAdapter):
             rate_list = await adapter.get_fund_realtime_increase_rate(['161725', '005827'])（带 TLS 指纹伪装 + 凭证注入）
 """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-        
+                    
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return None if isinstance(fund_codes, str) else []
             
@@ -3625,9 +3378,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 if cached:
                     return cached
                 
-                # 频率控制
-                await self._rate_limit()
-                
+                # 频率控制                
                 # 获取单只基金实时估算涨跌幅
                 df = ef.fund.get_realtime_increase_rate(code)
                 
@@ -3674,9 +3425,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 if cached:
                     return cached
                 
-                # 频率控制
-                await self._rate_limit()
-                
+                # 频率控制                
                 # 批量获取基金实时估算涨跌幅
                 df = ef.fund.get_realtime_increase_rate(valid_codes)
                 
@@ -3749,15 +3498,11 @@ class EFinanceAdapter(BaseDataAdapter):
             print(f"近一年收益率：{one_year['return_rate']}%")
             print(f"同类排名：{one_year['rank']}/{one_year['total_count']}")
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
+                
+        # 限流        
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info"
             )
             
@@ -3861,12 +3606,8 @@ class EFinanceAdapter(BaseDataAdapter):
             assets = await adapter.get_fund_types_percentage('005827', ['2021-12-31', '2021-06-30'])
         """
         try:
-            # 确保凭证有效（TLS 指纹伪装）
-            await self._ensure_credentials()
-            
+                        
             # 限流
-            await self._rate_limit()
-
             if not EF_AVAILABLE:
                 return []
             
@@ -3882,9 +3623,7 @@ class EFinanceAdapter(BaseDataAdapter):
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金资产配置数据
             df = ef.fund.get_types_percentage(fund_code, dates=dates)
             

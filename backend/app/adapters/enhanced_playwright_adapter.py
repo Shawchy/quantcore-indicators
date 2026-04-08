@@ -25,10 +25,11 @@ from .base import (
     SectorInfo,
     MarketQuote
 )
-from .anti_wind_control import (
-    AntiWindControlManager,
-    ProxyInfo,
-    CaptchaDetector
+from .anti_wind import (
+    AntiWindFacade,
+    CookieInjectStrategy,
+    CaptchaHandlerStrategy,
+    ProxyPoolStrategy,
 )
 
 
@@ -70,10 +71,18 @@ class EnhancedPlaywrightAdapter(BaseDataAdapter):
             **(config or {})
         }
         
-        self._anti_wind = AntiWindControlManager({
-            'enable_proxy': self._config['enable_proxy'],
-            'enable_cookies': self._config['enable_cookies'],
-            'enable_captcha_detection': self._config['enable_captcha_detection'],
+        # 使用新的 AntiWindFacade 统一管理反爬策略
+        self._anti_wind = AntiWindFacade({
+            'enable_cookie_inject': self._config['enable_cookies'],
+            'enable_captcha_handler': self._config['enable_captcha_detection'],
+            'enable_proxy_pool': self._config['enable_proxy'],
+            'enable_rate_limit': True,
+            'enable_ua_rotation': False,  # 浏览器适配器不需要 UA 轮换
+            'enable_smart_retry': True,
+            'max_retries': self._config.get('max_retries', 3),
+            'captcha_config': {
+                'timeout': self._config.get('captcha_timeout', 60),
+            },
         })
         
         self._eastmoney_urls = {
@@ -111,7 +120,7 @@ class EnhancedPlaywrightAdapter(BaseDataAdapter):
             await self._create_context()
             
             self._is_initialized = True
-            logger.info("增强版 Playwright 适配器初始化成功")
+            logger.info("增强版 Playwright 适配器初始化成功（使用 AntiWindFacade 统一管理）")
             return True
             
         except ImportError:

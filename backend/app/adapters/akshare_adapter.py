@@ -16,7 +16,15 @@ from .base import (
     ChipData,
     MarketQuote
 )
-from .smart_retry import SmartRetryExecutor, ErrorClassifier, ErrorType
+from .anti_wind import (
+    AntiWindFacade,
+    CookieInjectStrategy,
+    TLSFingerprintStrategy,
+    RateLimitStrategy,
+    UARotatorStrategy,
+    SmartRetryStrategy,
+    ProxyPoolStrategy,
+)
 from .hybrid_tls_client import HybridTLSClient
 
 
@@ -43,103 +51,67 @@ class AkShareAdapter(BaseDataAdapter):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
-        self._last_request_time = 0
-        self._min_request_interval = 1.5  # akshare 需要更保守
         
         # 缓存机制
         self._cache: Dict[str, CacheEntry] = {}
         
-        # 反风控设置
-        self._request_delay_range = (2.0, 4.0)  # 请求间隔（秒），默认更保守
-        self._retry_base_delay = 3.0  # 重试基础延迟（秒）
-        self._max_retries = 2  # 减少重试次数到 2 次
-        self._consecutive_failures = 0  # 连续失败次数
-        self._adaptive_delay_enabled = True  # 启用自适应延迟
-        self._is_initialized = False
-        
-        # 限流检测
-        self._rate_limit_detected = False
-        self._rate_limit_count = 0
-        self._last_rate_limit_time = 0
-        
-        # User-Agent 轮换池（简化版：4 个主流浏览器）
-        self._user_agents = [
-            # Chrome 最新版（主力）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            
-            # Chrome 上一版（备用）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            
-            # Edge（备用）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
-            
-            # Firefox（备用）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-        ]
-        self._current_user_agent = self._user_agents[0]  # 默认使用第一个
-        
-        # 智能重试执行器
-        self._retry_executor = SmartRetryExecutor({
+        # 反风控门面（统一管理所有策略）
+        self.anti_wind = AntiWindFacade({
+            'enable_cookie_inject': True,
+            'enable_tls_fingerprint': True,
+            'enable_rate_limit': True,
+            'enable_ua_rotation': True,
+            'enable_smart_retry': True,
+            'enable_proxy_pool': False,  # 默认禁用，需要时启用
             'max_retries': 3,
-            'base_wait_seconds': 2.0,
+            'rate_limit_config': {
+                'base_delay_range': (2.0, 4.0),  # akshare 需要更保守
+                'adaptive_delay_enabled': True,
+            },
+            'retry_config': {
+                'max_retries': 3,
+                'base_wait_seconds': 2.0,
+            },
+            'ua_config': {
+                'rotation_interval': 10,
+            },
         })
         
         # 混合 TLS 客户端（用于降级）
         self._hybrid_client: Optional[HybridTLSClient] = None
         
-        # 设置模式切换回调
-        self._retry_executor.set_switch_mode_callback(self._fallback_to_hybrid_client)
+        self._is_initialized = False
+        
+        logger.info("AkShare 适配器已初始化（使用 AntiWindFacade 统一管理反爬策略）")
+    
+    async def _execute_with_anti_wind(
+        self,
+        request_func: Callable,
+        url: str = "",
+        method: str = "GET",
+        **kwargs
+    ) -> Any:
+        """使用 AntiWindFacade 执行请求
+        
+        Args:
+            request_func: 请求函数（同步或异步）
+            url: 请求 URL（可选）
+            method: 请求方法（可选）
+            **kwargs: 其他参数
+        
+        Returns:
+            请求结果
+        """
+        return await self.anti_wind.execute_with_strategies(
+            request_func=request_func,
+            url=url,
+            method=method,
+            **kwargs
+        )
     
     @property
     def source_type(self) -> DataSourceType:
         return DataSourceType.AKSHARE
-    
-    async def _ensure_credentials(self) -> bool:
-        """确保凭证有效（懒加载获取）"""
-        logger.info(f"_ensure_credentials 开始，hasattr(_injector)={hasattr(self, '_injector')}")
-        
-        if not hasattr(self, '_injector') or self._injector is None:
-            logger.warning("_injector 不存在")
-            return False
-        
-        logger.info(f"检查 _is_patched={self._injector._is_patched}")
-        if self._injector._is_patched:
-            logger.info("凭证已注入，跳过获取")
-            return True
-        
-        async with self._injector._init_lock:
-            logger.info(f"✅ 获取到锁，检查 _is_patched={self._injector._is_patched}")
-            if self._injector._is_patched:
-                logger.info("凭证已注入（并发检查），跳过获取")
-                return True
-            
-            logger.info("🔧 开始初始化凭证注入...")
-            try:
-                logger.info("正在获取凭证（首次请求）...")
-                
-                init_result = await self._injector.initialize()
-                logger.info(f"injector.initialize() 返回：{init_result}")
-                
-                if not init_result:
-                    logger.warning("Playwright 初始化失败，使用普通模式")
-                    return False
-                
-                logger.info("正在获取凭证...")
-                fetch_result = await self._injector.fetch_credentials('eastmoney.com')
-                logger.info(f"injector.fetch_credentials() 返回：{fetch_result}")
-                
-                logger.info("正在进行 TLS 指纹伪装...")
-                patch_result = self._injector.patch_requests_with_tls()
-                logger.info(f"✅ TLS 指纹伪装结果：{patch_result}")
-                
-                logger.info("✅ 凭证获取并注入成功")
-                return True
-                
-            except Exception as e:
-                logger.warning(f"❌ 获取凭证失败：{e}，使用普通模式")
-                import traceback
-                logger.error(traceback.format_exc())
-                return False
     
     async def close(self) -> None:
         self._is_initialized = False
@@ -216,28 +188,10 @@ class AkShareAdapter(BaseDataAdapter):
             return (0.5, 1.5)
     
     async def _rate_limit(self) -> None:
-        """异步请求限流"""
-        if self._adaptive_delay_enabled:
-            min_delay, max_delay = self._get_time_based_delay()
-            
-            # 如果检测到限流，大幅增加延迟
-            if self._rate_limit_detected:
-                min_delay *= 3
-                max_delay *= 3
-                logger.warning(f"检测到限流，使用 3 倍延迟：{min_delay:.1f}-{max_delay:.1f}秒")
-            
-            # 根据连续失败次数增加额外延迟
-            if self._consecutive_failures > 0:
-                extra_delay = min(self._consecutive_failures * 2, 10)
-                min_delay += extra_delay
-                max_delay += extra_delay
-            
-            delay = random.uniform(min_delay, max_delay)
-        else:
-            delay = random.uniform(*self._request_delay_range)
-        
-        logger.debug(f"AkShare 请求限流：延迟 {delay:.2f}秒")
-        await asyncio.sleep(delay)
+        """异步请求限流 - 由 AntiWindFacade 的 RateLimitStrategy 处理"""
+        # 此方法已废弃，由 AntiWindFacade 自动处理
+        logger.debug("_rate_limit 已废弃，由 RateLimitStrategy 处理")
+        return
     
     def _detect_rate_limit(self, error: Exception) -> bool:
         """检测是否被限流
@@ -277,21 +231,17 @@ class AkShareAdapter(BaseDataAdapter):
         return is_rate_limit
     
     def _rate_limit_sync(self) -> None:
-        """同步请求限流"""
-        delay = random.uniform(*self._request_delay_range)
-        time.sleep(delay)
+        """同步请求限流 - 由 AntiWindFacade 的 RateLimitStrategy 处理"""
+        # 此方法已废弃，由 AntiWindFacade 自动处理
+        logger.debug("_rate_limit_sync 已废弃，由 RateLimitStrategy 处理")
+        return
     
     def get_anti_wind_config(self) -> Dict[str, Any]:
         """获取反风控配置信息"""
         return {
-            "request_delay_range": self._request_delay_range,
-            "current_delay_range": self._get_time_based_delay() if self._adaptive_delay_enabled else self._request_delay_range,
-            "adaptive_delay_enabled": self._adaptive_delay_enabled,
-            "max_retries": self._max_retries,
+            "max_retries": self.anti_wind.config.get('max_retries', 3) if hasattr(self, 'anti_wind') else 3,
             "consecutive_failures": self._consecutive_failures,
-            "user_agent_pool_size": len(self._user_agents),
-            "current_user_agent": self._current_user_agent[:50] + "...",
-            "user_agent_rotation": "已启用"
+            "anti_wind_strategies": len(self.anti_wind.strategies) if hasattr(self, 'anti_wind') else 0,
         }
     
     def enable_adaptive_delay(self, enabled: bool = True) -> None:
@@ -312,26 +262,29 @@ class AkShareAdapter(BaseDataAdapter):
             self._last_rate_limit_time = 0
             logger.info("限流状态已重置")
     
-    def set_custom_delay(self, min_delay: float, max_delay: float) -> None:
-        """设置自定义延迟范围
+    def set_custom_delay_range(self, min_delay: float, max_delay: float) -> None:
+        """【已废弃】设置自定义延迟范围 - 由 AntiWindFacade 的 RateLimitStrategy 处理
         
         Args:
             min_delay: 最小延迟（秒）
             max_delay: 最大延迟（秒）
         """
-        self._request_delay_range = (min_delay, max_delay)
-        self._adaptive_delay_enabled = False  # 禁用自适应延迟
-        logger.info(f"AkShare 自定义延迟范围：{min_delay}-{max_delay}秒（已禁用自适应延迟）")
+        # 此方法已废弃，由 AntiWindFacade 的 RateLimitStrategy 处理
+        logger.debug("set_custom_delay_range 已废弃，由 RateLimitStrategy 处理")
+        return
     
     def _rotate_user_agent(self) -> None:
-        """轮换 User-Agent"""
-        old_ua = self._current_user_agent
-        self._current_user_agent = random.choice(self._user_agents)
-        logger.debug(f"User-Agent 已轮换：{old_ua[:50]}... -> {self._current_user_agent[:50]}...")
+        """【已废弃】轮换 User-Agent - 由 AntiWindFacade 的 UARotatorStrategy 处理"""
+        # 此方法已废弃，保留仅用于向后兼容
+        logger.debug("_rotate_user_agent 已废弃，由 UARotatorStrategy 处理")
     
     def get_current_user_agent(self) -> str:
-        """获取当前 User-Agent"""
-        return self._current_user_agent
+        """获取当前 User-Agent（从 AntiWindFacade 的 UARotatorStrategy 获取）"""
+        if hasattr(self, 'anti_wind'):
+            ua_strategy = self.anti_wind.get_strategy('UARotator')
+            if ua_strategy and hasattr(ua_strategy, '_user_agents') and ua_strategy._user_agents:
+                return ua_strategy._user_agents[0]
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     
     @staticmethod
     def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3) -> Callable:
@@ -421,10 +374,8 @@ class AkShareAdapter(BaseDataAdapter):
                                     self._rotate_user_agent()
                         
                         if attempt < retries - 1:
-                            # 指数退避 + 限流惩罚
+                            # 指数退避
                             base_delay = (2 ** attempt) * min_delay
-                            if hasattr(self, '_rate_limit_detected') and self._rate_limit_detected:
-                                base_delay *= 2  # 限流时延迟翻倍
                             
                             delay = base_delay + random.uniform(0, 1)
                             logger.debug(f"{func.__name__} 请求失败，{delay:.1f}秒后重试（{attempt+1}/{retries}）: {e}")
@@ -437,24 +388,14 @@ class AkShareAdapter(BaseDataAdapter):
         return decorator
     
     async def initialize(self) -> bool:
-        """初始化 AkShare 适配器，集成凭证注入和 TLS 指纹伪装"""
+        """初始化 AkShare 适配器，使用 AntiWindFacade 统一管理反爬策略"""
         try:
-            from .credential_injector import get_global_injector
+            # AntiWindFacade 在 __init__ 中已自动初始化，这里只需要打印状态
+            logger.info("AkShare 适配器初始化成功（使用 AntiWindFacade 统一管理）")
+            self.anti_wind.print_status()
             
-            self._injector = await get_global_injector({
-                'tls_patch_mode': 'curl_cffi',
-                'impersonate': 'chrome131',  # 更新到最新的 Chrome 131
-                'headless': True,
-            })
-            
+            # 懒加载初始化 HybridTLSClient（用于降级）
             self._hybrid_client: Optional[HybridTLSClient] = None
-            
-            logger.info("AkShare 适配器初始化成功（凭证注入模式待命 + 智能重试）")
-            logger.info(f"  - TLS 指纹：curl_cffi (chrome131)")
-            logger.info(f"  - 智能重试：已启用（自动切换模式）")
-            logger.info(f"  - 降级方案：HybridTLSClient（懒加载，tls-client → curl_cffi → Playwright）")
-            logger.info(f"  - 请求频率：自适应延迟（根据时间段和失败次数调整）")
-            logger.info(f"  - 最大重试：{self._max_retries}次（指数退避）")
             
             self._is_initialized = True
             return True
@@ -515,12 +456,6 @@ class AkShareAdapter(BaseDataAdapter):
         logger.warning("⚠️ akshare 适配器 get_stock_list 方法已废弃，建议使用 Baostock 适配器")
         logger.warning("⚠️ akshare 只提供 code 和 name 字段，缺少 type, status, list_date, delist_date 等关键字段")
         
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
         def fetch_sync():
             # 使用新浪接口替代东方财富接口（stock_zh_a_spot_em 已失效）
             df = ak.stock_zh_a_spot()
@@ -537,8 +472,8 @@ class AkShareAdapter(BaseDataAdapter):
             return stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_list"
             )
             return result or []
@@ -547,19 +482,13 @@ class AkShareAdapter(BaseDataAdapter):
             return []
     
     async def get_stock_info(self, code: str) -> Optional[StockBasicInfo]:
-        """获取个股详细信息（带 TLS 指纹伪装 + 凭证注入 + 缓存）"""
+        """获取个股详细信息（使用 AntiWindFacade 统一管理反爬策略 + 缓存）"""
         # 生成缓存键
         cache_key = self._get_cache_key('stock_info', code=code)
         cached = self._get_from_cache(cache_key, 'stock_basic')
         if cached:
             logger.debug(f"缓存命中：{cache_key}")
             return cached
-        
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_individual_info_em(symbol=code)
@@ -575,8 +504,9 @@ class AkShareAdapter(BaseDataAdapter):
             )
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            # 使用 AntiWindFacade 执行（自动处理 Cookie 注入、TLS 指纹、限流、重试）
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info"
             )
             # 保存到缓存（股票信息变化慢，缓存 10 分钟）
@@ -610,7 +540,7 @@ class AkShareAdapter(BaseDataAdapter):
             - 所属行业、地区
             - 上市日期等
         """
-        logger.info(f"🔍 开始获取个股详细资料：{code}（高危 API，启用全部反爬策略）")
+        logger.info(f"🔍 开始获取个股详细资料：{code}（高危 API，使用 AntiWindFacade 全部策略）")
         
         # 生成缓存键（缓存 5 分钟，避免频繁请求）
         cache_key = self._get_cache_key('stock_individual_info_em', code=code)
@@ -619,108 +549,66 @@ class AkShareAdapter(BaseDataAdapter):
             logger.info(f"✅ 缓存命中：{code}")
             return cached
         
-        # 1. 确保凭证有效（TLS 指纹伪装 + Cookie 注入）
-        if not await self._ensure_credentials():
-            logger.warning(f"⚠️  凭证注入失败，尝试直接请求：{code}")
-        
-        # 2. 请求前限流（根据时间段和失败次数自适应）
-        await self._rate_limit()
-        
-        # 3. 轮换 User-Agent
-        self._rotate_user_agent()
-        logger.debug(f"使用 User-Agent: {self._current_user_agent[:50]}...")
-        
         def fetch_sync():
-            """同步获取数据（带重试装饰器）"""
-            try:
-                # 4. 调用 akshare API（高危接口）
-                logger.info(f"📞 调用 ak.stock_individual_info_em('{code}')...")
-                df = ak.stock_individual_info_em(symbol=code)
-                
-                if df is None or df.empty:
-                    logger.warning(f"⚠️  API 返回空数据：{code}")
-                    return None
-                
-                # 5. 解析数据
-                info_dict = dict(zip(df["item"], df["value"]))
-                
-                # 6. 转换为标准格式
-                result = {
-                    'code': code,
-                    'latest_price': float(info_dict.get('最新价', 0)) if info_dict.get('最新价') else None,
-                    'change_pct': float(info_dict.get('涨跌幅', 0)) if info_dict.get('涨跌幅') else None,
-                    'change_amount': float(info_dict.get('涨跌额', 0)) if info_dict.get('涨跌额') else None,
-                    'total_market_cap': float(info_dict.get('总市值', 0)) if info_dict.get('总市值') else None,
-                    'float_market_cap': float(info_dict.get('流通市值', 0)) if info_dict.get('流通市值') else None,
-                    'pe_ratio': float(info_dict.get('市盈率 - 动态', 0)) if info_dict.get('市盈率 - 动态') else None,
-                    'pb_ratio': float(info_dict.get('市净率', 0)) if info_dict.get('市净率') else None,
-                    'eps': float(info_dict.get('每股收益', 0)) if info_dict.get('每股收益') else None,
-                    'roe': float(info_dict.get('净资产收益率', 0)) if info_dict.get('净资产收益率') else None,
-                    'bps': float(info_dict.get('每股净资产', 0)) if info_dict.get('每股净资产') else None,
-                    'industry': info_dict.get('所属行业', ''),
-                    'area': info_dict.get('地区', ''),
-                    'list_date': info_dict.get('上市时间', ''),
-                    'total_shares': float(info_dict.get('总股本', 0)) if info_dict.get('总股本') else None,
-                    'float_shares': float(info_dict.get('流通股本', 0)) if info_dict.get('流通股本') else None,
-                    'revenue': float(info_dict.get('营业收入', 0)) if info_dict.get('营业收入') else None,
-                    'net_profit': float(info_dict.get('净利润', 0)) if info_dict.get('净利润') else None,
-                    'gross_margin': float(info_dict.get('毛利率', 0)) if info_dict.get('毛利率') else None,
-                }
-                
-                logger.info(f"✅ 获取成功：{code} - {info_dict.get('股票简称', 'Unknown')}")
-                return result
-                
-            except Exception as e:
-                error_msg = str(e).lower()
-                
-                # 7. 检测是否被限流
-                if self._detect_rate_limit(e):
-                    logger.warning(f"⚠️  检测到限流：{code}，轮换 User-Agent 并增加延迟")
-                    self._rotate_user_agent()
-                    self._consecutive_failures += 1
-                
-                # 8. 重新抛出异常，让重试机制处理
-                raise Exception(f"stock_individual_info_em 失败 {code}: {e}")
-        
-        try:
-            # 9. 使用智能重试执行器（自动降级）
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
-                context="get_stock_individual_info_em",
-                on_switch_mode=lambda: logger.info(f"🔄 切换到降级模式：{code}")
-            )
+            """同步获取数据"""
+            logger.info(f"📞 调用 ak.stock_individual_info_em('{code}')...")
+            df = ak.stock_individual_info_em(symbol=code)
             
-            # 10. 保存到缓存（缓存 5 分钟）
-            if result:
-                self._save_to_cache(cache_key, result, 'stock_info_em', ttl=300)
-                logger.info(f"💾 已保存到缓存：{code}")
-                
-                # 11. 成功后重置状态
-                self._consecutive_failures = 0
-                if self._rate_limit_detected:
-                    self.reset_rate_limit_status()
+            if df is None or df.empty:
+                logger.warning(f"⚠️  API 返回空数据：{code}")
+                return None
             
-            return result
+            # 解析数据
+            info_dict = dict(zip(df["item"], df["value"]))
             
-        except Exception as e:
-            # 12. 最终失败处理
-            logger.error(f"❌ 获取个股详细资料失败 {code}（已尝试所有重试和降级）: {e}")
-            
-            # 增加失败计数
-            self._consecutive_failures += 1
-            
-            # 返回空字典而不是 None，避免前端解析错误
-            return {
+            # 转换为标准格式
+            result = {
                 'code': code,
-                'error': str(e),
-                'latest_price': None,
-                'change_pct': None,
-                'total_market_cap': None,
-                'float_market_cap': None,
-                'pe_ratio': None,
-                'pb_ratio': None,
-                'industry': None,
+                'latest_price': float(info_dict.get('最新价', 0)) if info_dict.get('最新价') else None,
+                'change_pct': float(info_dict.get('涨跌幅', 0)) if info_dict.get('涨跌幅') else None,
+                'change_amount': float(info_dict.get('涨跌额', 0)) if info_dict.get('涨跌额') else None,
+                'total_market_cap': float(info_dict.get('总市值', 0)) if info_dict.get('总市值') else None,
+                'float_market_cap': float(info_dict.get('流通市值', 0)) if info_dict.get('流通市值') else None,
+                'pe_ratio': float(info_dict.get('市盈率 - 动态', 0)) if info_dict.get('市盈率 - 动态') else None,
+                'pb_ratio': float(info_dict.get('市净率', 0)) if info_dict.get('市净率') else None,
+                'eps': float(info_dict.get('每股收益', 0)) if info_dict.get('每股收益') else None,
+                'roe': float(info_dict.get('净资产收益率', 0)) if info_dict.get('净资产收益率') else None,
+                'bps': float(info_dict.get('每股净资产', 0)) if info_dict.get('每股净资产') else None,
+                'industry': info_dict.get('所属行业', ''),
+                'area': info_dict.get('地区', ''),
+                'list_date': info_dict.get('上市时间', ''),
+                'total_shares': float(info_dict.get('总股本', 0)) if info_dict.get('总股本') else None,
+                'float_shares': float(info_dict.get('流通股本', 0)) if info_dict.get('流通股本') else None,
+                'revenue': float(info_dict.get('营业收入', 0)) if info_dict.get('营业收入') else None,
+                'net_profit': float(info_dict.get('净利润', 0)) if info_dict.get('净利润') else None,
+                'gross_margin': float(info_dict.get('毛利率', 0)) if info_dict.get('毛利率') else None,
             }
+            
+            logger.info(f"✅ 获取成功：{code} - {info_dict.get('股票简称', 'Unknown')}")
+            return result
+        
+        # 使用 AntiWindFacade 执行（自动处理所有反爬策略）
+        result = await self._execute_with_anti_wind(
+            request_func=fetch_sync,
+            context="get_stock_individual_info_em"
+        )
+        
+        # 保存到缓存（缓存 5 分钟）
+        if result:
+            self._save_to_cache(cache_key, result, 'stock_info_em', ttl=300)
+            logger.info(f"💾 已保存到缓存：{code}")
+        
+        return result or {
+            'code': code,
+            'error': 'Request failed',
+            'latest_price': None,
+            'change_pct': None,
+            'total_market_cap': None,
+            'float_market_cap': None,
+            'pe_ratio': None,
+            'pb_ratio': None,
+            'industry': None,
+        }
     
     async def get_kline(
         self,
@@ -736,12 +624,6 @@ class AkShareAdapter(BaseDataAdapter):
         if cached:
             logger.debug(f"缓存命中：{cache_key}")
             return cached
-        
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         adjust_map = {
             "qfq": "qfq",
@@ -784,8 +666,8 @@ class AkShareAdapter(BaseDataAdapter):
             return klines
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_kline"
             )
             # 保存到缓存（K 线数据盘后更新，缓存到次日）
@@ -804,8 +686,6 @@ class AkShareAdapter(BaseDataAdapter):
         end_date: Optional[str] = None
     ) -> List[KLineData]:
         """获取大盘指数 K 线数据（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
         
         try:
             await self._rate_limit()
@@ -846,12 +726,6 @@ class AkShareAdapter(BaseDataAdapter):
             logger.debug(f"缓存命中：{cache_key}")
             return cached
         
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
-        
         def fetch_sync():
             # 使用新浪接口替代东方财富接口（stock_zh_a_spot_em 已失效）
             df = ak.stock_zh_a_spot()
@@ -875,8 +749,8 @@ class AkShareAdapter(BaseDataAdapter):
             }
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_realtime_quote"
             )
             # 保存到缓存（实时行情变化快，缓存 60 秒）
@@ -892,11 +766,6 @@ class AkShareAdapter(BaseDataAdapter):
         market_types: Optional[List[str]] = None
     ) -> List[MarketQuote]:
         """获取市场实时行情（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             # 使用新浪接口替代东方财富接口（stock_zh_a_spot_em 已失效）
@@ -941,8 +810,8 @@ class AkShareAdapter(BaseDataAdapter):
             return quotes
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_market_realtime_quotes"
             )
             quotes = result or []
@@ -956,10 +825,7 @@ class AkShareAdapter(BaseDataAdapter):
             return []
     
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
-        """获取板块列表（高敏感 API，需要凭证注入 + 智能重试）"""
-        # 确保凭证有效（懒加载）
-        if not await self._ensure_credentials():
-            logger.warning("凭证注入失败，尝试直接请求")
+        """获取板块列表（高敏感 API，使用 AntiWindFacade 统一管理）"""
         
         async def fetch():
             if sector_type == "industry":
@@ -995,10 +861,9 @@ class AkShareAdapter(BaseDataAdapter):
         
         try:
             # 使用智能重试执行器
-            result = await self._retry_executor.execute(
-                func=fetch,
-                context="get_sector_list",
-                on_switch_mode=lambda: self._handle_sector_list_fallback(sector_type)
+            result = await self._execute_with_anti_wind(
+                request_func=fetch,
+                context="get_sector_list"
             )
             return result or []
         except Exception as e:
@@ -1043,11 +908,6 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def get_sector_components(self, sector_code: str) -> List[str]:
         """获取板块成分股（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_board_industry_cons_em(symbol=sector_code)
@@ -1059,8 +919,8 @@ class AkShareAdapter(BaseDataAdapter):
             return df["代码"].tolist()
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_sector_components"
             )
             return result or []
@@ -1075,11 +935,6 @@ class AkShareAdapter(BaseDataAdapter):
         limit: int = 20
     ) -> List[SectorInfo]:
         """获取板块排名（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             if sector_type == "industry":
@@ -1106,8 +961,8 @@ class AkShareAdapter(BaseDataAdapter):
             return sectors
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_sector_ranking"
             )
             return result or []
@@ -1122,11 +977,6 @@ class AkShareAdapter(BaseDataAdapter):
         end_date: Optional[str] = None
     ) -> List[ChipData]:
         """获取筹码数据（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_zh_a_gdhs(symbol=code)
@@ -1171,8 +1021,8 @@ class AkShareAdapter(BaseDataAdapter):
             return chip_data
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_chip_data"
             )
             return result or []
@@ -1188,11 +1038,6 @@ class AkShareAdapter(BaseDataAdapter):
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """获取大盘资金流向（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             # 使用 akshare 获取全市场资金流向
@@ -1225,8 +1070,8 @@ class AkShareAdapter(BaseDataAdapter):
             }
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_market_moneyflow_dc"
             )
             result_dict = result or {}
@@ -1241,19 +1086,14 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def get_stock_financial(self, code: str) -> Dict[str, Any]:
         """获取财务数据（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_financial_abstract_ths(symbol=code, indicator="全部") 
             return df.to_dict("records")
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_financial"
             )
             return result or {}
@@ -1278,11 +1118,6 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             盘口异动数据列表
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_change_em(symbol=change_type)
@@ -1304,8 +1139,8 @@ class AkShareAdapter(BaseDataAdapter):
             return changes
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_changes"
             )
             if result:
@@ -1324,11 +1159,6 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             涨停股池数据列表
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         if not date:
             date = datetime.now().strftime('%Y%m%d')
@@ -1361,8 +1191,8 @@ class AkShareAdapter(BaseDataAdapter):
             return zt_stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_zt_pool"
             )
             if result:
@@ -1381,11 +1211,6 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             昨日涨停股池数据列表
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         if not date:
             date = datetime.now().strftime('%Y%m%d')
@@ -1414,8 +1239,8 @@ class AkShareAdapter(BaseDataAdapter):
             return zt_stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_zt_pool_previous"
             )
             if result:
@@ -1434,11 +1259,6 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             强势股池数据列表
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         if not date:
             date = datetime.now().strftime('%Y%m%d')
@@ -1463,8 +1283,8 @@ class AkShareAdapter(BaseDataAdapter):
             return zt_stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_zt_strong"
             )
             if result:
@@ -1483,11 +1303,6 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             次新股涨停池数据列表
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         if not date:
             date = datetime.now().strftime('%Y%m%d')
@@ -1516,8 +1331,8 @@ class AkShareAdapter(BaseDataAdapter):
             return zt_stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_zt_sub_new"
             )
             if result:
@@ -1533,11 +1348,6 @@ class AkShareAdapter(BaseDataAdapter):
         Returns:
             板块异动数据列表
         """
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_board_change_em()
@@ -1560,8 +1370,8 @@ class AkShareAdapter(BaseDataAdapter):
             return changes
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_board_changes"
             )
             if result:
@@ -1573,11 +1383,6 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def get_stock_info_sh_name_code(self, symbol: str = "主板 A 股") -> List[Any]:
         """获取上海证券交易所股票列表（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_info_sh_name_code(symbol=symbol)
@@ -1594,8 +1399,8 @@ class AkShareAdapter(BaseDataAdapter):
             return stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info_sh_name_code"
             )
             if result:
@@ -1607,11 +1412,6 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def get_stock_info_sz_name_code(self, symbol: str = "主板 A 股") -> List[Any]:
         """获取深圳证券交易所股票列表（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_info_sz_name_code(symbol=symbol)
@@ -1628,8 +1428,8 @@ class AkShareAdapter(BaseDataAdapter):
             return stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info_sz_name_code"
             )
             if result:
@@ -1641,11 +1441,6 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def get_stock_info_bj_name_code(self) -> List[Any]:
         """获取北京证券交易所股票列表（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_info_bj_name_code()
@@ -1662,8 +1457,8 @@ class AkShareAdapter(BaseDataAdapter):
             return stocks
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_stock_info_bj_name_code"
             )
             if result:
@@ -1675,11 +1470,6 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def get_board_industry_name_em(self) -> List[Any]:
         """获取东方财富行业板块列表（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_board_industry_name_em()
@@ -1700,8 +1490,8 @@ class AkShareAdapter(BaseDataAdapter):
             return boards
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_board_industry_name_em"
             )
             if result:
@@ -1713,11 +1503,6 @@ class AkShareAdapter(BaseDataAdapter):
     
     async def get_board_industry_cons_em(self, symbol: str) -> List[Any]:
         """获取东方财富行业板块成份股（带 TLS 指纹伪装 + 凭证注入）"""
-        # 确保凭证有效（TLS 指纹伪装）
-        await self._ensure_credentials()
-        
-        # 限流
-        await self._rate_limit()
         
         def fetch_sync():
             df = ak.stock_board_industry_cons_em(symbol=symbol)
@@ -1742,8 +1527,8 @@ class AkShareAdapter(BaseDataAdapter):
             return cons_data
         
         try:
-            result = await self._retry_executor.execute(
-                func=fetch_sync,
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
                 context="get_board_industry_cons_em"
             )
             if result:

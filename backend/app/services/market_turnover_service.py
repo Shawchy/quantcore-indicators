@@ -14,48 +14,44 @@ import akshare as ak
 from loguru import logger
 
 from app.storage.sqlite import MarketTurnover, get_session
+from app.adapters.anti_wind import AntiWindFacade
 
 
 class MarketTurnoverService:
-    """市场成交额服务（带完整反风控策略）"""
+    """市场成交额服务（使用 AntiWindFacade 统一管理反风控策略）"""
     
     def __init__(self):
-        # 反风控设置
-        self._request_delay_range = (3.0, 5.0)  # 基础请求间隔（秒）
-        self._retry_base_delay = 5.0  # 基础重试延迟 5 秒
-        self._max_retries = 3  # 减少重试次数到 3 次
-        self._consecutive_failures = 0  # 连续失败次数
-        self._adaptive_delay_enabled = True  # 启用自适应延迟
+        # 使用 AntiWindFacade 统一管理反风控策略
+        self.anti_wind = AntiWindFacade({
+            'enable_cookie_inject': True,
+            'enable_tls_fingerprint': True,
+            'enable_rate_limit': True,
+            'enable_ua_rotation': True,
+            'enable_smart_retry': True,
+            'max_retries': 3,
+            'rate_limit_config': {
+                'base_delay_range': (3.0, 5.0),  # 基础延迟
+                'adaptive_delay_enabled': True,
+            },
+            'retry_config': {
+                'max_retries': 3,
+                'base_wait_seconds': 5.0,
+            },
+        })
         
-        # 限流检测
-        self._rate_limit_detected = False
-        self._rate_limit_count = 0
-        self._last_rate_limit_time = 0
+        # 熔断器设置（保留，因为 AntiWindFacade 没有熔断器）
+        self._circuit_breaker_enabled = False
+        self._circuit_breaker_time = 0
+        self._circuit_breaker_duration = 300
         
-        # 熔断器设置
-        self._circuit_breaker_enabled = False  # 熔断器
-        self._circuit_breaker_time = 0  # 熔断时间
-        self._circuit_breaker_duration = 300  # 熔断持续时间（5 分钟）
-        
-        # User-Agent 轮换池（增加更多 UA）
-        self._user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-        ]
-        self._current_user_agent = self._user_agents[0]
-        
-        # 凭证注入器（懒加载）
+        # 凭证注入器（懒加载，向后兼容）
         self._credential_injector = None
         
-        # 智能路由器（懒加载）
+        # 智能路由器（懒加载，向后兼容）
         self._smart_router = None
     
     def _get_time_based_delay(self) -> tuple:
-        """根据当前时间段获取合适的延迟范围"""
+        """根据当前时间段获取合适的延迟范围（保留用于参考）"""
         current_hour = datetime.now().hour
         
         # 交易时段（9:30-11:30, 13:00-15:00）使用较长延迟
@@ -65,73 +61,11 @@ class MarketTurnoverService:
         else:
             return (3.0, 5.0)  # 增加延迟
     
-    async def _rate_limit(self):
-        """异步请求限流"""
-        if self._adaptive_delay_enabled:
-            min_delay, max_delay = self._get_time_based_delay()
-            
-            # 如果检测到限流，大幅增加延迟
-            if self._rate_limit_detected:
-                min_delay *= 3
-                max_delay *= 3
-                logger.warning(f"检测到限流，使用 3 倍延迟：{min_delay:.1f}-{max_delay:.1f}秒")
-            
-            # 根据连续失败次数增加额外延迟
-            if self._consecutive_failures > 0:
-                extra_delay = min(self._consecutive_failures * 2, 10)
-                min_delay += extra_delay
-                max_delay += extra_delay
-            
-            delay = random.uniform(min_delay, max_delay)
-        else:
-            delay = random.uniform(*self._request_delay_range)
-        
-        logger.debug(f"成交额服务请求限流：延迟 {delay:.2f}秒")
-        await asyncio.sleep(delay)
-    
-    def _detect_rate_limit(self, error: Exception) -> bool:
-        """检测是否被限流"""
-        error_msg = str(error).lower()
-        rate_limit_keywords = [
-            'connection aborted',
-            'remote end closed',
-            'too many requests',
-            'rate limit',
-            'frequency limit',
-            'access denied',
-            'ip blocked',
-            'request rejected'
-        ]
-        
-        is_rate_limit = any(keyword in error_msg for keyword in rate_limit_keywords)
-        
-        if is_rate_limit:
-            current_time = time.time()
-            # 5 分钟内多次限流才确认
-            if current_time - self._last_rate_limit_time < 300:
-                self._rate_limit_count += 1
-                if self._rate_limit_count >= 2:
-                    self._rate_limit_detected = True
-                    logger.warning(f"确认被限流！5 分钟内{self._rate_limit_count}次触发")
-            else:
-                self._rate_limit_count = 1
-                self._last_rate_limit_time = current_time
-        
-        return is_rate_limit
-    
-    def _rotate_user_agent(self):
-        """轮换 User-Agent"""
-        old_ua = self._current_user_agent
-        self._current_user_agent = random.choice(self._user_agents)
-        logger.debug(f"User-Agent 已轮换：{old_ua[:50]}... -> {self._current_user_agent[:50]}...")
-    
-    def reset_rate_limit_status(self):
-        """重置限流状态（在成功请求后调用）"""
-        if self._rate_limit_detected:
-            self._rate_limit_detected = False
-            self._rate_limit_count = 0
-            self._last_rate_limit_time = 0
-            logger.info("成交额服务限流状态已重置")
+    # 以下方法已废弃，由 AntiWindFacade 的 RateLimitStrategy 和 UARotatorStrategy 处理
+    # async def _rate_limit(self):  # 已删除
+    # def _detect_rate_limit(self, error):  # 已删除
+    # def _rotate_user_agent(self):  # 已删除
+    # def reset_rate_limit_status(self):  # 已删除
     
     async def _ensure_credential_injector(self) -> bool:
         """确保凭证注入器可用"""
@@ -181,90 +115,33 @@ class MarketTurnoverService:
         logger.warning(f"熔断器已打开！暂停成交额数据获取 {self._circuit_breaker_duration}秒")
     
     async def _fetch_with_anti_wind(self, fetch_func, *args, use_credential=False, use_smart_router=False, **kwargs):
-        """带反风控的请求封装（支持凭证注入和智能路由）"""
-        # 检查熔断器
+        """带反风控的请求封装（使用 AntiWindFacade 统一管理）"""
+        # 检查熔断器（保留熔断器逻辑）
         if self._is_circuit_breaker_open():
             logger.warning("熔断器打开中，跳过成交额数据获取")
             raise Exception("熔断器保护中，暂不获取成交额数据")
         
-        # 初始化凭证注入器和智能路由器（如果需要）
-        if use_credential:
-            if not await self._ensure_credential_injector():
-                logger.warning("凭证注入器不可用，降级为普通请求")
-                use_credential = False
-        
-        if use_smart_router:
-            if not await self._ensure_smart_router():
-                logger.warning("智能路由器不可用，降级为普通请求")
-                use_smart_router = False
-        
-        for attempt in range(self._max_retries):
-            try:
-                # 请求前限流
-                await self._rate_limit()
-                
-                # 使用智能路由或凭证注入
-                if use_smart_router and self._smart_router:
-                    # 使用智能路由器（自动选择最优客户端）
-                    logger.debug(f"使用智能路由器执行请求（第 {attempt+1} 次尝试）")
-                    result = await self._smart_router.execute_request(
-                        fetch_func, *args, **kwargs
-                    )
-                elif use_credential and self._credential_injector:
-                    # 使用凭证注入器
-                    logger.debug(f"使用凭证注入器执行请求（第 {attempt+1} 次尝试）")
-                    result = await self._credential_injector.execute_request(
-                        fetch_func, *args, **kwargs
-                    )
-                else:
-                    # 普通请求（原始方式）
-                    logger.debug(f"使用普通方式执行请求（第 {attempt+1} 次尝试）")
-                    result = await asyncio.get_event_loop().run_in_executor(
-                        None, fetch_func, *args, **kwargs
-                    )
-                
-                # 成功后重置失败计数和熔断器
-                self._consecutive_failures = 0
-                self.reset_rate_limit_status()
-                
-                return result
-                
-            except Exception as e:
-                self._consecutive_failures += 1
-                
-                # 检测是否被限流
-                is_rate_limit = self._detect_rate_limit(e)
-                if is_rate_limit:
-                    self._rotate_user_agent()
-                
-                # 连续失败 3 次，触发熔断器
-                if self._consecutive_failures >= 3:
-                    self._open_circuit_breaker()
-                    logger.error(f"连续失败{self._consecutive_failures}次，触发熔断器保护")
-                    raise
-                
-                if attempt < self._max_retries - 1:
-                    # 指数退避 + 限流惩罚
-                    base_delay = (2 ** attempt) * self._retry_base_delay
-                    
-                    # 限流时大幅增加延迟
-                    if self._rate_limit_detected:
-                        base_delay *= 3  # 限流时延迟 3 倍
-                        logger.warning(f"限流状态下重试，延迟增加到{base_delay:.1f}秒")
-                    
-                    # 交易时段额外延迟
-                    current_hour = datetime.now().hour
-                    if (9 <= current_hour <= 11) or (13 <= current_hour <= 14):
-                        base_delay *= 1.5  # 交易时段再增加 50%
-                    
-                    delay = base_delay + random.uniform(0, 2)
-                    logger.warning(f"成交额数据获取失败，{delay:.1f}秒后重试（{attempt+1}/{self._max_retries}）: {e}")
-                    await asyncio.sleep(delay)
-                else:
-                    logger.error(f"成交额数据获取失败，已达最大重试次数：{e}")
-                    raise
-        
-        return None
+        # 使用 AntiWindFacade 执行请求（自动处理所有反风控策略）
+        try:
+            result = await self.anti_wind.execute_with_strategies(
+                request_func=fetch_func,
+                args=args,
+                kwargs=kwargs,
+                context="market_turnover"
+            )
+            
+            # 成功后重置熔断器
+            if self._circuit_breaker_enabled:
+                self._circuit_breaker_enabled = False
+                logger.info("请求成功，熔断器已关闭")
+            
+            return result
+            
+        except Exception as e:
+            # 连续失败检测（用于熔断器）
+            # AntiWindFacade 会自动处理重试，这里只需要处理熔断器
+            logger.error(f"成交额数据获取失败（已使用 AntiWindFacade）：{e}")
+            raise
     
     @staticmethod
     async def save_turnover_data(

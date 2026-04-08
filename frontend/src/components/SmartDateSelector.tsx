@@ -117,9 +117,10 @@ export const SmartDateSelector = ({
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('请求超时')), API_TIMEOUT)
           )
-        ]) as [EffectiveDateInfo, TradingDay[]]
+        ])
         
-        const [effectiveDataRaw, tradingDaysRaw] = results
+        const effectiveDataRaw = results[0] as unknown as EffectiveDateInfo
+        const tradingDaysRaw = results[1] as unknown as TradingDay[]
         
         const effectiveData = effectiveDataRaw
         const tradingDaysData = tradingDaysRaw || []

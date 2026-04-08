@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   Card,
@@ -38,11 +39,10 @@ import { FiArrowLeft } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
 import { stockApi, realtimeApi, boardApi } from '../services/api'
 import RealtimeQuotePanel from '../components/RealtimeQuote'
-import RealtimeQuoteWS from '../components/RealtimeQuoteWS'
 import TickDataTable from '../components/TickDataTable'
 import { ProKLineChart as KLineChart } from '../components/charts/KLineChart'
 import type { RealtimeQuoteData, TickData, StockBasic, RealtimeQuote } from '../types'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 const queryEnabled = (code: string | undefined, valid: boolean) => Boolean(code && valid)
 
@@ -51,7 +51,6 @@ const StockDetail = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
-  const [wsQuoteData] = useState<RealtimeQuoteData | null>(null)
   
   // 判断是否来自自选股页面
   const isFromWatchlist = location.state?.from === 'watchlist'

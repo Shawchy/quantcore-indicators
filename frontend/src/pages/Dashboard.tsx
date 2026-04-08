@@ -186,14 +186,14 @@ const Dashboard = () => {
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
         <StatCard
           label="市场股票数"
-          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.total_stocks || 0)}
+          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.data?.total_stocks || 0)}
           helpText="A 股市场"
           icon={FiActivity}
           accentColor="blue"
         />
         <StatCard
           label="行业板块数"
-          value={marketStats?.industry_distribution ? Object.keys(marketStats.industry_distribution).length : 0}
+          value={marketStats?.data?.top_industries ? marketStats.data.top_industries.length : 0}
           helpText="申万一级行业"
           icon={FiPieChart}
           accentColor="purple"
@@ -207,7 +207,7 @@ const Dashboard = () => {
         />
         <StatCard
           label="市场成交额"
-          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.turnover ? `${(marketStats.turnover / 100000000).toFixed(2)}亿` : '-')}
+          value={statsLoading ? <Spinner size="sm" /> : (marketStats?.data?.turnover ? `${(marketStats.data.turnover / 100000000).toFixed(2)}亿` : '-')}
           helpText="全市场"
           icon={FiTrendingUp}
           accentColor="orange"

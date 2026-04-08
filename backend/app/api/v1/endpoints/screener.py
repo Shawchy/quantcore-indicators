@@ -63,6 +63,7 @@ async def get_market_statistics(
     cache_key = {'date': trade_date}
     cached_data = await api_cache.get('api_stats', cache_key)
     if cached_data:
+        logger.info("使用缓存的市场统计数据")
         return ResponseModel(data=cached_data)
     
     # 直接从数据库查询，而不是从数据源获取
@@ -77,24 +78,58 @@ async def get_market_statistics(
         )
         industries = {ind: cnt for ind, cnt in result.all() if ind}
         
-        # 计算市场总成交额：优先从数据库获取历史数据
+        # 计算市场总成交额：使用智能时效性检查
         total_turnover = 0.0  # 默认值
         
         try:
-            # 尝试从数据库获取（带超时保护）
-            turnover_data = await asyncio.wait_for(
-                market_turnover_service.fetch_and_save_latest(session),
-                timeout=10.0  # 10 秒超时
+            # 使用通用数据时效性检查工具
+            from app.utils.data_freshness_checker import DataFreshnessChecker
+            from app.storage.sqlite import MarketTurnover
+            
+            checker = DataFreshnessChecker(session)
+            
+            # 检查成交额数据时效性（24 小时有效期）
+            latest_turnover, is_stale = await checker.check_freshness(
+                MarketTurnover, 
+                'market_turnover',
+                custom_max_age_hours=24  # 24 小时
             )
             
-            if turnover_data:
-                total_turnover = turnover_data.get('total_turnover', 0.0)
-                logger.info(f"从数据库获取成交额：{total_turnover/100000000:.2f}亿")
+            if latest_turnover and not is_stale:
+                # 数据有效，直接使用
+                total_turnover = latest_turnover.get('total_turnover', 0.0)
+                freshness_info = latest_turnover.get('_freshness', {})
+                logger.info(
+                    f"✅ 使用数据库成交额数据（未过期）: "
+                    f"{total_turnover/100000000:.2f}亿，"
+                    f"age={freshness_info.get('age_hours', 0):.1f}h"
+                )
             else:
-                logger.info("数据库无成交额数据，使用默认值 0")
+                # 数据过期或不存在，需要获取
+                if latest_turnover:
+                    logger.info(f"成交额数据已过期，需要刷新")
+                else:
+                    logger.info("数据库无成交额数据，需要获取")
+                
+                # 带超时保护获取新数据
+                turnover_data = await asyncio.wait_for(
+                    market_turnover_service.fetch_and_save_latest(session),
+                    timeout=180.0  # 180 秒超时（3 分钟）
+                )
+                
+                if turnover_data:
+                    total_turnover = turnover_data.get('total_turnover', 0.0)
+                    logger.info(f"✅ 从 akshare 获取成交额：{total_turnover/100000000:.2f}亿")
+                else:
+                    # 获取失败，如果有旧数据则使用旧数据
+                    if latest_turnover:
+                        total_turnover = latest_turnover.get('total_turnover', 0.0)
+                        logger.warning(f"获取新数据失败，使用过期数据：{total_turnover/100000000:.2f}亿")
+                    else:
+                        logger.warning("获取成交额失败，使用默认值 0")
                 
         except asyncio.TimeoutError:
-            logger.warning("获取成交额超时，使用默认值 0")
+            logger.warning("获取成交额超时（180 秒），使用默认值 0")
         except Exception as e:
             logger.error(f"获取成交额失败：{e}")
     
@@ -102,10 +137,10 @@ async def get_market_statistics(
     try:
         effective_trade_date = await asyncio.wait_for(
             trading_calendar.get_latest_trading_day(),
-            timeout=5.0  # 5 秒超时
+            timeout=15.0  # 15 秒超时（增加超时时间）
         )
     except asyncio.TimeoutError:
-        logger.warning("获取交易日期超时，使用今天日期")
+        logger.warning("获取交易日期超时（15 秒），使用今天日期")
         effective_trade_date = datetime.now().strftime("%Y%m%d")
     except Exception as e:
         logger.warning(f"获取交易日期失败：{e}，使用今天日期")

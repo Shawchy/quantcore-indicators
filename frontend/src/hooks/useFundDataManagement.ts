@@ -30,8 +30,6 @@ interface UseFundDataOptions {
  */
 function useFundDataManagementInternal(options: UseFundDataOptions = {}) {
   const {
-    enableCleanup = true,
-    cleanupInterval = 60 * 60 * 1000, // 1 小时
     enableBackgroundUpdate = true,
     backgroundUpdateInterval = 5 * 60 * 1000, // 5 分钟
     watchlistCodes = [],

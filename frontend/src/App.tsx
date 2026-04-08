@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Box, ColorModeScript, Spinner, Flex } from '@chakra-ui/react'
-import { useEffect, Suspense, lazy } from 'react'
+import { Suspense, lazy } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -22,11 +22,6 @@ const MarketRanking = lazy(() => import('./pages/MarketRanking'))
 const DailyMarket = lazy(() => import('./pages/DailyMarket'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Billboard = lazy(() => import('./pages/Billboard'))
-
-// 预加载函数
-const prefetchDashboard = () => import('./pages/Dashboard')
-const prefetchStockDetail = () => import('./pages/StockDetail')
-const prefetchScreener = () => import('./pages/Screener')
 
 // 东方财富模块 - 懒加载
 const EastMoneyChangesPage = lazy(() => import('./pages/EastMoneyChangesPage'))

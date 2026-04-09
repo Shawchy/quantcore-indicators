@@ -13,10 +13,12 @@ class TLSFingerprintStrategy(BaseStrategy):
     """TLS 指纹伪装策略"""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        # 配置分离：只提取需要的配置
         super().__init__(config)
         self._client = None
-        self._fingerprint_mode = self.config.get('tls_patch_mode', 'curl_cffi')
-        self._impersonate = self.config.get('impersonate', 'chrome120')
+        self._fingerprint_mode = config.get('tls_patch_mode', 'curl_cffi')
+        self._impersonate = config.get('impersonate', 'chrome120')
+        self._timeout = config.get('timeout', 30)
     
     async def initialize(self):
         """初始化 TLS 客户端"""
@@ -30,7 +32,7 @@ class TLSFingerprintStrategy(BaseStrategy):
             # 创建会话
             self._client = requests.Session(
                 impersonate=self._impersonate,
-                timeout=self.config.get('timeout', 30)
+                timeout=self._timeout
             )
             
             logger.info(f"✅ TLS 指纹客户端初始化成功（{self._fingerprint_mode}, {self._impersonate}）")
@@ -47,11 +49,7 @@ class TLSFingerprintStrategy(BaseStrategy):
         if not self.enabled:
             return headers
         
-        # 确保已初始化
-        if not self._client:
-            await self.initialize()
-        
-        # 返回标准 headers，实际 TLS 配置在请求时处理
+        # Facade 已确保初始化，这里直接返回
         return headers
     
     async def after_request(self, response: Any) -> Any:

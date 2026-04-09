@@ -13,7 +13,12 @@ class CookieInjectStrategy(BaseStrategy):
     """Cookie 注入策略"""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        # 配置分离：只提取需要的配置
         super().__init__(config)
+        self.cookie_storage_dir = config.get('cookie_storage_dir', 'data/cookies')
+        self.cookie_file_name = config.get('cookie_file_name', 'eastmoney_com_manual.json')
+        self.cookie_max_age_hours = config.get('cookie_max_age_hours', 24)
+        
         self._cookies: Dict[str, str] = {}
         self._cookies_updated_at: Optional[Any] = None
     
@@ -32,7 +37,8 @@ class CookieInjectStrategy(BaseStrategy):
         from pathlib import Path
         from datetime import datetime
         
-        cookie_file = Path(self.config.get('cookie_storage_dir', 'data/cookies')) / 'eastmoney_com_manual.json'
+        # 使用提取后的配置
+        cookie_file = Path(self.cookie_storage_dir) / self.cookie_file_name
         
         if cookie_file.exists():
             try:
@@ -61,11 +67,7 @@ class CookieInjectStrategy(BaseStrategy):
         if not self.enabled:
             return headers
         
-        # 确保已初始化
-        if not self._cookies:
-            await self.initialize()
-        
-        # 注入 Cookie
+        # 注入 Cookie（Facade 已确保初始化）
         if self._cookies:
             cookie_string = '; '.join([f"{k}={v}" for k, v in self._cookies.items()])
             headers['Cookie'] = cookie_string

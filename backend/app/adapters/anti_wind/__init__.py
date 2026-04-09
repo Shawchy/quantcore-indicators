@@ -1,7 +1,13 @@
 """
-反风控策略模块
+反风控策略模块（优化版）
 
 提供统一的反爬虫策略门面，支持多种策略的动态组合和配置。
+
+特性：
+- 策略注册表：动态加载策略，符合开闭原则
+- 配置分离：每个策略只提取需要的配置
+- 统一初始化：由 Facade 管理初始化时机
+- 性能优化：缓存启用的策略列表
 
 策略分层：
 - L1: 认证策略 (CookieInjectStrategy)
@@ -24,6 +30,25 @@ from .facade import (
     HEADLESS_CONFIG,
     BROWSER_CONFIG,
 )
+from .cookie_auto_fetcher import (
+    CookieAutoFetcher,
+    CookieRefreshListener,
+)
+from .metrics import (
+    MetricsCollector,
+    get_metrics_collector,
+    AlertLevel,
+    StrategyMetrics,
+    APIMetrics,
+    CookieMetrics,
+    Alert,
+)
+from .registry import (
+    register_strategy,
+    get_strategy_class,
+    get_all_strategy_names,
+    STRATEGY_REGISTRY,
+)
 from .strategies.base import BaseStrategy
 from .strategies.cookie_injector import CookieInjectStrategy
 from .strategies.tls_fingerprint import TLSFingerprintStrategy
@@ -44,6 +69,19 @@ __all__ = [
     'HEADLESS_CONFIG',
     'BROWSER_CONFIG',
     
+    # Cookie 自动获取（v5.0 新增）
+    'CookieAutoFetcher',
+    'CookieRefreshListener',
+    
+    # 监控与统计（v5.0 新增）
+    'MetricsCollector',
+    'get_metrics_collector',
+    'AlertLevel',
+    'StrategyMetrics',
+    'APIMetrics',
+    'CookieMetrics',
+    'Alert',
+    
     # 策略类
     'BaseStrategy',
     'CookieInjectStrategy',
@@ -53,4 +91,10 @@ __all__ = [
     'SmartRetryStrategy',
     'ProxyPoolStrategy',
     'CaptchaHandlerStrategy',
+    
+    # 注册表函数
+    'register_strategy',
+    'get_strategy_class',
+    'get_all_strategy_names',
+    'STRATEGY_REGISTRY',
 ]

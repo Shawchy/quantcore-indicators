@@ -57,7 +57,7 @@ from app.models.schemas import (
     CapitalFlowItem,
 )
 from app.config import settings
-from app.storage.unified_storage import storage_manager, DataCategory
+from app.storage.storage_service import storage_service
 
 
 class TickFlowAdapter(BaseDataAdapter):
@@ -206,7 +206,7 @@ class TickFlowAdapter(BaseDataAdapter):
             if not self._tf:
                 return []
             
-            # 缓存已移除，统一使用 storage_manager
+            # 使用内存缓存（_get_from_cache / _save_to_cache）
             # cache_key = 'tickflow_stock_list'
             # cached = self._get_from_cache(cache_key, 'stock_list')
             # if cached:
@@ -229,7 +229,7 @@ class TickFlowAdapter(BaseDataAdapter):
                 return None
             
             symbol = self._symbol_to_tickflow(code)
-            # 缓存已移除，统一使用 storage_manager
+            # 使用内存缓存（_get_from_cache / _save_to_cache）
             # cache_key = f'tickflow_stock_info_{symbol}'
             # cached = self._get_from_cache(cache_key, 'stock_info')
             # if cached:
@@ -264,8 +264,8 @@ class TickFlowAdapter(BaseDataAdapter):
                 float_shares=getattr(inst, 'float_shares', None),
             )
             
-            # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, stock_info, 'stock_info')
+            # 使用内存缓存（_get_from_cache / _save_to_cache）
+            # await self._save_to_cache(cache_key, stock_info, 'stock_info')
             logger.info(f"TickFlow 获取股票信息成功：{code}")
             return stock_info
             
@@ -303,7 +303,7 @@ class TickFlowAdapter(BaseDataAdapter):
                 return []
             
             symbol = self._symbol_to_tickflow(code)
-            # 缓存已移除，统一使用 storage_manager
+            # 使用内存缓存（_get_from_cache / _save_to_cache）
             # cache_key = f'tickflow_kline_{symbol}_{period}_{start_date}_{end_date}'
             
             # 根据周期选择缓存类型
@@ -423,8 +423,8 @@ class TickFlowAdapter(BaseDataAdapter):
                        (not end_date or k.date <= end_date.replace('-', ''))
                 ]
             
-            # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, klines, cache_type)
+            # 使用内存缓存（_get_from_cache / _save_to_cache）
+            # await self._save_to_cache(cache_key, klines, cache_type)
             logger.info(f"TickFlow 获取 K 线数据成功 {code} ({period}): {len(klines)}条")
             return klines
             
@@ -454,7 +454,7 @@ class TickFlowAdapter(BaseDataAdapter):
                 return {}
             
             symbol = self._symbol_to_tickflow(code)
-            # 缓存已移除，统一使用 storage_manager
+            # 使用内存缓存（_get_from_cache / _save_to_cache）
             # cache_key = f'tickflow_quote_{symbol}'
             # cached = self._get_from_cache(cache_key, 'quote')
             # if cached:
@@ -493,8 +493,8 @@ class TickFlowAdapter(BaseDataAdapter):
                 'volume_ratio': quote.get('volume_ratio', 0),
             }
             
-            # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, result, 'quote')
+            # 使用内存缓存（_get_from_cache / _save_to_cache）
+            # await self._save_to_cache(cache_key, result, 'quote')
             logger.info(f"TickFlow 获取实时行情成功：{code}")
             return result
             
@@ -572,17 +572,11 @@ class TickFlowAdapter(BaseDataAdapter):
             - count: 标的数量
         """
         try:
-            # 使用 storage_manager 统一存储
-            exchange_storage_new = storage_manager.get_exchange_storage()
-            
-            # 1. 尝试从统一存储层加载（包含缓存和 JSON 文件）
+            # 1. 尝试从缓存加载（如果 force_refresh=False）
+            # 注意: 交易所数据缓存功能待实现，当前直接从 API 获取
             if not force_refresh:
-                logger.debug("尝试从统一存储层加载交易所数据...")
-                cached = await exchange_storage_new.get("exchanges")
-                if cached:
-                    logger.info(f"✅ 从统一存储层加载交易所数据成功：{len(cached) if isinstance(cached, list) else 'unknown'}项")
-                    return cached
-            
+                logger.debug("交易所数据缓存功能待实现，直接从 API 获取...")
+
             # 2. 从 API 获取
             if not self._tf:
                 logger.warning("TickFlow 未初始化")
@@ -601,18 +595,16 @@ class TickFlowAdapter(BaseDataAdapter):
                     logger.warning("TickFlow exchanges 对象没有 list() 或 get() 方法")
                     exchanges = None
                 
-                if exchanges:
-                    result = []
-                    for exc in exchanges:
-                        result.append({
-                            'exchange': getattr(exc, 'exchange', getattr(exc, 'code', '')),
-                            'region': getattr(exc, 'region', getattr(exc, 'country', '')),
-                            'count': getattr(exc, 'count', 0),
-                        })
-                    
-                    # 保存到统一存储层（自动缓存 + JSON 文件持久化）
-                    await exchange_storage_new.set("exchanges", result)
-                    
+                    if exchanges:
+                        result = []
+                        for exc in exchanges:
+                            result.append({
+                                'exchange': getattr(exc, 'exchange', getattr(exc, 'code', '')),
+                                'region': getattr(exc, 'region', getattr(exc, 'country', '')),
+                                'count': getattr(exc, 'count', 0),
+                            })
+
+                    # TODO: 交易所数据缓存功能待实现（需要时可使用 storage_service）
                     logger.info(f"✅ TickFlow 获取交易所列表成功：{len(result)}个")
                     return result
             else:
@@ -639,9 +631,7 @@ class TickFlowAdapter(BaseDataAdapter):
                         for exc, count in exchange_stats.items()
                     ]
                     
-                    # 保存到统一存储层
-                    await exchange_storage_new.set("exchanges", result)
-                    
+                    # TODO: 交易所数据缓存功能待实现（需要时可使用 storage_service）
                     logger.info(f"TickFlow 推断交易所列表成功：{len(result)}个")
                     return result
             
@@ -674,37 +664,14 @@ class TickFlowAdapter(BaseDataAdapter):
             - ext: 扩展信息（股本、上市日期等）
         """
         try:
-            # 1. 检查是否需要强制刷新
-            if not force_refresh:
-                # 2. 尝试从持久化存储加载
-                logger.debug(f"尝试从持久化存储加载交易所 {exchange} 的标的列表...")
-                data = exchange_storage.load_exchange_instruments(exchange)
-                if data:
-                    instruments = data.get('instruments', [])
-                    metadata = data.get('metadata', {})
-                    logger.info(
-                        f"✅ 从持久化存储加载 {exchange} 标的列表成功:\n"
-                        f"   来源：{metadata.get('source', 'unknown')}\n"
-                        f"   更新时间：{metadata.get('update_time', 'unknown')}\n"
-                        f"   标的数量：{len(instruments)}"
-                    )
-                    # 同时保存到内存缓存
-                    cache_key = f'tickflow_instruments_{exchange}'
-                    self._set_to_cache(cache_key, instruments, 'instruments')
-                    return instruments
-            
-            # 3. 持久化数据不存在或已过期，从 API 获取
-            if not self._tf:
-                logger.warning("TickFlow 未初始化")
-                return []
-            
+            # 1. 尝试从内存缓存加载
             cache_key = f'tickflow_instruments_{exchange}'
-            cached = self._get_from_cache(cache_key, 'instruments')
+            cached = await self._get_from_cache(cache_key, 'instruments')
             if cached and not force_refresh:
                 logger.info(f"从内存缓存获取 {exchange} 标的列表")
                 return cached
-            
-            logger.info(f"从 TickFlow API 获取 {exchange} 交易所标的列表...")
+
+            # 2. 缓存未命中，从 API 获取
             
             # 4. 从 TickFlow SDK 获取
             if hasattr(self._tf, 'exchanges') and self._tf.exchanges is not None:
@@ -743,16 +710,10 @@ class TickFlowAdapter(BaseDataAdapter):
                         result.append(inst_data)
                     
                     # 保存到内存缓存
-                    self._set_to_cache(cache_key, result, 'instruments')
-                    
-                    # 保存到持久化存储（7 天有效期）
-                    exchange_storage.save_exchange_instruments(
-                        exchange, 
-                        result, 
-                        source='tickflow', 
-                        expiry_days=7
-                    )
-                    
+                    await self._save_to_cache(cache_key, result, 'instruments')
+
+                    # TODO: 持久化存储功能待实现（需要时可使用 storage_service）
+
                     logger.info(f"✅ TickFlow 获取 {exchange} 标的列表成功：{len(result)}个")
                     return result
             else:
@@ -837,7 +798,7 @@ class TickFlowAdapter(BaseDataAdapter):
                         }
                     
                     # 保存到内存缓存
-                    self._set_to_cache(cache_key, result, 'instruments')
+                    await self._save_to_cache(cache_key, result, 'instruments')
                     logger.info(f"✅ 查询 {symbol} 标的元数据成功")
                     return result
                 else:
@@ -940,7 +901,7 @@ class TickFlowAdapter(BaseDataAdapter):
                         
                         # 保存到内存缓存
                         cache_key = f'tickflow_instrument_{inst_data["symbol"]}'
-                        self._set_to_cache(cache_key, inst_data, 'instruments')
+                        await self._save_to_cache(cache_key, inst_data, 'instruments')
                     
                     logger.info(f"✅ 批量查询 {len(result)} 个标的元数据成功")
                     return result
@@ -1043,7 +1004,7 @@ class TickFlowAdapter(BaseDataAdapter):
                         }
                     
                     # 保存到内存缓存（实时行情缓存 10 秒）
-                    self._set_to_cache(cache_key, result, 'quote')
+                    await self._save_to_cache(cache_key, result, 'quote')
                     logger.info(f"✅ 查询 {symbol} 实时行情成功")
                     return result
                 else:
@@ -1153,7 +1114,7 @@ class TickFlowAdapter(BaseDataAdapter):
                         
                         # 保存到内存缓存（实时行情缓存 10 秒）
                         cache_key = f'tickflow_quote_{quote_data["symbol"]}'
-                        self._set_to_cache(cache_key, quote_data, 'quote')
+                        await self._save_to_cache(cache_key, quote_data, 'quote')
                     
                     logger.info(f"✅ 批量查询 {len(result)} 个标的实时行情成功")
                     return result

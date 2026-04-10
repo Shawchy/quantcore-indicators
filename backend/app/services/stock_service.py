@@ -10,11 +10,11 @@ from app.services.data_processor import DataProcessor
 from app.services.indicators_manager import IndicatorsManager, get_indicators_manager
 from app.storage import (
     StockInfo, KLine, TechnicalIndicatorDB, RealtimeQuote,
-    get_session, cache_manager, parquet_store
+    get_session
 )
+from app.storage.storage_service import storage_service
+from app.services.cache_service import cache_service
 from app.core.exceptions import DataNotFoundException, DataSourceException
-from app.services.data_persistence import data_persistence
-from app.services.data_loader import data_loader, LoadPriority, LoadProgress
 
 
 class StockService:
@@ -39,13 +39,23 @@ class StockService:
         2. 数据库（本地存储）
         3. 数据源（最后选择，受频率限制）
         """
-        # L1: 内存缓存
         cache_key = f"stock_basic_{code}"
-        cached = await cache_manager.get("kline", cache_key)
-        if cached:
-            logger.debug(f"从缓存获取股票信息：{code}")
-            return cached
         
+        # 使用统一的 cache_service
+        data = await cache_service.get_or_fetch(
+            key=cache_key,
+            fetch_func=self._fetch_stock_basic_from_source,
+            data_type="kline",
+            use_l2=False  # 股票基本信息不使用 L2 数据库缓存
+        )
+        
+        if data is None:
+            raise DataNotFoundException(f"股票 {code} 不存在")
+        
+        return data
+    
+    async def _fetch_stock_basic_from_source(self, code: str) -> Optional[Dict[str, Any]]:
+        """从数据源获取股票基本信息"""
         # L2: 数据库
         try:
             async with get_session() as session:
@@ -66,14 +76,12 @@ class StockService:
                         "total_shares": stock.total_shares,
                         "float_shares": stock.float_shares
                     }
-                    # 更新缓存
-                    await cache_manager.set("kline", cache_key, data, ttl=3600)  # 1 小时
                     logger.debug(f"从数据库获取股票信息：{code}")
                     return data
         except Exception as e:
             logger.warning(f"从数据库读取股票信息失败 {code}: {e}")
         
-        # L3: 数据源（最后选择）
+        # L3: 数据源
         try:
             stock_info = await data_source_manager.get_stock_info(code)
             if stock_info:
@@ -88,19 +96,14 @@ class StockService:
                     "total_shares": stock_info.total_shares,
                     "float_shares": stock_info.float_shares
                 }
-                # 异步保存到数据库和缓存
+                # 异步保存
                 asyncio.create_task(self._save_stock_info_to_db(code, data))
                 logger.debug(f"从数据源获取股票信息：{code}")
                 return data
         except Exception as e:
             logger.error(f"从数据源获取股票信息失败 {code}: {e}")
-            # 如果数据源失败，检查是否有缓存的旧数据
-            old_cached = await cache_manager.get("kline", cache_key)
-            if old_cached:
-                logger.warning(f"使用缓存的旧数据：{code}")
-                return old_cached
         
-        raise DataNotFoundException(f"股票 {code} 不存在")
+        return None
     
     async def _save_stock_info_to_db(self, code: str, data: Dict[str, Any]):
         """异步保存股票信息到数据库"""
@@ -254,30 +257,30 @@ class StockService:
         按需加载 K 线数据（Lazy Loading）
         
         加载策略：
-        1. 优先从数据库读取（已缓存的数据）
-        2. 如果数据库没有或数据不足，才从数据源拉取
-        3. 拉取的数据保存到数据库，下次直接使用
+        1. 优先从 storage_service 读取（自动处理缓存和数据库）
+        2. 如果数据不足，从数据源拉取
+        3. 拉取的数据保存到 storage_service，下次直接使用
         """
         cache_key = f"kline_{code}_{start_date}_{end_date}_{adjust}"
         
         # 1. 尝试从缓存读取
         if use_cache:
-            cached = await cache_manager.get("kline", cache_key)
+            cached = await cache_service.get("kline", cache_key)
             if cached:
                 logger.info(f"缓存命中：{code}, {len(cached)} 条")
                 return cached
         
-        # 2. 从数据库读取
-        db_klines = await data_persistence.get_klines_from_db(
-            code, start_date, end_date, adjust
+        # 2. 使用 storage_service 从数据库/Parquet 加载
+        klines = await storage_service.get_kline(
+            code=code,
+            start_date=start_date or "1970-01-01",
+            end_date=end_date or datetime.now().strftime("%Y-%m-%d"),
+            adjust=adjust,
+            use_cache=False  # 我们已经手动处理了缓存
         )
         
-        if db_klines and len(db_klines) >= 100:
-            # 数据库有足够数据，直接使用
-            logger.info(f"数据库命中：{code}, {len(db_klines)} 条")
-            klines = db_klines
-        else:
-            # 3. 数据库不足，从数据源拉取
+        if not klines:
+            # 3. 数据不足，从数据源拉取
             logger.info(f"数据库不足，从数据源拉取：{code}")
             klines = await data_source_manager.get_kline(code, start_date, end_date, adjust)
             
@@ -287,10 +290,15 @@ class StockService:
             
             logger.info(f"从数据源拉取 {len(klines)} 条：{code}")
             
-            # 4. 保存到数据库（如果启用持久化）
+            # 4. 保存到 storage_service（自动处理 SQLite + Parquet）
             if persist:
                 try:
-                    saved_count = await data_persistence.save_klines(code, klines, adjust)
+                    saved_count = await storage_service.save_kline(
+                        code=code,
+                        klines=klines,
+                        adjust=adjust,
+                        sync_to_parquet=True
+                    )
                     if saved_count > 0:
                         logger.info(f"已保存到数据库：{code}, {saved_count} 条")
                     else:
@@ -314,8 +322,8 @@ class StockService:
         result = df.to_dict("records")
         
         # 6. 更新缓存
-        if use_cache:
-            await cache_manager.set("kline", cache_key, result)
+        if use_cache and result:
+            await cache_service.set("kline", cache_key, result)
         
         return result
     
@@ -344,7 +352,9 @@ class StockService:
         end_date: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         cache_key = f"indicators_{code}_{start_date}_{end_date}"
-        cached = await cache_manager.get("indicators", cache_key)
+        
+        # 使用 cache_service 统一管理
+        cached = await cache_service.get("indicators", cache_key)
         if cached:
             return cached
         
@@ -373,89 +383,45 @@ class StockService:
         
         result = result_df.to_dict("records")
         
-        await cache_manager.set("indicators", cache_key, result)
+        # 使用 cache_service 保存
+        await cache_service.set("indicators", cache_key, result)
         
         return result
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
         """
-        获取实时行情（三级缓存优化）
+        获取实时行情（使用 storage_service 统一管理）
         
         L1: 内存缓存 (60 秒) - 最快
         L2: 数据库缓存 (永久，直到更新) - 次快
         L3: 数据源实时拉取 - 最慢，受频率限制
         
         优先级策略：
-        1. 优先使用缓存，避免触发数据源频率限制
+        1. 优先使用 storage_service 统一管理
         2. 数据源失败时，降级使用旧缓存
         3. 异步更新缓存，不阻塞返回
         """
-        cache_key = f"realtime_{code}"
+        # 使用 storage_service 统一管理实时行情
+        quote = await storage_service.get_realtime_quote(code, use_cache=True)
         
-        # L1: 检查内存缓存（最快）
-        cached = await cache_manager.get("realtime", cache_key)
-        if cached:
-            logger.debug(f"从内存缓存获取实时行情：{code}")
-            return cached
+        if quote:
+            return quote
         
-        # L2: 检查数据库缓存（次快）
-        try:
-            async with get_session() as session:
-                result = await session.execute(
-                    select(RealtimeQuote).where(RealtimeQuote.code == code)
-                )
-                db_quote = result.scalar_one_or_none()
-                
-                if db_quote:
-                    # 转换为字典格式
-                    quote = {
-                        "code": db_quote.code,
-                        "name": db_quote.name,
-                        "price": db_quote.price,
-                        "change": db_quote.change,
-                        "change_pct": db_quote.change_pct,
-                        "volume": db_quote.volume,
-                        "amount": db_quote.amount,
-                        "high": db_quote.high,
-                        "low": db_quote.low,
-                        "open": db_quote.open,
-                        "prev_close": db_quote.prev_close,
-                        "turnover_rate": db_quote.turnover_rate,
-                        "quote_time": db_quote.quote_time,
-                    }
-                    
-                    # 更新内存缓存（60 秒）
-                    await cache_manager.set("realtime", cache_key, quote, ttl=60)
-                    
-                    logger.debug(f"从数据库获取实时行情：{code}")
-                    return quote
-        except Exception as e:
-            logger.warning(f"从数据库读取实时行情失败 {code}: {e}")
-        
-        # L3: 从数据源获取（最后选择）
+        # 从数据源获取
         try:
             quote = await data_source_manager.get_realtime_quote(code)
             
             if not quote:
                 raise DataNotFoundException(f"股票 {code} 实时行情不存在")
             
-            # 保存到内存缓存
-            await cache_manager.set("realtime", cache_key, quote, ttl=60)
-            
-            # 异步保存到数据库（不阻塞返回）
-            asyncio.create_task(self._save_realtime_quote_to_db(code, quote))
+            # 保存到 storage_service（自动处理缓存和数据库）
+            await storage_service.save_realtime_quote(code, quote)
             
             logger.debug(f"从数据源获取实时行情：{code}")
             return quote
             
         except Exception as e:
             logger.error(f"获取实时行情失败 {code}: {e}")
-            # 降级策略：如果数据源失败，检查是否有旧缓存
-            old_cached = await cache_manager.get("realtime", cache_key)
-            if old_cached:
-                logger.warning(f"使用缓存的旧实时行情：{code}")
-                return old_cached
-            
             raise DataNotFoundException(f"股票 {code} 实时行情获取失败：{e}")
     
     async def _save_realtime_quote_to_db(self, code: str, quote: Dict[str, Any]):

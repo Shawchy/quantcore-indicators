@@ -4,14 +4,17 @@ from loguru import logger
 from sqlalchemy import select
 
 from app.adapters import data_source_manager
-from app.storage import cache_manager, SectorInfo, get_session
+from app.services.cache_service import cache_service
+from app.storage import SectorInfo, get_session
 from app.core.exceptions import DataNotFoundException
 
 
 class SectorService:
     async def get_sector_list(self, sector_type: str = "industry") -> List[Dict[str, Any]]:
         cache_key = f"sector_list_{sector_type}"
-        cached = await cache_manager.get("sector", cache_key)
+        
+        # 使用 cache_service 统一管理
+        cached = await cache_service.get("sector", cache_key)
         if cached:
             return cached
         
@@ -33,7 +36,8 @@ class SectorService:
                         "amount": s.amount
                     } for s in sectors]
                     
-                    await cache_manager.set("sector", cache_key, result)
+                    # 使用 cache_service 保存
+                    await cache_service.set("sector", cache_key, result)
                     logger.debug(f"从数据库获取板块列表：{sector_type} ({len(sectors)}条)")
                     return result
         except Exception as e:
@@ -51,7 +55,8 @@ class SectorService:
             "amount": s.amount
         } for s in sectors]
         
-        await cache_manager.set("sector", cache_key, result)
+        # 使用 cache_service 保存
+        await cache_service.set("sector", cache_key, result)
         
         return result
     
@@ -62,7 +67,9 @@ class SectorService:
         limit: int = 20
     ) -> List[Dict[str, Any]]:
         cache_key = f"sector_ranking_{sector_type}_{sort_by}_{limit}"
-        cached = await cache_manager.get("sector", cache_key)
+        
+        # 使用 cache_service 统一管理
+        cached = await cache_service.get("sector", cache_key)
         if cached:
             return cached
         
@@ -77,13 +84,16 @@ class SectorService:
         
         result = sectors[:limit]
         
-        await cache_manager.set("sector", cache_key, result)
+        # 使用 cache_service 保存
+        await cache_service.set("sector", cache_key, result)
         
         return result
     
     async def get_sector_components(self, sector_code: str) -> List[Dict[str, Any]]:
         cache_key = f"sector_components_{sector_code}"
-        cached = await cache_manager.get("sector", cache_key)
+        
+        # 使用 cache_service 统一管理
+        cached = await cache_service.get("sector", cache_key)
         if cached:
             return cached
         
@@ -94,7 +104,8 @@ class SectorService:
         
         result = [{"code": code} for code in codes]
         
-        await cache_manager.set("sector", cache_key, result)
+        # 使用 cache_service 保存
+        await cache_service.set("sector", cache_key, result)
         
         return result
     

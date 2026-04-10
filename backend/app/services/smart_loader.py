@@ -7,6 +7,8 @@
 3. 数据库未命中则从 API 获取并回填
 4. 自动预热常用数据
 5. 智能预测和定时预热
+
+⚠️ **已更新**: 使用 storage_service 替代旧的 storage_manager
 """
 import asyncio
 from typing import Any, Dict, List, Optional, Set
@@ -14,9 +16,9 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from loguru import logger
 
-from app.storage.unified_storage import storage_manager, DataCategory
+from app.storage.storage_service import storage_service
+from app.services.cache_service import cache_service
 from app.adapters.factory import data_source_manager
-from app.services.local_database import local_db_service
 
 
 class SmartDataLoader:
@@ -27,7 +29,8 @@ class SmartDataLoader:
     HIT_RATE_CRITICAL_THRESHOLD = 0.1  # 10%
     
     def __init__(self):
-        self._storage = storage_manager
+        self._storage_service = storage_service
+        self._cache_service = cache_service
         self._warmup_done = False
         
         # 访问频率统计（用于智能预热）
@@ -48,7 +51,7 @@ class SmartDataLoader:
         use_cache: bool = True
     ) -> Optional[List[Any]]:
         """
-        智能获取 K 线数据
+        智能获取 K 线数据（使用 storage_service）
         
         Args:
             code: 股票代码
@@ -60,15 +63,16 @@ class SmartDataLoader:
         Returns:
             K 线数据列表
         """
-        storage = self._storage.get_kline_storage(period)
-        
-        # 尝试从存储层获取
-        if use_cache:
-            data = await storage.get(
-                code,
+        # 使用 storage_service 统一获取
+        if use_cache and start_date and end_date:
+            data = await self._storage_service.get_kline(
+                code=code,
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
+                adjust="qfq",  # 默认前复权
+                use_cache=True
             )
+            
             if data:
                 # 记录访问频率
                 await self._record_access(code)
@@ -83,8 +87,8 @@ class SmartDataLoader:
         )
         
         if kline_data:
-            # 保存到存储层
-            await storage.set(code, kline_data)
+            # 使用 storage_service 保存
+            await self._storage_service.save_kline(code=code, klines=kline_data, adjust="qfq")
             logger.info(f"K 线数据已缓存：{code} {len(kline_data)}条")
             # 记录访问频率
             await self._record_access(code)

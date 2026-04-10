@@ -305,6 +305,14 @@ async def init_database():
     db_path.mkdir(parents=True, exist_ok=True)
     
     db_file = db_path / "quant.db"
+    
+    # 新增：确保数据库文件存在（用于 WAL 模式初始化）
+    if not db_file.exists():
+        import aiosqlite
+        async with aiosqlite.connect(str(db_file)) as db:
+            pass
+    
+    # 创建异步引擎
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_file}",
         echo=settings.DEBUG,
@@ -313,7 +321,34 @@ async def init_database():
         pool_pre_ping=True,  # 连接前 ping 测试
         pool_recycle=3600,  # 1 小时回收连接
     )
-
+    
+    # ✅ 关键优化：添加事件监听器设置 PRAGMA
+    from sqlalchemy import event
+    
+    @event.listens_for(engine.sync_engine, "connect")
+    def set_sqlite_pragmas(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        
+        try:
+            # 核心性能优化
+            cursor.execute("PRAGMA journal_mode = WAL")      # 启用 WAL 模式（最关键！）
+            cursor.execute("PRAGMA synchronous = NORMAL")     # 放宽同步策略
+            cursor.execute("PRAGMA cache_size = -64000")       # 64MB 缓存（默认仅 2MB）
+            cursor.execute("PRAGMA temp_store = MEMORY")       # 临时表放内存
+            cursor.execute("PRAGMA mmap_size = 268435456")     # 256MB 内存映射
+            
+            # 可靠性优化
+            cursor.execute("PRAGMA busy_timeout = 5000")       # 5秒忙等待
+            cursor.execute("PRAGMA foreign_keys = ON")          # 外键约束
+            cursor.execute("PRAGMA wal_autocheckpoint = 1000") # 自动 checkpoint
+            
+            logger.debug("SQLite PRAGMA 设置完成：WAL模式 + 性能优化")
+            
+        except Exception as e:
+            logger.error(f"设置 SQLite PRAGMA 失败: {e}")
+        finally:
+            cursor.close()
+    
     async_session_maker = async_sessionmaker(
         engine,
         class_=AsyncSession,
@@ -325,6 +360,19 @@ async def init_database():
     # 只创建表结构，不删除现有数据
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # ✅ 验证 WAL 模式是否生效
+    from sqlalchemy import text
+    async with engine.begin() as conn:
+        result = await conn.run_sync(
+            lambda conn: conn.execute(text("PRAGMA journal_mode")).fetchone()
+        )
+        journal_mode = result[0] if result else "unknown"
+        
+        if journal_mode == "wal":
+            logger.success(f"✓ SQLite WAL 模式已启用！journal_mode={journal_mode}")
+        else:
+            logger.warning(f"⚠ SQLite journal_mode={journal_mode}（非WAL，性能可能受限）")
     
     # 创建默认用户
     await create_default_users()
@@ -418,3 +466,53 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     
     async with async_session_maker() as session:
         yield session
+
+
+# ✅ 新增：定期 Checkpoint 任务（控制 WAL 文件大小）
+async def sqlite_checkpoint_task():
+    """
+    定期执行 SQLite checkpoint
+    
+    作用：
+    - 将 WAL 日志写入主数据库文件
+    - 控制 WAL 文件大小，防止无限增长
+    - 建议每 30 分钟执行一次
+    """
+    global engine
+    
+    if engine is None:
+        logger.warning("数据库未初始化，跳过 checkpoint")
+        return
+    
+    try:
+        async with engine.begin() as conn:
+            # 执行 TRUNCATE checkpoint（清理 WAL 文件）
+            result = await conn.run_sync(
+                lambda conn: conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            )
+            
+            if result:
+                wal_size = result[0] if len(result) > 0 else 0
+                logger.debug(f"SQLite checkpoint 完成，WAL 文件大小: {wal_size} 页")
+            
+    except Exception as e:
+        logger.error(f"SQLite checkpoint 失败: {e}")
+
+
+# ✅ 新增：启动定期 Checkpoint 调度任务
+def start_checkpoint_scheduler():
+    """启动定期 Checkpoint 后台任务"""
+    import asyncio
+    
+    async def _checkpoint_loop():
+        while True:
+            try:
+                await asyncio.sleep(1800)  # 每 30 分钟执行一次
+                await sqlite_checkpoint_task()
+            except Exception as e:
+                logger.error(f"Checkpoint 调度异常: {e}")
+                await asyncio.sleep(60)  # 出错后等待 1 分钟再试
+    
+    task = asyncio.create_task(_checkpoint_loop())
+    logger.info("✓ SQLite 定期 Checkpoint 调度器已启动（每30分钟）")
+    return task

@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from loguru import logger
 
-from app.storage.query_optimizer import query_optimizer
-from app.storage.cache_optimizer import cache_optimizer
+from app.monitoring.query_optimizer import query_optimizer
+from app.services.cache_service import cache_service
 
 
 router = APIRouter(prefix="/performance", tags=["性能优化"])
@@ -88,8 +88,8 @@ async def reset_query_stats():
 @router.get("/cache/stats")
 async def get_cache_stats():
     """获取缓存统计信息"""
-    stats = cache_optimizer.get_cache_stats()
-    
+    stats = cache_service.get_cache_stats_for_api()
+
     return {
         "success": True,
         "data": stats
@@ -100,11 +100,11 @@ async def get_cache_stats():
 async def warmup_cache(request: CacheWarmupRequest, background_tasks: BackgroundTasks):
     """缓存预热"""
     background_tasks.add_task(
-        cache_optimizer.warmup_cache,
+        cache_service.warmup_cache_simple,
         request.data_type,
         request.items
     )
-    
+
     return {
         "success": True,
         "message": f"已提交缓存预热任务: {request.data_type}, 数量: {len(request.items)}"
@@ -114,8 +114,8 @@ async def warmup_cache(request: CacheWarmupRequest, background_tasks: Background
 @router.post("/cache/clear")
 async def clear_cache(level: Optional[str] = None):
     """清空缓存"""
-    cache_optimizer.clear_cache(level)
-    
+    await cache_service.clear_by_level(level)
+
     return {
         "success": True,
         "message": f"缓存已清空: {level or 'all'}"
@@ -125,8 +125,8 @@ async def clear_cache(level: Optional[str] = None):
 @router.get("/cache/policies")
 async def get_cache_policies():
     """获取缓存策略"""
-    policies = cache_optimizer.get_cache_policies()
-    
+    policies = cache_service.get_policies()
+
     return {
         "success": True,
         "policies": policies
@@ -136,8 +136,8 @@ async def get_cache_policies():
 @router.post("/cache/policy")
 async def set_cache_policy(request: CachePolicyRequest):
     """设置缓存策略"""
-    cache_optimizer.set_cache_policy(request.cache_type, request.policy)
-    
+    cache_service.set_policy(request.cache_type, request.policy)
+
     return {
         "success": True,
         "message": f"缓存策略已更新: {request.cache_type}"
@@ -148,8 +148,8 @@ async def set_cache_policy(request: CachePolicyRequest):
 async def get_performance_overview():
     """获取性能概览"""
     query_stats = query_optimizer.get_query_stats()
-    cache_stats = cache_optimizer.get_cache_stats()
-    
+    cache_stats = cache_service.get_cache_stats_for_api()
+
     return {
         "success": True,
         "data": {

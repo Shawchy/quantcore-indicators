@@ -11,7 +11,7 @@ from loguru import logger
 from app.adapters.factory import data_source_manager
 from app.services.local_database import local_db_service
 from app.services.stock_list_sync import stock_list_sync
-from app.storage.unified_storage import storage_manager, DataCategory
+from app.storage.storage_service import storage_service
 
 
 class DataSyncScheduler:
@@ -150,8 +150,6 @@ class DataSyncScheduler:
             stocks_to_sync = stock_list[:limit_stocks]
             
             # 使用统一存储层
-            kline_storage = storage_manager.get_kline_storage("daily")
-            
             for stock in stocks_to_sync:
                 try:
                     # 从数据源获取 K 线数据
@@ -160,10 +158,15 @@ class DataSyncScheduler:
                         start_date=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
                         end_date=datetime.now().strftime("%Y-%m-%d")
                     )
-                    
+
                     if kline_data:
-                        # 使用统一存储层（自动同步到数据库）
-                        await kline_storage.set(stock.code, kline_data)
+                        # 直接使用 storage_service 保存（自动同步到数据库）
+                        await storage_service.save_kline(
+                            code=stock.code,
+                            klines=kline_data,
+                            adjust="qfq",
+                            sync_to_parquet=True
+                        )
                     
                     # 避免请求过快
                     await asyncio.sleep(1)
@@ -196,18 +199,16 @@ class DataSyncScheduler:
             stocks_to_sync = stock_list[:limit_stocks]
             
             # 使用统一存储层
-            quote_storage = storage_manager.get_quote_storage()
-            
             for stock in stocks_to_sync:
                 try:
                     # 从数据源获取实时行情
                     quote_data = await data_source_manager.get_realtime_quote(
                         code=stock.code
                     )
-                    
+
                     if quote_data:
-                        # 使用统一存储层（自动同步到数据库，缓存 30 秒）
-                        await quote_storage.set(stock.code, [quote_data])
+                        # 直接使用 storage_service 保存（自动同步到数据库，缓存 30 秒）
+                        await storage_service.save_realtime_quote(stock.code, [quote_data])
                     
                     # 避免请求过快
                     await asyncio.sleep(0.5)

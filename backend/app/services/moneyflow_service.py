@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from app.adapters import data_source_manager
-from app.storage import cache_manager
+from app.services.cache_service import cache_service
 from app.models.schemas import MarketMoneyflowData
 
 
@@ -19,12 +19,12 @@ class MoneyflowService:
         use_cache: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        获取大盘资金流向数据
+        获取大盘资金流向数据（使用 cache_service 统一管理）
         
         Args:
-            trade_date: 交易日期（YYYYMMDD格式）
-            start_date: 开始日期（YYYYMMDD格式）
-            end_date: 结束日期（YYYYMMDD格式）
+            trade_date: 交易日期（YYYYMMDD 格式）
+            start_date: 开始日期（YYYYMMDD 格式）
+            end_date: 结束日期（YYYYMMDD 格式）
             use_cache: 是否使用缓存
             
         Returns:
@@ -33,7 +33,8 @@ class MoneyflowService:
         cache_key = f"market_moneyflow_{trade_date}_{start_date}_{end_date}"
         
         if use_cache:
-            cached = await cache_manager.get("moneyflow", cache_key)
+            # 使用 cache_service 统一管理
+            cached = await cache_service.get("moneyflow", cache_key)
             if cached:
                 logger.debug(f"从缓存获取大盘资金流向数据")
                 return cached
@@ -52,7 +53,8 @@ class MoneyflowService:
                 data = []
             
             if data:
-                await cache_manager.set("moneyflow", cache_key, data, ttl=self._cache_ttl)
+                # 使用 cache_service 保存
+                await cache_service.set("moneyflow", cache_key, data, ttl=self._cache_ttl)
             
             return data
             

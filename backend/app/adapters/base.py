@@ -1322,10 +1322,10 @@ class BaseDataAdapter(ABC):
         Returns:
             缓存的数据，如果不存在则返回 None
         """
-        from app.storage.intelligent_classifier import data_classifier
+        from app.storage.storage_service import storage_service
         
         # 智能判断缓存策略
-        decision = data_classifier.classify(data_type)
+        decision = storage_service.classify_data(data_type)
         
         if not decision.should_cache:
             logger.debug(f"数据 {data_type} 不缓存，跳过缓存读取")
@@ -1358,10 +1358,10 @@ class BaseDataAdapter(ABC):
             data: 要缓存的数据
             data_type: 数据类型（如 'kline_daily', 'realtime_quote'）
         """
-        from app.storage.intelligent_classifier import data_classifier
+        from app.storage.storage_service import storage_service
         
         # 智能判断缓存策略
-        decision = data_classifier.classify(data_type)
+        decision = storage_service.classify_data(data_type)
         
         if not decision.should_cache:
             logger.debug(f"数据 {data_type} 不缓存，跳过缓存写入")
@@ -1386,9 +1386,9 @@ class BaseDataAdapter(ABC):
         
         根据智能分类器的决策，映射到 CacheManager 的缓存类型
         """
-        from app.storage.intelligent_classifier import data_classifier
+        from app.storage.storage_service import storage_service
         
-        decision = data_classifier.classify(data_type)
+        decision = storage_service.classify_data(data_type)
         
         # 根据缓存层级映射到缓存类型
         mapping = {
@@ -1415,10 +1415,10 @@ class BaseDataAdapter(ABC):
         Returns:
             持久化的数据，如果不存在则返回 None
         """
-        from app.storage.intelligent_classifier import data_classifier
+        from app.storage.storage_service import storage_service
         
         # 智能判断持久化策略
-        decision = data_classifier.classify(data_type)
+        decision = storage_service.classify_data(data_type)
         
         if not decision.should_persist:
             logger.debug(f"数据 {data_type} 不持久化，跳过持久化读取")
@@ -1576,10 +1576,10 @@ class BaseDataAdapter(ABC):
             data: 要持久化的数据
             data_type: 数据类型
         """
-        from app.storage.intelligent_classifier import data_classifier
+        from app.storage.storage_service import storage_service
         
         # 智能判断持久化策略
-        decision = data_classifier.classify(data_type)
+        decision = storage_service.classify_data(data_type)
         
         if not decision.should_persist:
             logger.debug(f"数据 {data_type} 不持久化，跳过持久化写入")

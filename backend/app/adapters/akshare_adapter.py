@@ -62,10 +62,10 @@ class AkShareAdapter(BaseDataAdapter):
             'enable_rate_limit': True,
             'enable_ua_rotation': True,
             'enable_smart_retry': True,
-            'enable_proxy_pool': False,  # 默认禁用，需要时启用
+            'enable_proxy_pool': False,
             'max_retries': 3,
             'rate_limit_config': {
-                'base_delay_range': (2.0, 4.0),  # akshare 需要更保守
+                'base_delay_range': (2.0, 4.0),
                 'adaptive_delay_enabled': True,
             },
             'retry_config': {
@@ -170,114 +170,6 @@ class AkShareAdapter(BaseDataAdapter):
         self._cache[key] = CacheEntry(data, expires_at)
         logger.debug(f"保存到缓存：{key}, TTL={ttl}s")
     
-    # ========== 反风控方法 ===========
-    
-    def _get_time_based_delay(self) -> Tuple[float, float]:
-        """根据当前时间段获取合适的延迟范围
-        
-        Returns:
-            tuple: (min_delay, max_delay)
-        """
-        current_hour = datetime.now().hour
-        
-        # 交易时段（9:30-11:30, 13:00-15:00）使用较长延迟
-        if (9 <= current_hour <= 11) or (13 <= current_hour <= 14):
-            return (1.5, 3.0)
-        # 非交易时段使用较短延迟
-        else:
-            return (0.5, 1.5)
-    
-    async def _rate_limit(self) -> None:
-        """异步请求限流 - 由 AntiWindFacade 的 RateLimitStrategy 处理"""
-        # 此方法已废弃，由 AntiWindFacade 自动处理
-        logger.debug("_rate_limit 已废弃，由 RateLimitStrategy 处理")
-        return
-    
-    def _detect_rate_limit(self, error: Exception) -> bool:
-        """检测是否被限流
-        
-        Args:
-            error: 捕获的异常
-            
-        Returns:
-            bool: 是否检测到限流
-        """
-        error_msg = str(error).lower()
-        rate_limit_keywords = [
-            'connection aborted',
-            'remote end closed',
-            'too many requests',
-            'rate limit',
-            'frequency limit',
-            'access denied',
-            'ip blocked',
-            'request rejected'
-        ]
-        
-        is_rate_limit = any(keyword in error_msg for keyword in rate_limit_keywords)
-        
-        if is_rate_limit:
-            current_time = time.time()
-            # 5 分钟内多次限流才确认
-            if current_time - self._last_rate_limit_time < 300:
-                self._rate_limit_count += 1
-                if self._rate_limit_count >= 3:
-                    self._rate_limit_detected = True
-                    logger.warning(f"确认被限流！5 分钟内{self._rate_limit_count}次触发")
-            else:
-                self._rate_limit_count = 1
-                self._last_rate_limit_time = current_time
-        
-        return is_rate_limit
-    
-    def _rate_limit_sync(self) -> None:
-        """同步请求限流 - 由 AntiWindFacade 的 RateLimitStrategy 处理"""
-        # 此方法已废弃，由 AntiWindFacade 自动处理
-        logger.debug("_rate_limit_sync 已废弃，由 RateLimitStrategy 处理")
-        return
-    
-    def get_anti_wind_config(self) -> Dict[str, Any]:
-        """获取反风控配置信息"""
-        return {
-            "max_retries": self.anti_wind.config.get('max_retries', 3) if hasattr(self, 'anti_wind') else 3,
-            "consecutive_failures": self._consecutive_failures,
-            "anti_wind_strategies": len(self.anti_wind.strategies) if hasattr(self, 'anti_wind') else 0,
-        }
-    
-    def enable_adaptive_delay(self, enabled: bool = True) -> None:
-        """启用/禁用自适应延迟
-        
-        Args:
-            enabled: 是否启用自适应延迟
-        """
-        self._adaptive_delay_enabled = enabled
-        status = "已启用" if enabled else "已禁用"
-        logger.info(f"AkShare 自适应延迟：{status}")
-    
-    def reset_rate_limit_status(self) -> None:
-        """重置限流状态（在成功请求后调用）"""
-        if self._rate_limit_detected:
-            self._rate_limit_detected = False
-            self._rate_limit_count = 0
-            self._last_rate_limit_time = 0
-            logger.info("限流状态已重置")
-    
-    def set_custom_delay_range(self, min_delay: float, max_delay: float) -> None:
-        """【已废弃】设置自定义延迟范围 - 由 AntiWindFacade 的 RateLimitStrategy 处理
-        
-        Args:
-            min_delay: 最小延迟（秒）
-            max_delay: 最大延迟（秒）
-        """
-        # 此方法已废弃，由 AntiWindFacade 的 RateLimitStrategy 处理
-        logger.debug("set_custom_delay_range 已废弃，由 RateLimitStrategy 处理")
-        return
-    
-    def _rotate_user_agent(self) -> None:
-        """【已废弃】轮换 User-Agent - 由 AntiWindFacade 的 UARotatorStrategy 处理"""
-        # 此方法已废弃，保留仅用于向后兼容
-        logger.debug("_rotate_user_agent 已废弃，由 UARotatorStrategy 处理")
-    
     def get_current_user_agent(self) -> str:
         """获取当前 User-Agent（从 AntiWindFacade 的 UARotatorStrategy 获取）"""
         if hasattr(self, 'anti_wind'):
@@ -285,107 +177,6 @@ class AkShareAdapter(BaseDataAdapter):
             if ua_strategy and hasattr(ua_strategy, '_user_agents') and ua_strategy._user_agents:
                 return ua_strategy._user_agents[0]
         return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    
-    @staticmethod
-    def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3) -> Callable:
-        """限流装饰器（用于同步方法）
-        
-        Args:
-            min_delay: 最小延迟（秒）
-            max_delay: 最大延迟（秒）
-            retries: 重试次数
-        
-        Example:
-            @rate_limit_decorator(min_delay=1.5, max_delay=2.5, retries=3)
-            def fetch_data():
-                pass
-        """
-        def decorator(func):
-            def wrapper(*args, **kwargs):
-                self = args[0] if args else None
-                for attempt in range(retries):
-                    try:
-                        # 请求前延迟
-                        if hasattr(self, '_rate_limit_sync'):
-                            self._rate_limit_sync()
-                        
-                        result = func(*args, **kwargs)
-                        
-                        # 成功后重置失败计数
-                        if hasattr(self, '_consecutive_failures'):
-                            self._consecutive_failures = 0
-                        
-                        return result
-                    except Exception as e:
-                        if hasattr(self, '_consecutive_failures'):
-                            self._consecutive_failures += 1
-                        
-                        if attempt < retries - 1:
-                            # 指数退避
-                            delay = (2 ** attempt) * min_delay + random.uniform(0, 1)
-                            logger.debug(f"{func.__name__} 请求失败，{delay:.1f}秒后重试（{attempt+1}/{retries}）: {e}")
-                            time.sleep(delay)
-                        else:
-                            logger.error(f"{func.__name__} 失败，已达最大重试次数：{e}")
-                            raise
-                return None
-            return wrapper
-        return decorator
-    
-    @staticmethod
-    def async_rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3) -> Callable:
-        """异步限流装饰器
-        
-        Args:
-            min_delay: 最小延迟（秒）
-            max_delay: 最大延迟（秒）
-            retries: 重试次数
-        
-        Example:
-            @async_rate_limit_decorator(min_delay=1.5, max_delay=2.5, retries=3)
-            async def fetch_data():
-                pass
-        """
-        def decorator(func):
-            async def wrapper(*args, **kwargs):
-                self = args[0] if args else None
-                for attempt in range(retries):
-                    try:
-                        # 请求前延迟
-                        if hasattr(self, '_rate_limit'):
-                            await self._rate_limit()
-                        
-                        result = await func(*args, **kwargs)
-                        
-                        # 成功后重置失败计数
-                        if hasattr(self, '_consecutive_failures'):
-                            self._consecutive_failures = 0
-                        
-                        return result
-                    except Exception as e:
-                        if hasattr(self, '_consecutive_failures'):
-                            self._consecutive_failures += 1
-                        
-                        # 检测是否被限流
-                        if hasattr(self, '_detect_rate_limit'):
-                            if self._detect_rate_limit(e):
-                                # 轮换 User-Agent
-                                if hasattr(self, '_rotate_user_agent'):
-                                    self._rotate_user_agent()
-                        
-                        if attempt < retries - 1:
-                            # 指数退避
-                            base_delay = (2 ** attempt) * min_delay
-                            
-                            delay = base_delay + random.uniform(0, 1)
-                            logger.debug(f"{func.__name__} 请求失败，{delay:.1f}秒后重试（{attempt+1}/{retries}）: {e}")
-                            await asyncio.sleep(delay)
-                        else:
-                            logger.error(f"{func.__name__} 失败，已达最大重试次数：{e}")
-                            raise
-                return None
-            return wrapper
-        return decorator
     
     async def initialize(self) -> bool:
         """初始化 AkShare 适配器，使用 AntiWindFacade 统一管理反爬策略"""
@@ -438,10 +229,6 @@ class AkShareAdapter(BaseDataAdapter):
         except Exception as e:
             logger.error(f"HybridTLSClient 也失败：{e}")
             return None
-    
-    async def close(self) -> None:
-        self._is_initialized = False
-        logger.info("AkShare 适配器已关闭")
     
     async def get_stock_list(self, market: Optional[str] = None) -> List[StockBasicInfo]:
         """
@@ -687,10 +474,7 @@ class AkShareAdapter(BaseDataAdapter):
     ) -> List[KLineData]:
         """获取大盘指数 K 线数据（带 TLS 指纹伪装 + 凭证注入）"""
         
-        try:
-            await self._rate_limit()
-            
-            # 使用 akshare 获取指数历史行情（正确的 API 是 index_zh_a_hist）
+        def fetch_sync():
             df = ak.index_zh_a_hist(
                 symbol=index_code,
                 period="daily",
@@ -708,10 +492,19 @@ class AkShareAdapter(BaseDataAdapter):
                     low=float(row["low"]),
                     close=float(row["close"]),
                     volume=float(row["volume"]) if "volume" in row else 0,
-                    amount=0  # 指数通常没有成交额数据
+                    amount=0
                 ))
             
             return klines
+        
+        try:
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_market_index_kline"
+            )
+            if result:
+                logger.info(f"获取指数 K 线成功 {index_code}: {len(result)}条")
+            return result or []
             
         except Exception as e:
             logger.error(f"获取指数 K 线失败 {index_code}: {e}")
@@ -1554,7 +1347,6 @@ class AkShareAdapter(BaseDataAdapter):
             单只基金返回字典，多只基金返回字典列表
         """
         try:
-            # 处理单只基金
             if isinstance(fund_codes, str):
                 code = fund_codes.strip()
                 cache_key = self._get_cache_key('fund_info', code=code)
@@ -1562,37 +1354,34 @@ class AkShareAdapter(BaseDataAdapter):
                 if cached:
                     return cached
                 
-                # 频率控制
-                await self._rate_limit()
+                def fetch_single():
+                    df = ak.fund_open_fund_info_em(fund=code)
+                    if df is None or (hasattr(df, 'empty') and df.empty):
+                        return None
+                    row = df.iloc[0] if len(df) > 0 else None
+                    if row is None:
+                        return None
+                    return {
+                        'code': code,
+                        'name': str(row.get('基金简称', '')),
+                        'establish_date': str(row.get('成立日期', '')),
+                        'change_pct': float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None,
+                        'net_asset_value': float(row.get('单位净值', 0)) if pd.notna(row.get('单位净值')) else None,
+                        'fund_company': str(row.get('基金公司', '')),
+                        'nav_update_date': str(row.get('净值日期', '')),
+                        'description': ''
+                    }
                 
-                # 使用 akshare 获取基金信息
-                import akshare as ak
-                df = ak.fund_open_fund_info_em(fund=code)
+                result = await self._execute_with_anti_wind(
+                    request_func=fetch_single,
+                    context="get_fund_base_info"
+                )
                 
-                if df is None or (hasattr(df, 'empty') and df.empty):
-                    return None
-                
-                # 解析数据
-                row = df.iloc[0] if len(df) > 0 else None
-                if row is None:
-                    return None
-                
-                fund_info = {
-                    'code': code,
-                    'name': str(row.get('基金简称', '')),
-                    'establish_date': str(row.get('成立日期', '')),
-                    'change_pct': float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None,
-                    'net_asset_value': float(row.get('单位净值', 0)) if pd.notna(row.get('单位净值')) else None,
-                    'fund_company': str(row.get('基金公司', '')),
-                    'nav_update_date': str(row.get('净值日期', '')),
-                    'description': ''
-                }
-                
-                self._save_to_cache(cache_key, fund_info, 'fund_info')
-                logger.info(f"获取基金 {code} 基本信息成功")
-                return fund_info
+                if result:
+                    self._save_to_cache(cache_key, result, 'fund_info')
+                    logger.info(f"获取基金 {code} 基本信息成功")
+                return result
             
-            # 处理多只基金（列表）
             else:
                 valid_codes = [c.strip() for c in fund_codes if c and len(c.strip()) >= 6]
                 
@@ -1604,42 +1393,42 @@ class AkShareAdapter(BaseDataAdapter):
                 if cached:
                     return cached
                 
-                # 频率控制
-                await self._rate_limit()
+                def fetch_batch():
+                    fund_list = []
+                    for code in valid_codes:
+                        try:
+                            df = ak.fund_open_fund_info_em(fund=code)
+                            if df is not None and len(df) > 0:
+                                row = df.iloc[0]
+                                fund_info = {
+                                    'code': code,
+                                    'name': str(row.get('基金简称', '')),
+                                    'establish_date': str(row.get('成立日期', '')),
+                                    'change_pct': float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None,
+                                    'net_asset_value': float(row.get('单位净值', 0)) if pd.notna(row.get('单位净值')) else None,
+                                    'fund_company': str(row.get('基金公司', '')),
+                                    'nav_update_date': str(row.get('净值日期', '')),
+                                    'description': ''
+                                }
+                                fund_list.append(fund_info)
+                        except Exception as e:
+                            logger.debug(f"获取基金 {code} 信息失败：{e}")
+                            continue
+                    return fund_list
                 
-                # 批量获取基金信息
-                import akshare as ak
-                fund_list = []
-                for code in valid_codes:
-                    try:
-                        df = ak.fund_open_fund_info_em(fund=code)
-                        if df is not None and len(df) > 0:
-                            row = df.iloc[0]
-                            fund_info = {
-                                'code': code,
-                                'name': str(row.get('基金简称', '')),
-                                'establish_date': str(row.get('成立日期', '')),
-                                'change_pct': float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None,
-                                'net_asset_value': float(row.get('单位净值', 0)) if pd.notna(row.get('单位净值')) else None,
-                                'fund_company': str(row.get('基金公司', '')),
-                                'nav_update_date': str(row.get('净值日期', '')),
-                                'description': ''
-                            }
-                            fund_list.append(fund_info)
-                    except Exception as e:
-                        logger.error(f"获取基金 {code} 信息失败：{e}")
-                        continue
+                result = await self._execute_with_anti_wind(
+                    request_func=fetch_batch,
+                    context="get_fund_base_info_batch"
+                )
                 
-                self._save_to_cache(cache_key, fund_list, 'fund_info')
-                logger.info(f"获取基金基本信息成功：{len(fund_list)}条")
-                return fund_list
+                if result:
+                    self._save_to_cache(cache_key, result, 'fund_info')
+                    logger.info(f"获取基金基本信息成功：{len(result)}条")
+                return result or []
         
         except Exception as e:
             logger.error(f"获取基金基本信息失败 {fund_codes}: {e}")
-            # 返回空列表而不是 None，避免前端解析错误
             if isinstance(fund_codes, str):
-                # 单只基金返回空字典
                 return {'code': fund_codes, 'name': '', 'establish_date': '', 'change_pct': None, 'net_asset_value': None, 'fund_company': '', 'nav_update_date': '', 'description': ''}
             else:
-                # 多只基金返回空列表
                 return []

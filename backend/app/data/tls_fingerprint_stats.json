@@ -1,37 +1,37 @@
 {
   "chrome120": {
     "success_count": 0,
-    "fail_count": 34,
-    "last_used": 1775319555.7560663,
+    "fail_count": 40,
+    "last_used": 1775792155.5271482,
     "last_success": 0,
     "api_stats": {
       "sector_list": {
         "success": 0,
-        "fail": 34
+        "fail": 40
       }
     }
   },
   "chrome119": {
     "success_count": 0,
-    "fail_count": 32,
-    "last_used": 1775319555.8607507,
+    "fail_count": 35,
+    "last_used": 1775792155.5690973,
     "last_success": 0,
     "api_stats": {
       "sector_list": {
         "success": 0,
-        "fail": 32
+        "fail": 35
       }
     }
   },
   "chrome118": {
     "success_count": 0,
-    "fail_count": 32,
-    "last_used": 1775319555.8607507,
+    "fail_count": 35,
+    "last_used": 1775792155.5690973,
     "last_success": 0,
     "api_stats": {
       "sector_list": {
         "success": 0,
-        "fail": 32
+        "fail": 35
       }
     }
   }

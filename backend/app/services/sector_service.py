@@ -14,7 +14,7 @@ class SectorService:
         cache_key = f"sector_list_{sector_type}"
         
         # 使用 cache_service 统一管理
-        cached = await cache_service.get("sector", cache_key)
+        cached = await cache_service.get(cache_key, "sector")
         if cached:
             return cached
         
@@ -37,7 +37,7 @@ class SectorService:
                     } for s in sectors]
                     
                     # 使用 cache_service 保存
-                    await cache_service.set("sector", cache_key, result)
+                    await cache_service.set(cache_key, result, "sector")
                     logger.debug(f"从数据库获取板块列表：{sector_type} ({len(sectors)}条)")
                     return result
         except Exception as e:
@@ -56,7 +56,7 @@ class SectorService:
         } for s in sectors]
         
         # 使用 cache_service 保存
-        await cache_service.set("sector", cache_key, result)
+        await cache_service.set(cache_key, result, "sector")
         
         return result
     
@@ -69,7 +69,7 @@ class SectorService:
         cache_key = f"sector_ranking_{sector_type}_{sort_by}_{limit}"
         
         # 使用 cache_service 统一管理
-        cached = await cache_service.get("sector", cache_key)
+        cached = await cache_service.get(cache_key, "sector")
         if cached:
             return cached
         
@@ -85,7 +85,7 @@ class SectorService:
         result = sectors[:limit]
         
         # 使用 cache_service 保存
-        await cache_service.set("sector", cache_key, result)
+        await cache_service.set(cache_key, result, "sector")
         
         return result
     
@@ -93,7 +93,7 @@ class SectorService:
         cache_key = f"sector_components_{sector_code}"
         
         # 使用 cache_service 统一管理
-        cached = await cache_service.get("sector", cache_key)
+        cached = await cache_service.get(cache_key, "sector")
         if cached:
             return cached
         
@@ -105,7 +105,7 @@ class SectorService:
         result = [{"code": code} for code in codes]
         
         # 使用 cache_service 保存
-        await cache_service.set("sector", cache_key, result)
+        await cache_service.set(cache_key, result, "sector")
         
         return result
     

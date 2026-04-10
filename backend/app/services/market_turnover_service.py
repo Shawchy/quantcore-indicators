@@ -121,13 +121,17 @@ class MarketTurnoverService:
             logger.warning("熔断器打开中，跳过成交额数据获取")
             raise Exception("熔断器保护中，暂不获取成交额数据")
         
+        # 根据函数名生成 URL（用于反风控策略的日志和统计）
+        # 默认使用东方财富网 URL（数据来源）
+        url = f"https://www.eastmoney.com/{fetch_func.__name__}"
+        
         # 使用 AntiWindFacade 执行请求（自动处理所有反风控策略）
         try:
             result = await self.anti_wind.execute_with_strategies(
                 request_func=fetch_func,
-                args=args,
-                kwargs=kwargs,
-                context="market_turnover"
+                url=url,
+                method="GET",
+                **kwargs
             )
             
             # 成功后重置熔断器

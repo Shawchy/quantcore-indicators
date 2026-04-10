@@ -4,8 +4,7 @@
 提供本地数据存储和同步功能，减少对实时 API 的依赖
 """
 from sqlalchemy import create_engine, Column, String, Float, Integer, Date, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.pool import StaticPool
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any

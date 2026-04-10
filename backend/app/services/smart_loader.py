@@ -110,35 +110,12 @@ class SmartDataLoader:
         Returns:
             行情数据
         """
-        storage = self._storage.get_quote_storage()
-        
         # 尝试从存储层获取（缓存 30 秒）
         if use_cache:
-            data = await storage.get(code)
+            data = await self._storage_service.get_realtime_quote(code, use_cache=True)
             if data:
                 # 记录访问频率
                 await self._record_access(code)
-                # 数据库返回的是 StockQuote 对象，需要转换为字典
-                if hasattr(data, '__table__'):  # SQLAlchemy 模型
-                    return {
-                        "code": data.code,
-                        "name": data.name,
-                        "price": data.price,
-                        "change": data.change,
-                        "change_pct": data.change_pct,
-                        "volume": data.volume,
-                        "amount": data.amount,
-                        "high": data.high,
-                        "low": data.low,
-                        "open": data.open,
-                        "prev_close": data.prev_close,
-                    }
-                # 缓存中可能是列表格式（见 set 方法）
-                elif isinstance(data, list) and len(data) > 0:
-                    return data[0] if isinstance(data[0], dict) else data
-                # 直接是字典
-                elif isinstance(data, dict):
-                    return data
                 return data
         
         # 未命中则从 API 获取
@@ -147,7 +124,7 @@ class SmartDataLoader:
         
         if quote_data:
             # 保存到存储层（自动同步到数据库）
-            await storage.set(code, [quote_data])
+            await self._storage_service.save_realtime_quote(code, quote_data)
             # 记录访问频率
             await self._record_access(code)
         
@@ -211,7 +188,7 @@ class SmartDataLoader:
         use_cache: bool = True
     ) -> Optional[List[Any]]:
         """
-        智能获取基金净值
+        智能获取基金净值（使用缓存管理器）
         
         Args:
             code: 基金代码
@@ -222,15 +199,10 @@ class SmartDataLoader:
         Returns:
             基金净值数据列表
         """
-        storage = self._storage.get_fund_storage()
-        
-        # 尝试从存储层获取
-        if use_cache:
-            data = await storage.get(
-                code,
-                start_date=start_date,
-                end_date=end_date
-            )
+        # 尝试从缓存层获取
+        if use_cache and start_date and end_date:
+            cache_key = f"fund_nav_{code}_{start_date}_{end_date}"
+            data = await self._storage_service.cache_manager.get("fund", cache_key)
             if data:
                 return data
         
@@ -242,8 +214,10 @@ class SmartDataLoader:
             fund_nav = await data_source_manager.get_fund_nav(code, start_date, end_date)
             
             if fund_nav:
-                # 保存到存储层
-                await storage.set(code, fund_nav)
+                # 保存到缓存层
+                if start_date and end_date:
+                    cache_key = f"fund_nav_{code}_{start_date}_{end_date}"
+                    await self._storage_service.cache_manager.set("fund", cache_key, fund_nav)
                 logger.info(f"基金净值数据已缓存：{code} {len(fund_nav)}条")
             
             return fund_nav
@@ -289,22 +263,20 @@ class SmartDataLoader:
                 "601899", "601919", "601988", "601995", "603259"
             ]
         
-        # 预热行情数据
-        quote_storage = self._storage.get_quote_storage()
+        # 预热行情数据（使用 storage_service 的方法）
         success_count = 0
         for code in stock_codes[:50]:  # 限制数量
             try:
                 quote = await data_source_manager.get_realtime_quote(code)
                 if quote:
-                    await quote_storage.set(code, [quote], sync_to_lower=False)
+                    await self._storage_service.save_realtime_quote(code, quote)
                     success_count += 1
             except Exception as e:
                 logger.debug(f"预热行情失败 {code}: {e}")
         
         logger.info(f"行情数据预热完成：{success_count}/{len(stock_codes[:50])}")
         
-        # 预热最近 30 天的 K 线
-        kline_storage = self._storage.get_kline_storage("daily")
+        # 预热最近 30 天的 K 线（使用 storage_service 的方法）
         end_date = datetime.now().strftime("%Y%m%d")
         start_date = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
         
@@ -317,7 +289,7 @@ class SmartDataLoader:
                     end_date=end_date
                 )
                 if kline:
-                    await kline_storage.set(code, kline, sync_to_lower=False)
+                    await self._storage_service.save_kline(code=code, klines=kline, adjust="qfq")
                     kline_success += 1
             except Exception as e:
                 logger.debug(f"预热 K 线失败 {code}: {e}")
@@ -332,7 +304,10 @@ class SmartDataLoader:
     
     def get_storage_stats(self) -> Dict[str, Any]:
         """获取存储器统计信息"""
-        return self._storage.get_all_stats()
+        return {
+            "cache": self._storage_service.get_cache_stats(),
+            "storage": self._storage_service.get_storage_stats(),
+        }
     
     async def get_health_report(self) -> Dict[str, Any]:
         """

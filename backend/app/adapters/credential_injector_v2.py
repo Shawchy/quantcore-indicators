@@ -22,7 +22,6 @@ import threading
 class BrowserMode(Enum):
     """浏览器模式"""
     DRISSION = "drission"
-    PLAYWRIGHT_SYNC = "playwright_sync"
     CURL_CFFI = "curl_cffi"
     NONE = "none"
 
@@ -117,7 +116,7 @@ class CredentialInjectorV2:
     
     def _detect_browser_mode(self) -> BrowserMode:
         """检测可用的浏览器模式"""
-        # Level 1: DrissionPage
+        # Level 1: DrissionPage（推荐）
         try:
             from DrissionPage import ChromiumPage
             logger.info("✅ DrissionPage 可用")
@@ -125,15 +124,7 @@ class CredentialInjectorV2:
         except ImportError:
             pass
         
-        # Level 2: Playwright 同步
-        try:
-            from playwright.sync_api import sync_playwright
-            logger.info("✅ Playwright 同步可用")
-            return BrowserMode.PLAYWRIGHT_SYNC
-        except ImportError:
-            pass
-        
-        # Level 3: curl_cffi
+        # Level 2: curl_cffi（无需浏览器）
         logger.info("✅ 使用 curl_cffi 模式（无需浏览器）")
         return BrowserMode.CURL_CFFI
     
@@ -228,9 +219,13 @@ class CredentialInjectorV2:
     async def _fetch_cookies_with_browser(self, domain: str) -> Optional[List[Dict]]:
         """使用浏览器获取 Cookie"""
         if self._browser_mode == BrowserMode.DRISSION:
-            return await self._fetch_with_drission(domain)
-        elif self._browser_mode == BrowserMode.PLAYWRIGHT_SYNC:
-            return await self._fetch_with_playwright_sync(domain)
+            # 首先尝试标准 DrissionPage 模式
+            result = await self._fetch_with_drission(domain)
+            if result:
+                return result
+            # 如果标准模式失败，使用增强模式
+            logger.info("标准 DrissionPage 模式失败，尝试增强模式...")
+            return await self._fetch_with_drission_enhanced(domain)
         else:
             return None
     
@@ -272,43 +267,60 @@ class CredentialInjectorV2:
             logger.error(f"DrissionPage 获取凭证异常：{e}")
             return None
     
-    async def _fetch_with_playwright_sync(self, domain: str) -> Optional[List[Dict]]:
-        """Playwright 同步获取 Cookie"""
+    async def _fetch_with_drission_enhanced(self, domain: str) -> Optional[List[Dict]]:
+        """DrissionPage 增强模式获取 Cookie（替代 Playwright）"""
         loop = asyncio.get_event_loop()
         
         def sync_fetch():
             try:
-                from playwright.sync_api import sync_playwright
+                from DrissionPage import ChromiumPage, ChromiumOptions
                 
-                playwright = sync_playwright().start()
+                # 配置无头模式
+                options = ChromiumOptions()
+                options.headless(True)
+                options.set_argument('--disable-blink-features=AutomationControlled')
+                options.set_argument('--disable-dev-shm-usage')
+                options.set_argument('--no-sandbox')
+                options.set_argument('--disable-features=IsolateOrigins,site-per-process')
+                options.set_argument('--window-size=1920,1080')
+                
+                # 配置浏览器路径
+                browser_path = self._config.get('browser_path')
+                if browser_path:
+                    options.set_paths(browser_path=browser_path)
+                
+                page = ChromiumPage(options)
                 
                 try:
-                    browser = playwright.chromium.launch(headless=True)
-                    try:
-                        context = browser.new_context()
-                        page = context.new_page()
-                        
-                        try:
-                            if 'eastmoney' in domain:
-                                page.goto('https://fund.eastmoney.com/')
-                                page.wait_for_load_state('networkidle')
-                            
-                            return context.cookies()
-                        finally:
-                            page.close()
-                    finally:
-                        context.close()
-                        browser.close()
+                    if 'eastmoney' in domain:
+                        page.get('https://fund.eastmoney.com/')
+                        page.wait.load_start()
+                    
+                    time.sleep(2)
+                    
+                    cookies = page.cookies()
+                    
+                    # 转换为标准格式
+                    cookie_list = []
+                    for cookie in cookies:
+                        cookie_list.append({
+                            'name': cookie.get('name', ''),
+                            'value': cookie.get('value', ''),
+                            'domain': cookie.get('domain', domain),
+                            'path': cookie.get('path', '/'),
+                        })
+                    
+                    return cookie_list
                 finally:
-                    playwright.stop()
+                    page.quit()
             except Exception as e:
-                logger.error(f"Playwright 获取凭证失败：{e}")
+                logger.error(f"DrissionPage 增强模式获取凭证失败：{e}")
                 return None
         
         try:
             return await loop.run_in_executor(self._browser_executor, sync_fetch)
         except Exception as e:
-            logger.error(f"Playwright 获取凭证异常：{e}")
+            logger.error(f"DrissionPage 增强模式获取凭证异常：{e}")
             return None
     
     def _generate_headers(self) -> Dict[str, str]:

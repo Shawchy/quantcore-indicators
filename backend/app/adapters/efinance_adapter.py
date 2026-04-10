@@ -752,10 +752,6 @@ class EFinanceAdapter(BaseDataAdapter):
                 
         # 限流        
         try:
-            result = await self._execute_with_anti_wind(
-                request_func=fetch_sync,
-                context="get_data"
-            )
             if not EF_AVAILABLE:
                 return []
             
@@ -830,11 +826,6 @@ class EFinanceAdapter(BaseDataAdapter):
                 
         # 限流        
         try:
-            result = await self._execute_with_anti_wind(
-                request_func=fetch_sync,
-                context="get_deal_detail"
-            )
-
             cache_key = self._get_cache_key('history_bill', code=stock_code)
             cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
@@ -1042,11 +1033,6 @@ class EFinanceAdapter(BaseDataAdapter):
                 
         # 限流        
         try:
-            result = await self._execute_with_anti_wind(
-                request_func=fetch_sync,
-                context="get_history_bill"
-            )
-
             # 兼容旧的 adjust 参数
             if adjust is not None and fqt == 1:
                 if adjust == 'qfq':
@@ -1138,32 +1124,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 # 按日期排序
                 klines.sort(key=lambda x: x.date)
                 return klines
-            
-            # 使用智能重试执行器
-            result = await self._execute_with_anti_wind(
-                request_func=fetch_sync,
-                context="get_kline"
-            )
-            klines = result or []
-            
-            if klines:
-                await self._save_to_cache(cache_key, klines, 'kline')
-                logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条")
-            else:
-                logger.warning(f"K 线数据为空：{code} (klt={klt})")
-            
-            self.record_request_success()
-            return klines
-            
-        except Exception as e:
-            logger.error(f"获取 K 线数据失败 {code}: {e}")
-            return []
-            klines.sort(key=lambda x: x.date)
-            
-            await self._save_to_cache(cache_key, klines, 'kline')
-            logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条 (klt={klt}, fqt={fqt})")
-            return klines
-            
+                
         except Exception as e:
             self.record_request_failure()  # 记录失败
             logger.error(f"获取 K 线数据失败 {code} (klt={klt}, fqt={fqt}): {e}")
@@ -2567,41 +2528,6 @@ class EFinanceAdapter(BaseDataAdapter):
             
         except Exception as e:
             logger.error(f"获取公司业绩表现失败：{e}")
-            return []
-    
-    async def get_all_report_dates(self) -> List[str]:
-        """
-        获取所有可选的报告发布日期
-        
-        Returns:
-            报告日期列表，格式：YYYY-MM-DD（带 TLS 指纹伪装 + 凭证注入）
-"""
-        try:
-                        
-            # 限流
-            if not EF_AVAILABLE:
-                return []
-            
-            cache_key = self._get_cache_key('report_dates')
-            cached = await self._get_from_cache(cache_key, 'stock_list')
-            if cached:
-                return cached
-            
-            # 获取所有报告日期
-            dates = ef.stock.get_all_report_dates()
-            
-            if not dates:
-                return []
-            
-            # 转换为字符串列表
-            date_list = [str(d) for d in dates]
-            
-            await self._save_to_cache(cache_key, date_list, 'stock_list')
-            logger.info(f"获取报告日期列表成功：{len(date_list)}个")
-            return date_list
-            
-        except Exception as e:
-            logger.error(f"获取报告日期列表失败：{e}")
             return []
     
     async def get_market_realtime_quotes(

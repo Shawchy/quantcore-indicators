@@ -202,18 +202,8 @@ class CredentialInjector:
                 except ImportError:
                     logger.info("⚠️  Level 2: undetected-chromedriver 不可用，尝试 Level 3")
             
-            # Level 3: 检测 Playwright 同步
-            if not self._drission_available and not uc_available:
-                try:
-                    from playwright.sync_api import sync_playwright
-                    self._playwright_sync_available = True
-                    logger.info("✅ Level 3: Playwright 同步可用（稳定模式）")
-                except ImportError:
-                    logger.info("⚠️  Level 3: Playwright 同步不可用，降级到 Level 4")
-                    self._playwright_sync_available = False
-            
-            # Level 4: curl_cffi（总是可用）
-            logger.info("✅ Level 4: curl_cffi 可用（降级模式）")
+            # Level 3: curl_cffi（总是可用）
+            logger.info("✅ Level 3: curl_cffi 可用（降级模式）")
             
             # 确定使用哪个模式
             if self._drission_available:
@@ -222,9 +212,6 @@ class CredentialInjector:
             elif uc_available:
                 self._browser_mode = "uc"
                 logger.info("🚀 使用 undetected-chromedriver 模式（强反爬）")
-            elif self._playwright_sync_available:
-                self._browser_mode = "playwright_sync"
-                logger.info("🚀 使用 Playwright 同步模式")
             else:
                 self._browser_mode = "curl_cffi"
                 logger.info("🚀 使用 curl_cffi TLS 指纹伪装模式")
@@ -276,7 +263,8 @@ class CredentialInjector:
             elif self._browser_mode == "uc":
                 return await self._fetch_with_undetected_chromedriver(domain)
             elif self._browser_mode == "playwright_sync":
-                return await self._fetch_with_playwright_sync(domain)
+                # 使用 DrissionPage 增强模式替代 Playwright（避免 Windows 异步问题）
+                return await self._fetch_with_drission_enhanced(domain)
             else:
                 # curl_cffi 模式，不需要获取凭证
                 logger.info(f"curl_cffi 模式：跳过凭证获取，使用 TLS 指纹伪装")
@@ -527,56 +515,65 @@ class CredentialInjector:
             logger.error(f"undetected-chromedriver 获取凭证异常：{e}")
             return False
     
-    async def _fetch_with_playwright_sync(self, domain: str) -> bool:
-        """使用 Playwright 同步 API 获取凭证（稳定模式）"""
-        logger.info(f"使用 Playwright 同步 API 获取 {domain} 凭证...")
+    async def _fetch_with_drission_enhanced(self, domain: str) -> bool:
+        """使用 DrissionPage 获取凭证（增强模式，替代 Playwright）"""
+        logger.info(f"使用 DrissionPage 增强模式获取 {domain} 凭证...")
         
         loop = asyncio.get_event_loop()
         
         def sync_fetch():
             try:
-                from playwright.sync_api import sync_playwright
+                from DrissionPage import ChromiumPage, ChromiumOptions
                 
-                # 启动 Playwright
-                playwright = sync_playwright().start()
+                # 配置无头模式
+                options = ChromiumOptions()
+                options.headless(True)
+                options.set_argument('--disable-blink-features=AutomationControlled')
+                options.set_argument('--disable-dev-shm-usage')
+                options.set_argument('--no-sandbox')
+                options.set_argument('--disable-features=IsolateOrigins,site-per-process')
+                
+                # 配置浏览器路径
+                browser_path = self._config.get('browser_path')
+                if browser_path:
+                    logger.debug(f"使用浏览器路径：{browser_path}")
+                    options.set_paths(browser_path=browser_path)
+                
+                # 配置视口和区域
+                options.set_argument('--window-size=1920,1080')
+                
+                # 启动浏览器
+                page = ChromiumPage(options)
                 
                 try:
-                    # 启动浏览器
-                    browser = playwright.chromium.launch(
-                        headless=True,
-                        args=['--disable-blink-features=AutomationControlled']
-                    )
+                    # 访问东方财富网
+                    if 'eastmoney' in domain:
+                        page.get('https://www.eastmoney.com/')
+                        page.wait.load_start()
                     
-                    try:
-                        # 创建上下文
-                        context = browser.new_context(
-                            viewport={'width': 1920, 'height': 1080},
-                            locale='zh-CN',
-                            timezone_id='Asia/Shanghai',
-                        )
-                        
-                        page = context.new_page()
-                        
-                        try:
-                            # 访问东方财富网
-                            if 'eastmoney' in domain:
-                                page.goto('https://www.eastmoney.com/')
-                                page.wait_for_load_state('networkidle')
-                            
-                            # 获取 Cookie
-                            cookies = context.cookies()
-                            
-                            return cookies
-                        finally:
-                            page.close()
-                    finally:
-                        context.close()
-                        browser.close()
+                    # 等待页面加载
+                    import time
+                    time.sleep(2)
+                    
+                    # 获取 Cookie
+                    cookies = page.cookies()
+                    
+                    # 转换为标准格式
+                    cookie_list = []
+                    for cookie in cookies:
+                        cookie_list.append({
+                            'name': cookie.get('name', ''),
+                            'value': cookie.get('value', ''),
+                            'domain': cookie.get('domain', domain),
+                            'path': cookie.get('path', '/'),
+                        })
+                    
+                    return cookie_list
                 finally:
-                    playwright.stop()
+                    page.quit()
                     
             except Exception as e:
-                logger.error(f"Playwright 同步获取凭证失败：{e}")
+                logger.error(f"DrissionPage 增强模式获取凭证失败：{e}")
                 return None
         
         try:
@@ -589,14 +586,14 @@ class CredentialInjector:
             if cookie_list:
                 self._cookies[domain] = cookie_list
                 self._cookies_updated_at[domain] = datetime.now()
-                logger.info(f"✅ Playwright 同步成功获取 {domain} 凭证")
+                logger.info(f"✅ DrissionPage 增强模式成功获取 {domain} 凭证")
                 return True
             else:
-                logger.warning("Playwright 同步获取凭证返回空列表")
+                logger.warning("DrissionPage 增强模式获取凭证返回空列表")
                 return False
                 
         except Exception as e:
-            logger.error(f"Playwright 同步获取凭证异常：{e}")
+            logger.error(f"DrissionPage 增强模式获取凭证异常：{e}")
             return False
     
     async def _fetch_generic_credentials(self, domain: str) -> bool:

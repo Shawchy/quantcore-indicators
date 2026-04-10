@@ -204,19 +204,13 @@ class TLSFingerprintPool:
         return self._persistence._data
 
 
-class PlaywrightPool:
-    """Playwright 浏览器实例池"""
-    
-    DEFAULT_CHROMIUM_PATH = Path(__file__).parent.parent.parent / "playwright_browsers" / "chromium-1148" / "chrome-win" / "chrome.exe"
+class DrissionPagePool:
+    """DrissionPage 浏览器实例池（替代 Playwright，避免 Windows 异步问题）"""
     
     def __init__(self, pool_size: int = 3):
         self._pool_size = pool_size
-        self._pool: List[Any] = []
-        self._available = asyncio.Queue()
-        self._playwright = None
-        self._browser = None
-        self._contexts: List[Any] = []
         self._pages: List[Any] = []
+        self._available = asyncio.Queue()
         self._is_initialized = False
         self._lock = asyncio.Lock()
         self._session_established = False

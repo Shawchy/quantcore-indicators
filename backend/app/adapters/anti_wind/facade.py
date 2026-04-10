@@ -241,10 +241,29 @@ class AntiWindFacade:
             # 2. 执行实际请求
             request_start = time.time()
             try:
+                import inspect
+                
+                # 检查函数签名，确定可以传递哪些参数
+                sig = inspect.signature(request_func)
+                params = sig.parameters
+                
+                # 构建参数字典（只包含函数接受的参数）
+                call_kwargs = {}
+                if 'url' in params:
+                    call_kwargs['url'] = url
+                if 'method' in params:
+                    call_kwargs['method'] = method
+                if 'headers' in params:
+                    call_kwargs['headers'] = current_headers
+                
+                # 添加其他 kwargs
+                call_kwargs.update(kwargs)
+                
+                # 执行请求
                 if asyncio.iscoroutinefunction(request_func):
-                    response = await request_func(url=url, method=method, headers=current_headers, **kwargs)
+                    response = await request_func(**call_kwargs)
                 else:
-                    response = request_func(url=url, method=method, headers=current_headers, **kwargs)
+                    response = request_func(**call_kwargs)
                 
                 request_time = (time.time() - request_start) * 1000
                 

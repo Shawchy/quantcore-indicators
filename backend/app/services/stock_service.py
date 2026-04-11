@@ -6,8 +6,8 @@ from loguru import logger
 from sqlalchemy import select
 
 from app.adapters import data_source_manager, KLineData
-from app.services.data_processor import DataProcessor
-from app.services.indicators_manager import IndicatorsManager, get_indicators_manager
+from app.processing.data_processor import DataProcessor
+from app.processing.indicators_manager import IndicatorsManager, get_indicators_manager
 from app.storage import (
     StockInfo, KLine, TechnicalIndicatorDB, RealtimeQuote,
     get_session
@@ -21,13 +21,15 @@ class StockService:
     def __init__(self, prefer_talib: bool = False):
         """
         初始化股票服务
-        
+
         Args:
             prefer_talib: 是否优先使用 TA-Lib（如果可用）
         """
         self.processor = DataProcessor()
         # 使用现代化的指标管理器，支持 pandas-ta 和 TA-Lib 双库
         self.indicator_manager = get_indicators_manager(prefer_talib=prefer_talib)
+        # 后台任务跟踪（防止异常丢失）
+        self._background_tasks: set = set()
         logger.info(f"StockService 初始化完成，指标库：{'TA-Lib' if self.indicator_manager.prefer_talib else 'pandas-ta'}")
     
     async def get_stock_basic(self, code: str) -> Dict[str, Any]:
@@ -96,8 +98,10 @@ class StockService:
                     "total_shares": stock_info.total_shares,
                     "float_shares": stock_info.float_shares
                 }
-                # 异步保存
-                asyncio.create_task(self._save_stock_info_to_db(code, data))
+                # 异步保存（跟踪任务防止异常丢失）
+                save_task = asyncio.create_task(self._save_stock_info_to_db(code, data))
+                self._background_tasks.add(save_task)
+                save_task.add_done_callback(self._background_tasks.discard)
                 logger.debug(f"从数据源获取股票信息：{code}")
                 return data
         except Exception as e:

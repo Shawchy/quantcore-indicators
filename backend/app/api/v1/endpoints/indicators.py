@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 
-from app.services.indicators_manager import (
+from app.processing.indicators_manager import (
     TALIB_AVAILABLE, 
     PANDAS_TA_AVAILABLE,
     get_indicators_manager

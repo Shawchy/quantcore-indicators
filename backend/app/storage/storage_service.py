@@ -303,7 +303,7 @@ class UnifiedStorageService:
         
         # ✅ 新增：数据校验（防止无效数据进入系统）
         if validate:
-            from app.services.data_validator import data_validator
+            from app.processing.data_validator import data_validator
             valid_klines, errors = data_validator.validate_kline_data(klines)
             
             if errors:

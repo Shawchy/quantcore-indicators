@@ -294,6 +294,190 @@ class MarketTurnover(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+# ========== 从 local_database.py 迁移的独有ORM模型 ==========
+
+class FundBasic(Base):
+    """基金基本信息表"""
+    __tablename__ = 'fund_basic'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), unique=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100))
+    fund_type: Mapped[str] = mapped_column(String(50))
+    manager: Mapped[str] = mapped_column(String(50))
+    company: Mapped[str] = mapped_column(String(100))
+    establish_date: Mapped[str] = mapped_column(String(20))
+    fund_size: Mapped[float] = mapped_column(Float)
+    management_fee: Mapped[float] = mapped_column(Float)
+    custody_fee: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class FundNAV(Base):
+    """基金净值数据表"""
+    __tablename__ = 'fund_nav'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    nav: Mapped[float] = mapped_column(Float)
+    accumulated_nav: Mapped[float] = mapped_column(Float)
+    nav_change: Mapped[float] = mapped_column(Float)
+    nav_growth: Mapped[float] = mapped_column(Float)
+    discount_rate: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class FundHolding(Base):
+    """基金持仓数据表"""
+    __tablename__ = 'fund_holding'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    report_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    stock_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    stock_name: Mapped[str] = mapped_column(String(50))
+    holding_volume: Mapped[float] = mapped_column(Float)
+    holding_amount: Mapped[float] = mapped_column(Float)
+    holding_ratio: Mapped[float] = mapped_column(Float)
+    stock_rank: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class FundAssetAllocation(Base):
+    """基金资产配置表"""
+    __tablename__ = 'fund_asset_allocation'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    report_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    stock_ratio: Mapped[float] = mapped_column(Float)
+    bond_ratio: Mapped[float] = mapped_column(Float)
+    cash_ratio: Mapped[float] = mapped_column(Float)
+    other_ratio: Mapped[float] = mapped_column(Float)
+    total_asset: Mapped[float] = mapped_column(Float)
+    net_asset: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class StockKlineWeekly(Base):
+    """周线 K 线数据表"""
+    __tablename__ = 'stock_kline_weekly'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    open: Mapped[float] = mapped_column(Float)
+    high: Mapped[float] = mapped_column(Float)
+    low: Mapped[float] = mapped_column(Float)
+    close: Mapped[float] = mapped_column(Float)
+    volume: Mapped[float] = mapped_column(Float)
+    amount: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class StockKlineMonthly(Base):
+    """月线 K 线数据表"""
+    __tablename__ = 'stock_kline_monthly'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    open: Mapped[float] = mapped_column(Float)
+    high: Mapped[float] = mapped_column(Float)
+    low: Mapped[float] = mapped_column(Float)
+    close: Mapped[float] = mapped_column(Float)
+    volume: Mapped[float] = mapped_column(Float)
+    amount: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class StockBillboard(Base):
+    """龙虎榜数据表"""
+    __tablename__ = 'stock_billboard'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(50))
+    trade_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    close_price: Mapped[float] = mapped_column(Float)
+    change_pct: Mapped[float] = mapped_column(Float)
+    turnover_ratio: Mapped[float] = mapped_column(Float)
+    buy_amount: Mapped[float] = mapped_column(Float)
+    sell_amount: Mapped[float] = mapped_column(Float)
+    net_amount: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class StockMoneyflow(Base):
+    """资金流向数据表"""
+    __tablename__ = 'stock_moneyflow'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(50))
+    trade_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    main_force_in: Mapped[float] = mapped_column(Float)
+    main_force_out: Mapped[float] = mapped_column(Float)
+    main_force_net: Mapped[float] = mapped_column(Float)
+    super_large_in: Mapped[float] = mapped_column(Float)
+    large_in: Mapped[float] = mapped_column(Float)
+    medium_in: Mapped[float] = mapped_column(Float)
+    small_in: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class StockShareholder(Base):
+    """股东信息表"""
+    __tablename__ = 'stock_shareholder'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    report_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    holder_name: Mapped[str] = mapped_column(String(100))
+    holder_type: Mapped[str] = mapped_column(String(50))
+    holding_shares: Mapped[float] = mapped_column(Float)
+    holding_ratio: Mapped[float] = mapped_column(Float)
+    holder_rank: Mapped[int] = mapped_column(Integer)
+    change_type: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class StockFinancial(Base):
+    """财务数据表"""
+    __tablename__ = 'stock_financial'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    report_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    report_type: Mapped[str] = mapped_column(String(20))
+    eps: Mapped[float] = mapped_column(Float)
+    bvps: Mapped[float] = mapped_column(Float)
+    roe: Mapped[float] = mapped_column(Float)
+    gross_margin: Mapped[float] = mapped_column(Float)
+    net_margin: Mapped[float] = mapped_column(Float)
+    debt_ratio: Mapped[float] = mapped_column(Float)
+    total_revenue: Mapped[float] = mapped_column(Float)
+    net_profit: Mapped[float] = mapped_column(Float)
+    operating_cash_flow: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class SectorComponent(Base):
+    """板块成分股表"""
+    __tablename__ = 'sector_components'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sector_code: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    sector_name: Mapped[str] = mapped_column(String(100))
+    stock_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    stock_name: Mapped[str] = mapped_column(String(50))
+    weight: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 engine = None
 async_session_maker = None
 
@@ -516,3 +700,11 @@ def start_checkpoint_scheduler():
     task = asyncio.create_task(_checkpoint_loop())
     logger.info("✓ SQLite 定期 Checkpoint 调度器已启动（每30分钟）")
     return task
+
+
+# ========== 向后兼容别名 ==========
+# 为 local_database.py 等旧代码提供兼容性支持
+
+StockBasic = StockInfo           # 旧名称 StockBasic → 新名称 StockInfo
+StockKlineDaily = KLine          # 旧名称 StockKlineDaily → 新名称 KLine
+StockQuote = RealtimeQuote       # 旧名称 StockQuote → 新名称 RealtimeQuote

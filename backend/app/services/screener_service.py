@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
 import pandas as pd
+import warnings
 from loguru import logger
 
 
@@ -38,7 +39,24 @@ class FilterCondition:
 
 
 class Screener:
+    """股票筛选器（已废弃）
+
+    .. deprecated::
+        2.0.0
+        使用 `BatchScreener.fast_screen()` 替代，性能提升 10x+
+        迁移指南：https://wiki.example.com/migration/screener-to-batchscreener
+
+    示例：
+        旧代码: screener = Screener(); screener.add_condition(...)
+        新代码: results = await batch_screener.fast_screen([...])
+    """
+
     def __init__(self):
+        warnings.warn(
+            "Screener 类已废弃，请使用 BatchScreener.fast_screen() 替代",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.conditions: List[FilterCondition] = []
     
     def add_condition(

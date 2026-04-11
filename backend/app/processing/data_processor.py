@@ -26,16 +26,11 @@ class DataCleaner:
             df[col] = df[col].astype(float)
         
         if "date" in df.columns:
-            # 统一日期格式处理，支持多种格式
             try:
-                # 先尝试转换为字符串，去除可能的前后空格
                 df["date"] = df["date"].astype(str).str.strip()
-                # 使用 pandas 的智能解析，支持混合格式
                 df["date"] = pd.to_datetime(df["date"], format='mixed', errors='coerce')
             except Exception as e:
-                from loguru import logger
                 logger.warning(f"日期转换失败，使用备用方案：{e}")
-                # 备用方案：手动转换
                 def convert_date(date_str):
                     try:
                         date_str = str(date_str).strip()
@@ -81,12 +76,10 @@ class DataCleaner:
             return df
         
         df = df.copy()
-        # 统一日期格式处理
         try:
             df["date"] = df["date"].astype(str).str.strip()
             df["date"] = pd.to_datetime(df["date"], format='mixed', errors='coerce')
         except Exception:
-            # 备用方案
             df["date"] = pd.to_datetime(df["date"], errors='coerce')
         
         df = df.set_index("date")

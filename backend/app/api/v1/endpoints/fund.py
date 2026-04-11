@@ -10,7 +10,7 @@ import asyncio
 
 from app.models.schemas import ResponseModel, FundInfo
 from app.adapters.factory import data_source_manager
-from app.services.smart_loader import smart_loader
+from app.services.cache_service import cache_service
 
 router = APIRouter(tags=["基金信息"])
 
@@ -400,10 +400,17 @@ async def get_fund_quote_history(
         GET /api/v1/fund/161725/history?pz=100
     """
     try:
-        # 使用智能加载器获取基金历史净值（带缓存）
-        history_list = await smart_loader.get_fund_nav(
-            code=fund_code,
-            use_cache=True
+        # 使用统一缓存服务获取基金历史净值
+        cache_key = f"fund_nav_{fund_code}"
+        history_list = await cache_service.get_or_fetch(
+            cache_key,
+            lambda: data_source_manager.get_fund_quote_history(
+                fund_code=fund_code,
+                pz=pz,
+                source_type="efinance"
+            ),
+            "fund",
+            ttl=3600  # 基金数据缓存1小时
         )
         
         # 如果缓存未命中或数据为空，从 API 获取

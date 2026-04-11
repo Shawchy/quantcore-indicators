@@ -9,7 +9,7 @@ from datetime import datetime
 from loguru import logger
 import time
 
-from app.services.indicators_manager import get_indicators_manager, IndicatorsManager
+from app.processing.indicators_manager import get_indicators_manager, IndicatorsManager
 from app.services.stock_service import stock_service
 
 

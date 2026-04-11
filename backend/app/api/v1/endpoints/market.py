@@ -12,7 +12,7 @@ from app.models.schemas import ResponseModel
 from app.storage.cache import cache_manager
 from app.config import settings
 # import tushare as ts  # Tushare 已移除，使用其他数据源替代
-from app.services.data_persistence import data_persistence
+from app.storage.storage_service import storage_service
 
 router = APIRouter()
 
@@ -197,7 +197,9 @@ async def _save_ranking_to_db(result: Dict[str, Any], data_source: str):
         total_saved = 0
         
         for ranking_type in ranking_types:
-            saved = await data_persistence.save_market_ranking(result, ranking_type, data_source)
+            # saved = await storage_service.save_market_ranking(result, ranking_type, data_source)
+            # TODO: 迁移 save_market_ranking 到 storage_service
+            saved = 0  # 暂时跳过持久化
             total_saved += saved
         
         if total_saved > 0:
@@ -342,13 +344,14 @@ async def get_market_ranking_history(
                 message=f"无效的排行类型，必须是：{', '.join(valid_types)}"
             )
         
-        # 从数据库查询历史数据
-        history_data = await data_persistence.get_market_ranking_history(
-            ranking_type=ranking_type,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit
-        )
+      # 从数据库查询历史数据
+        # history_data = await storage_service.get_market_ranking_history(
+        #     ranking_type=ranking_type,
+        #     days=days
+        # )
+        # TODO: 迁移 get_market_ranking_history 到 storage_service
+        # TODO: 迁移 get_market_ranking_history 到 storage_service
+        history_data = []  # 暂时返回空列表
         
         if not history_data:
             return ResponseModel(

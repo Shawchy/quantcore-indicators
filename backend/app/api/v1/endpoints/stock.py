@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Query, Depends
 from app.models.schemas import ResponseModel, KLineData, StockBasic, TechnicalIndicator
 from app.services import stock_service
-from app.services.smart_loader import smart_loader
 from app.api.deps import CurrentUser, OptionalCurrentUser
 from typing import Optional
 from loguru import logger
@@ -100,14 +99,15 @@ async def get_kline(
     
     if is_code:
         code = identifier
-        # 通过代码获取 K 线 - 使用智能加载器
-        kline_data = await smart_loader.get_kline(
+        # 通过代码获取 K 线 - 使用 stock_service（统一存储层）
+        result = await stock_service.get_kline(
             code=code,
-            period=period,
             start_date=start_date,
             end_date=end_date,
+            adjust="qfq",
             use_cache=True
         )
+        kline_data = result.get("data", [])
         
         if kline_data:
             data = {
@@ -226,8 +226,9 @@ async def get_market_realtime(
     
     for code in codes:
         try:
-            # 获取实时行情 - 使用智能加载器（缓存 30 秒）
-            quote = await smart_loader.get_quote(code, use_cache=True)
+            # 获取实时行情 - 使用 storage_service（统一缓存层）
+            from app.storage.storage_service import storage_service
+            quote = await storage_service.get_realtime_quote(code, use_cache=True)
             if quote:
                 realtime_data.append({
                     "code": code,

@@ -212,7 +212,7 @@ class StrategyOptimizer:
         """
         from app.core.backtest import BacktestEngine
         from app.adapters import data_source_manager
-        from app.services.data_persistence import data_persistence
+        from app.storage.storage_service import storage_service
         import pandas as pd
         import asyncio
         
@@ -223,10 +223,10 @@ class StrategyOptimizer:
             data_source_manager.get_kline(code, start_date, end_date, "qfq")
         )
         
-        # 持久化保存到数据库
+        # 持久化保存到数据库（使用统一的 storage_service）
         if klines:
             try:
-                asyncio.run(data_persistence.save_klines(code, klines, "qfq"))
+                asyncio.run(storage_service.save_kline(code, klines, "qfq"))
                 logger.info(f"已保存 {len(klines)} 条 K 线数据：{code}")
             except Exception as e:
                 logger.warning(f"保存 K 线数据失败：{e}")

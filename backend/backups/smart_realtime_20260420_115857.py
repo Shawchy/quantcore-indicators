@@ -25,41 +25,20 @@ router = APIRouter(prefix="/realtime", tags=["智能轮询"])
 
 def get_smart_polling_service():
     """获取智能轮询服务实例（依赖注入）"""
-    try:
-        from app.services.smart_polling import smart_polling_service
-        if smart_polling_service is None:
-            logger.error("智能轮询服务实例为 None")
-            raise HTTPException(status_code=503, detail="服务未初始化")
-        return smart_polling_service
-    except ImportError as e:
-        logger.error(f"智能轮询服务导入失败：{e}")
-        raise HTTPException(status_code=500, detail="服务初始化失败")
+    from app.services.smart_polling import smart_polling_service
+    return smart_polling_service
 
 
 def get_incremental_updater():
     """获取增量更新器实例（依赖注入）"""
-    try:
-        from app.services.incremental_update import incremental_updater
-        if incremental_updater is None:
-            logger.error("增量更新器实例为 None")
-            raise HTTPException(status_code=503, detail="服务未初始化")
-        return incremental_updater
-    except ImportError as e:
-        logger.error(f"增量更新器导入失败：{e}")
-        raise HTTPException(status_code=500, detail="服务初始化失败")
+    from app.services.incremental_update import incremental_updater
+    return incremental_updater
 
 
 def get_anti_scraping_rules():
     """获取反爬规则实例（依赖注入）"""
-    try:
-        from app.utils.anti_scraping_rules import anti_scraping_rules
-        if anti_scraping_rules is None:
-            logger.error("反爬规则实例为 None")
-            raise HTTPException(status_code=503, detail="服务未初始化")
-        return anti_scraping_rules
-    except ImportError as e:
-        logger.error(f"反爬规则导入失败：{e}")
-        raise HTTPException(status_code=500, detail="服务初始化失败")
+    from app.utils.anti_scraping_rules import anti_scraping_rules
+    return anti_scraping_rules
 
 
 class BatchQuoteRequest(BaseModel):
@@ -134,6 +113,9 @@ async def get_batch_quotes(
         }
     """
     try:
+        from app.services.smart_polling import smart_polling_service
+        from app.services.incremental_update import incremental_updater
+        
         logger.info(
             f"批量行情请求: {len(request.codes)}只股票, "
             f"用户等级={request.user_tier}"
@@ -203,6 +185,8 @@ async def get_polling_stats(
     - 市场状态
     """
     try:
+        from app.services.smart_polling import smart_polling_service
+        
         stats = smart_polling_service.get_statistics()
         
         return {
@@ -362,6 +346,8 @@ async def get_safety_status(
 ):
     """获取反爬安全状态"""
     try:
+        from app.utils.anti_scraping_rules import anti_scraping_rules
+        
         stats = anti_scraping_rules.get_statistics()
         
         overall_safe = (

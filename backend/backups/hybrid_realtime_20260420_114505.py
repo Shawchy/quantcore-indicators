@@ -151,20 +151,8 @@ class HybridRealtimeService:
     
     async def _get_from_ws(self, symbols: List[str]) -> Tuple[Dict[str, Any], str]:
         """从WebSocket获取（读取缓存）"""
-        # 使用健康检查代替简单的属性检查
-        if not self._tickflow_service:
+        if not self._tickflow_service or not self._tickflow_service._is_connected:
             return await self._fallback_to_polling(symbols)
-        
-        # 验证 is_connection_healthy 方法是否存在
-        if not hasattr(self._tickflow_service, 'is_connection_healthy'):
-            logger.warning("TickFlow 服务缺少健康检查方法，使用默认检查")
-            if not getattr(self._tickflow_service, '_is_connected', False):
-                return await self._fallback_to_polling(symbols)
-        elif not self._tickflow_service.is_connection_healthy():
-            logger.warning("WebSocket 连接不健康，降级到轮询")
-            return await self._fallback_to_polling(symbols)
-        
-
         
         quotes = {}
         for symbol in symbols:

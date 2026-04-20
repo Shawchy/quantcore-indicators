@@ -12,6 +12,64 @@ from app.middleware.rate_limiter import rate_limiters
 from app.middleware.circuit_breaker import circuit_breakers
 from app.storage.cache import cache_manager
 
+from fastapi import Depends, HTTPException
+from loguru import logger
+
+
+# ==================== 依赖注入 ====================
+
+def get_rate_limiters():
+    """获取限流器实例（依赖注入）"""
+    try:
+        from app.middleware.rate_limiter import rate_limiters
+        if rate_limiters is None:
+            logger.error("限流器实例为 None")
+            raise HTTPException(status_code=503, detail="服务未初始化")
+        return rate_limiters
+    except ImportError as e:
+        logger.error(f"限流器导入失败：{e}")
+        raise HTTPException(status_code=500, detail="服务初始化失败")
+
+
+def get_circuit_breakers():
+    """获取断路器实例（依赖注入）"""
+    try:
+        from app.middleware.circuit_breaker import circuit_breakers
+        if circuit_breakers is None:
+            logger.error("断路器实例为 None")
+            raise HTTPException(status_code=503, detail="服务未初始化")
+        return circuit_breakers
+    except ImportError as e:
+        logger.error(f"断路器导入失败：{e}")
+        raise HTTPException(status_code=500, detail="服务初始化失败")
+
+
+def get_cache_manager():
+    """获取缓存管理器实例（依赖注入）"""
+    try:
+        from app.storage.cache import cache_manager
+        if cache_manager is None:
+            logger.error("缓存管理器实例为 None")
+            raise HTTPException(status_code=503, detail="服务未初始化")
+        return cache_manager
+    except ImportError as e:
+        logger.error(f"缓存管理器导入失败：{e}")
+        raise HTTPException(status_code=500, detail="服务初始化失败")
+
+
+def get_trading_calendar():
+    """获取交易日历服务实例（依赖注入）"""
+    try:
+        from app.services.trading_calendar import trading_calendar
+        if trading_calendar is None:
+            logger.error("交易日历服务实例为 None")
+            raise HTTPException(status_code=503, detail="服务未初始化")
+        return trading_calendar
+    except ImportError as e:
+        logger.error(f"交易日历服务导入失败：{e}")
+        raise HTTPException(status_code=500, detail="服务初始化失败")
+
+
 
 router = APIRouter(prefix="/metrics", tags=["监控"])
 
@@ -30,43 +88,60 @@ async def get_metrics():
 
 
 @router.get("/data-sources")
-async def get_data_source_metrics():
+async def get_data_source_metrics(
+    rate_limiters=Depends(get_rate_limiters),
+    circuit_breakers=Depends(get_circuit_breakers)
+):
     """获取数据源详细指标"""
-    metrics = {
-        "rate_limiters": {},
-        "circuit_breakers": {},
-        "requests": {}
-    }
-    
-    # 限流器统计
-    for source, limiter in rate_limiters.items():
+    try:
+        metrics = {
+            "rate_limiters": {},
+            "circuit_breakers": {},
+            "requests": {}
+            }
+    except Exception as e:
+        logger.error(f"获取交易日历状态失败：{e}")
+        raise HTTPException(status_code=500, detail="获取交易日历状态失败")
+        
+        # 限流器统计
+        for source, limiter in rate_limiters.items():
         metrics["rate_limiters"][source] = limiter.get_stats()
     
     # 断路器统计
     for source, breaker in circuit_breakers.items():
         metrics["circuit_breakers"][source] = breaker.get_stats()
     
-    return metrics
+        return metrics
+    except Exception as e:
+        logger.error(f"获取数据源指标失败：{e}")
+        raise HTTPException(status_code=500, detail="获取指标失败")
 
 
 @router.get("/cache")
-async def get_cache_metrics():
+async def get_cache_metrics(
+    cache_manager=Depends(get_cache_manager)
+):
     """获取缓存详细指标"""
-    cache_stats = cache_manager.get_all_stats()
+    try:
+        cache_stats = cache_manager.get_all_stats()
     
     # 更新 Prometheus 指标
     for cache_type, stats in cache_stats.items():
         hit_rate = stats["hits"] / (stats["hits"] + stats["misses"]) if (stats["hits"] + stats["misses"]) > 0 else 0
         MetricsCollector.record_cache_hit_rate(cache_type, hit_rate)
     
-    return cache_stats
+        return cache_stats
+    except Exception as e:
+        logger.error(f"获取缓存指标失败：{e}")
+        raise HTTPException(status_code=500, detail="获取缓存指标失败")
 
 
 @router.get("/storage")
 async def get_storage_metrics():
     """获取存储详细指标"""
-    from pathlib import Path
-    import os
+    try:
+        from pathlib import Path
+        import os
     
     storage_info = {
         "sqlite": {},
@@ -97,7 +172,10 @@ async def get_storage_metrics():
         }
         storage_info["total_size_mb"] += storage_info["parquet"]["total_size_mb"]
     
-    return storage_info
+        return storage_info
+    except Exception as e:
+        logger.error(f"获取存储指标失败：{e}")
+        raise HTTPException(status_code=500, detail="获取存储指标失败")
 
 
 @router.get("/health")
@@ -145,13 +223,16 @@ async def health_check():
 
 
 @router.get("/summary")
-async def get_metrics_summary():
+async def get_metrics_summary(
+    cache_manager=Depends(get_cache_manager)
+):
     """获取指标摘要"""
-    summary = {
-        "data_sources": {},
-        "cache": cache_manager.get_all_stats(),
-        "storage": await get_storage_metrics()
-    }
+    try:
+        summary = {
+            "data_sources": {},
+            "cache": cache_manager.get_all_stats(),
+            "storage": await get_storage_metrics()
+        }
     
     # 数据源摘要
     for source in rate_limiters.keys():
@@ -171,15 +252,19 @@ async def get_metrics_summary():
             }
         }
     
-    return summary
+        return summary
+    except Exception as e:
+        logger.error(f"获取指标摘要失败：{e}")
+        raise HTTPException(status_code=500, detail="获取指标摘要失败")
 
 
 @router.get("/trading-calendar")
-async def get_trading_calendar_status():
+async def get_trading_calendar_status(
+    trading_calendar=Depends(get_trading_calendar)
+):
     """获取交易日历状态"""
-    from app.services.trading_calendar import trading_calendar
-    
-    status = trading_calendar.get_cache_status()
+    try:
+        status = trading_calendar.get_cache_status()
     
     latest_day = await trading_calendar.get_latest_trading_day()
     recent_days = await trading_calendar.get_recent_trading_days(5)
@@ -192,11 +277,12 @@ async def get_trading_calendar_status():
 
 
 @router.post("/trading-calendar/refresh")
-async def refresh_trading_calendar():
+async def refresh_trading_calendar(
+    trading_calendar=Depends(get_trading_calendar)
+):
     """强制刷新交易日历数据"""
-    from app.services.trading_calendar import trading_calendar
-    
-    success = await trading_calendar.force_refresh()
+    try:
+        success = await trading_calendar.force_refresh()
     
     return {
         "success": success,

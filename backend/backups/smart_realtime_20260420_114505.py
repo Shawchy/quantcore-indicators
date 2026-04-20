@@ -20,48 +20,6 @@ from loguru import logger
 router = APIRouter(prefix="/realtime", tags=["智能轮询"])
 
 
-
-# ==================== 依赖注入 ====================
-
-def get_smart_polling_service():
-    """获取智能轮询服务实例（依赖注入）"""
-    try:
-        from app.services.smart_polling import smart_polling_service
-        if smart_polling_service is None:
-            logger.error("智能轮询服务实例为 None")
-            raise HTTPException(status_code=503, detail="服务未初始化")
-        return smart_polling_service
-    except ImportError as e:
-        logger.error(f"智能轮询服务导入失败：{e}")
-        raise HTTPException(status_code=500, detail="服务初始化失败")
-
-
-def get_incremental_updater():
-    """获取增量更新器实例（依赖注入）"""
-    try:
-        from app.services.incremental_update import incremental_updater
-        if incremental_updater is None:
-            logger.error("增量更新器实例为 None")
-            raise HTTPException(status_code=503, detail="服务未初始化")
-        return incremental_updater
-    except ImportError as e:
-        logger.error(f"增量更新器导入失败：{e}")
-        raise HTTPException(status_code=500, detail="服务初始化失败")
-
-
-def get_anti_scraping_rules():
-    """获取反爬规则实例（依赖注入）"""
-    try:
-        from app.utils.anti_scraping_rules import anti_scraping_rules
-        if anti_scraping_rules is None:
-            logger.error("反爬规则实例为 None")
-            raise HTTPException(status_code=503, detail="服务未初始化")
-        return anti_scraping_rules
-    except ImportError as e:
-        logger.error(f"反爬规则导入失败：{e}")
-        raise HTTPException(status_code=500, detail="服务初始化失败")
-
-
 class BatchQuoteRequest(BaseModel):
     """批量行情请求"""
     codes: List[str] = Field(..., description="股票代码列表", min_length=1, max_length=100)
@@ -101,9 +59,7 @@ class BatchQuoteResponse(BaseModel):
 
 @router.post("/batch", response_model=BatchQuoteResponse)
 async def get_batch_quotes(
-    request: BatchQuoteRequest,
-    smart_polling_service=Depends(get_smart_polling_service),
-    incremental_updater=Depends(get_incremental_updater)
+    request: BatchQuoteRequest
 ):
     """
     批量获取实时行情（核心API）
@@ -134,6 +90,9 @@ async def get_batch_quotes(
         }
     """
     try:
+        from app.services.smart_polling import smart_polling_service
+        from app.services.incremental_update import incremental_updater
+        
         logger.info(
             f"批量行情请求: {len(request.codes)}只股票, "
             f"用户等级={request.user_tier}"
@@ -190,9 +149,7 @@ async def get_batch_quotes(
 
 
 @router.get("/stats")
-async def get_polling_stats(
-    smart_polling_service=Depends(get_smart_polling_service)
-):
+async def get_polling_stats():
     """
     获取轮询服务统计信息
     
@@ -203,6 +160,8 @@ async def get_polling_stats(
     - 市场状态
     """
     try:
+        from app.services.smart_polling import smart_polling_service
+        
         stats = smart_polling_service.get_statistics()
         
         return {
@@ -218,8 +177,7 @@ async def get_polling_stats(
 
 @router.get("/config")
 async def get_polling_config(
-    user_tier: str = Query(default="normal", description="用户等级"),
-    smart_polling_service=Depends(get_smart_polling_service)
+    user_tier: str = Query(default="normal", description="用户等级")
 ):
     """
     获取推荐的轮询配置
@@ -268,8 +226,7 @@ async def get_polling_config(
 
 @router.post("/delta")
 async def get_incremental_update(
-    current_data: Dict[str, Dict] = Body(...),
-    incremental_updater=Depends(get_incremental_updater)
+    current_data: Dict[str, Dict] = Body(...)
 ):
     """
     增量更新接口
@@ -309,8 +266,7 @@ async def get_incremental_update(
 @router.get("/single/{code}")
 async def get_single_quote(
     code: str,
-    use_cache: bool = Query(default=True, description="使用缓存"),
-    smart_polling_service=Depends(get_smart_polling_service)
+    use_cache: bool = Query(default=True, description="使用缓存")
 ):
     """
     获取单只股票实时行情
@@ -357,11 +313,11 @@ safety_router = APIRouter(prefix="/safety", tags=["反爬安全"])
 
 
 @safety_router.get("/status")
-async def get_safety_status(
-    anti_scraping_rules=Depends(get_anti_scraping_rules)
-):
+async def get_safety_status():
     """获取反爬安全状态"""
     try:
+        from app.utils.anti_scraping_rules import anti_scraping_rules
+        
         stats = anti_scraping_rules.get_statistics()
         
         overall_safe = (
@@ -383,9 +339,7 @@ async def get_safety_status(
 
 
 @safety_router.get("/rules")
-async def get_active_rules(
-    anti_scraping_rules=Depends(get_anti_scraping_rules)
-):
+async def get_active_rules():
     """查看当前活跃的安全规则"""
     try:
         from app.utils.anti_scraping_rules import anti_scraping_rules

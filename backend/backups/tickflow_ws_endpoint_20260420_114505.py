@@ -146,37 +146,30 @@ class ConnectionManager:
             return False
     
     async def broadcast_quotes(self, quotes_data: Dict[str, Any]):
-        """广播行情数据给所有相关订阅者（批量优化）"""
-        
-        # 按客户端分组，合并多个标的数据
-        client_messages: Dict[str, Dict] = {}
+        """广播行情数据给所有相关订阅者"""
+        sent_count = 0
         
         for code, quote_data in quotes_data.items():
             subscribers = self._symbol_subscribers.get(code, set())
             
+            message = {
+                "op": "quotes",
+                "data": {code: quote_data},
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            json_msg = json.dumps(message, ensure_ascii=False)
+            
             for client_id in subscribers:
-                if client_id not in client_messages:
-                    client_messages[client_id] = {
-                        "op": "quotes",
-                        "data": {},
-                        "timestamp": datetime.now().isoformat()
-                    }
-                # 合并到同一个消息的 data 中
-                client_messages[client_id]["data"][code] = quote_data
-        
-        # 每个客户端只发送一次（批量）
-        sent_count = 0
-        for client_id, message in client_messages.items():
-            try:
-                conn = self._connections.get(client_id)
-                if conn:
-                    # 只序列化一次
-                    json_msg = json.dumps(message, ensure_ascii=False)
-                    await conn["websocket"].send_text(json_msg)
-                    conn["last_activity"] = datetime.now()
-                    sent_count += 1
-            except Exception as e:
-                logger.debug(f"广播失败 ({client_id}): {e}")
+                try:
+                    conn = self._connections.get(client_id)
+                    if conn:
+                        await conn["websocket"].send_text(json_msg)
+                        conn["last_activity"] = datetime.now()
+                        sent_count += 1
+                        
+                except Exception as e:
+                    logger.debug(f"广播失败 ({client_id}): {e}")
         
         return sent_count
     

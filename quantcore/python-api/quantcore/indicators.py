@@ -8,9 +8,35 @@
 - MACD: 异同移动平均
 - RSI: 相对强弱指标
 - BOLL: 布林带
+
+优先使用 quantcore-indicators（Rust 加速版本），不可用时降级到纯 Python 实现
 """
 
 from typing import List
+
+# 尝试导入 quantcore-indicators（Rust 加速版）
+try:
+    from quantcore_indicators import (
+        ma as _rsi_ma,
+        ema as _rsi_ema,
+        macd as _rsi_macd,
+        rsi as _rsi_rsi,
+        bollinger_bands as _rsi_boll,
+        atr as _rsi_atr,
+        cci as _rsi_cci,
+        kdj as _rsi_kdj,
+        obv as _rsi_obv,
+        williams_r as _rsi_williams,
+        adx as _rsi_adx,
+    )
+    _USE_RUST = True
+except ImportError:
+    _USE_RUST = False
+
+
+def _use_rust_if_available():
+    """检查是否使用 Rust 版本"""
+    return _USE_RUST
 
 
 def ma(prices: List[float], period: int) -> List[float]:
@@ -24,6 +50,9 @@ def ma(prices: List[float], period: int) -> List[float]:
     Returns:
         MA 值列表
     """
+    if _USE_RUST:
+        return _rsi_ma(prices, period).tolist()
+    
     if len(prices) < period:
         return []
     
@@ -46,6 +75,9 @@ def ema(prices: List[float], period: int) -> List[float]:
     Returns:
         EMA 值列表
     """
+    if _USE_RUST:
+        return _rsi_ema(prices, period).tolist()
+    
     if len(prices) < period:
         return []
     
@@ -72,6 +104,14 @@ def macd(prices: List[float], fast: int = 12, slow: int = 26, signal: int = 9) -
     Returns:
         包含 MACD、Signal、Histogram 的字典
     """
+    if _USE_RUST:
+        result = _rsi_macd(prices, fast, slow, signal)
+        return {
+            'macd': result['macd'].tolist(),
+            'signal': result['signal'].tolist(),
+            'histogram': result['histogram'].tolist(),
+        }
+    
     if len(prices) < slow:
         return {'macd': [], 'signal': [], 'histogram': []}
     
@@ -108,6 +148,9 @@ def rsi(prices: List[float], period: int = 14) -> List[float]:
     Returns:
         RSI 值列表
     """
+    if _USE_RUST:
+        return _rsi_rsi(prices, period).tolist()
+    
     if len(prices) < period + 1:
         return []
     
@@ -151,6 +194,14 @@ def bollinger_bands(prices: List[float], period: int = 20, std_dev: float = 2.0)
     Returns:
         包含 upper、middle、lower 的字典
     """
+    if _USE_RUST:
+        result = _rsi_boll(prices, period, std_dev)
+        return {
+            'upper': result['upper'].tolist(),
+            'middle': result['middle'].tolist(),
+            'lower': result['lower'].tolist(),
+        }
+    
     if len(prices) < period:
         return {'upper': [], 'middle': [], 'lower': []}
     
@@ -174,12 +225,15 @@ def bollinger_bands(prices: List[float], period: int = 20, std_dev: float = 2.0)
     }
 
 
-def kdj(prices: List[float], n: int = 9, m1: int = 3, m2: int = 3) -> dict:
+def kdj(high: List[float], low: List[float], close: List[float], 
+        n: int = 9, m1: int = 3, m2: int = 3) -> dict:
     """
     KDJ 指标（随机指标）
     
     Args:
-        prices: 价格列表（使用收盘价）
+        high: 最高价列表
+        low: 最低价列表
+        close: 收盘价列表
         n: KDJ 周期，默认 9
         m1: K 值平滑周期，默认 3
         m2: D 值平滑周期，默认 3
@@ -187,11 +241,17 @@ def kdj(prices: List[float], n: int = 9, m1: int = 3, m2: int = 3) -> dict:
     Returns:
         字典 {'k': List, 'd': List, 'j': List}
     """
-    if len(prices) < n:
+    if _USE_RUST:
+        result = _rsi_kdj(high, low, close, n, m1, m2)
+        return {
+            'k': result['k'].tolist(),
+            'd': result['d'].tolist(),
+            'j': result['j'].tolist(),
+        }
+    
+    if len(high) < n or len(low) < n or len(close) < n:
         return {'k': [], 'd': [], 'j': []}
     
-    # 简化版本：假设最高价和最低价与收盘价相近
-    # 实际使用应该传入 high_prices 和 low_prices
     k = 50.0  # 初始值
     d = 50.0  # 初始值
     
@@ -199,22 +259,18 @@ def kdj(prices: List[float], n: int = 9, m1: int = 3, m2: int = 3) -> dict:
     d_list = []
     j_list = []
     
-    for i in range(n - 1, len(prices)):
-        # 计算最近 N 天的最高价和最低价
-        recent_prices = prices[i - n + 1:i + 1]
-        low_n = min(recent_prices)
-        high_n = max(recent_prices)
-        current_price = prices[i]
+    for i in range(n - 1, len(high)):
+        highest = max(high[i - n + 1:i + 1])
+        lowest = min(low[i - n + 1:i + 1])
+        current_close = close[i]
         
-        # 计算 RSV
-        if high_n == low_n:
+        if highest == lowest:
             rsv = 50.0
         else:
-            rsv = ((current_price - low_n) / (high_n - low_n)) * 100
+            rsv = ((current_close - lowest) / (highest - lowest)) * 100
         
-        # 计算 K, D, J
-        k = (2/3) * k + (1/3) * rsv
-        d = (2/3) * d + (1/3) * k
+        k = (m2 - 1) / m2 * k + 1 / m2 * rsv
+        d = (m1 - 1) / m1 * d + 1 / m1 * k
         j = 3 * k - 2 * d
         
         k_list.append(k)
@@ -238,6 +294,9 @@ def atr(high_prices: List[float], low_prices: List[float],
     Returns:
         ATR 值列表
     """
+    if _USE_RUST:
+        return _rsi_atr(high_prices, low_prices, close_prices, period).tolist()
+    
     if len(high_prices) < period or len(low_prices) < period or len(close_prices) < period:
         return []
     
@@ -283,6 +342,9 @@ def cci(high_prices: List[float], low_prices: List[float],
     Returns:
         CCI 值列表
     """
+    if _USE_RUST:
+        return _rsi_cci(high_prices, low_prices, close_prices, period).tolist()
+    
     if len(high_prices) < period or len(low_prices) < period or len(close_prices) < period:
         return []
     
@@ -328,6 +390,9 @@ def williams_r(high_prices: List[float], low_prices: List[float],
     Returns:
         Williams %R 值列表（范围 -100 到 0）
     """
+    if _USE_RUST:
+        return _rsi_williams(high_prices, low_prices, close_prices, period).tolist()
+    
     if len(high_prices) < period or len(low_prices) < period or len(close_prices) < period:
         return []
     
@@ -361,6 +426,9 @@ def obv(close_prices: List[float], volumes: List[int]) -> List[float]:
     Returns:
         OBV 值列表
     """
+    if _USE_RUST:
+        return _rsi_obv(close_prices, volumes).tolist()
+    
     if len(close_prices) != len(volumes) or len(close_prices) < 2:
         return []
     
@@ -394,6 +462,9 @@ def adx(high_prices: List[float], low_prices: List[float],
     Returns:
         ADX 值列表
     """
+    if _USE_RUST:
+        return _rsi_adx(high_prices, low_prices, close_prices, period).tolist()
+    
     if len(high_prices) < period + 1:
         return []
     

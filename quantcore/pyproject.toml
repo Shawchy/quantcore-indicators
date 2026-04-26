@@ -38,6 +38,7 @@ dependencies = [
     "pandas>=2.0",
     "numpy>=1.24",
     "matplotlib>=3.7",
+    "quantcore-indicators>=0.1.0",
 ]
 
 [project.optional-dependencies]

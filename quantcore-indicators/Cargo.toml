@@ -16,8 +16,8 @@ name = "quantcore_indicators"
 crate-type = ["cdylib"]
 
 [dependencies]
-# PyO3 for Python bindings (0.28.3 - latest stable, fixes Windows issues)
-pyo3 = { version = "0.28.3", features = ["extension-module"] }
+# PyO3 for Python bindings (0.28 supports Python 3.14)
+pyo3 = { version = "0.28", features = ["extension-module"] }
 numpy = { version = "0.28", optional = true }
 
 # Apache Arrow for zero-copy high-performance computing
@@ -26,9 +26,6 @@ arrow-array = { version = "58", optional = true }
 arrow-buffer = { version = "58", optional = true }
 arrow-schema = { version = "58", optional = true }
 pyo3-arrow = { version = "0.17", optional = true }
-
-# Numerical computing
-ndarray = "0.16"
 
 # Error handling
 thiserror = "2.0"
@@ -49,14 +46,14 @@ rand = "0.8"
 [build-dependencies]
 pyo3-build-config = "0.28"
 
-# 暂时注释掉基准测试
+# Benchmark (temporarily disabled)
 # [[bench]]
 # name = "indicators_benchmark"
 # harness = false
 
 [features]
 default = ["numpy-backend"]
-numpy-backend = ["numpy"]
-arrow-backend = ["arrow", "arrow-array", "arrow-buffer", "arrow-schema", "pyo3-arrow"]
+numpy-backend = ["numpy", "extension-module"]
+arrow-backend = ["arrow", "arrow-array", "arrow-buffer", "arrow-schema", "pyo3-arrow", "extension-module"]
 all-backends = ["numpy-backend", "arrow-backend"]
 extension-module = ["pyo3/extension-module"]

@@ -9,48 +9,38 @@
 //! - **SIMD 优化**: Arrow 内存布局支持 SIMD 指令
 //! - **内存效率**: 比 Vec<f64> 节省 30-50% 内存
 
+use std::sync::Arc;
+
 #[cfg(feature = "arrow-backend")]
 use arrow_array::Float64Array;
 
-// 重新导出核心函数
 pub use crate::core::*;
 
-/// 使用 Arrow 数组计算移动平均（真正的零拷贝）
-///
-/// # 零拷贝实现
-///
-/// 直接使用 `ScalarBuffer` 共享底层数据，避免复制
 #[cfg(feature = "arrow-backend")]
 pub fn ma_arrow(prices: &Float64Array, period: usize) -> Float64Array {
     let len = prices.len();
-    if len < period {
+    if period < 2 || len < period {
         return Float64Array::from(vec![] as Vec<f64>);
     }
 
-    // 获取底层数据的引用（零拷贝）
     let values = prices.values();
-
     let mut result = Vec::with_capacity(len - period + 1);
 
-    // 计算第一个 MA
     let mut sum: f64 = (0..period).map(|i| values[i]).sum();
     result.push(sum / period as f64);
 
-    // 滑动窗口（使用切片，避免复制）
     for i in period..len {
         sum = sum - values[i - period] + values[i];
         result.push(sum / period as f64);
     }
 
-    // 使用 Arrow 的内存池分配（更高效）
     Float64Array::from(result)
 }
 
-/// 使用 Arrow 数组计算 EMA（零拷贝优化）
 #[cfg(feature = "arrow-backend")]
 pub fn ema_arrow(prices: &Float64Array, period: usize) -> Float64Array {
     let len = prices.len();
-    if len < period {
+    if period < 2 || len < period {
         return Float64Array::from(vec![] as Vec<f64>);
     }
 
@@ -58,11 +48,9 @@ pub fn ema_arrow(prices: &Float64Array, period: usize) -> Float64Array {
     let multiplier = 2.0 / (period as f64 + 1.0);
     let mut result = Vec::with_capacity(len - period + 1);
 
-    // 第一个 EMA 使用 SMA
     let initial_sma: f64 = (0..period).map(|i| values[i]).sum::<f64>() / period as f64;
     result.push(initial_sma);
 
-    // 计算后续 EMA
     for i in period..len {
         let ema = (values[i] - result.last().unwrap()) * multiplier + result.last().unwrap();
         result.push(ema);
@@ -71,7 +59,6 @@ pub fn ema_arrow(prices: &Float64Array, period: usize) -> Float64Array {
     Float64Array::from(result)
 }
 
-/// Arrow MACD 结果
 #[cfg(feature = "arrow-backend")]
 pub struct MACDResultArrow {
     pub macd: Float64Array,
@@ -79,7 +66,6 @@ pub struct MACDResultArrow {
     pub histogram: Float64Array,
 }
 
-/// 使用 Arrow 数组计算 MACD（零拷贝优化）
 #[cfg(feature = "arrow-backend")]
 pub fn macd_arrow(
     prices: &Float64Array,
@@ -87,15 +73,21 @@ pub fn macd_arrow(
     slow: usize,
     signal_period: usize,
 ) -> MACDResultArrow {
+    if fast < 2 || slow < 2 || signal_period < 2 {
+        return MACDResultArrow {
+            macd: Float64Array::from(vec![] as Vec<f64>),
+            signal: Float64Array::from(vec![] as Vec<f64>),
+            histogram: Float64Array::from(vec![] as Vec<f64>),
+        };
+    }
+
     let fast_ema = ema_arrow(prices, fast);
     let slow_ema = ema_arrow(prices, slow);
 
-    // 对齐长度（使用切片，避免复制）
     let min_len = fast_ema.len().min(slow_ema.len());
     let fast_slice = &fast_ema.values()[fast_ema.len() - min_len..];
     let slow_slice = &slow_ema.values()[slow_ema.len() - min_len..];
 
-    // MACD 线 = 快线 EMA - 慢线 EMA（使用迭代器，避免中间向量）
     let macd_line: Vec<f64> = fast_slice
         .iter()
         .zip(slow_slice.iter())
@@ -103,14 +95,12 @@ pub fn macd_arrow(
         .collect();
     let macd_array = Float64Array::from(macd_line);
 
-    // 信号线 = MACD 的 EMA
     let signal_line = if macd_array.len() >= signal_period {
         ema_arrow(&macd_array, signal_period)
     } else {
         Float64Array::from(vec![] as Vec<f64>)
     };
 
-    // 柱状图 = MACD - 信号线
     let histogram: Float64Array = if signal_line.len() > 0 {
         let offset = macd_array.len() - signal_line.len();
         let values: Vec<f64> = (0..signal_line.len())
@@ -128,48 +118,51 @@ pub fn macd_arrow(
     }
 }
 
-/// 使用 Arrow 数组计算 RSI（零拷贝优化）
 #[cfg(feature = "arrow-backend")]
 pub fn rsi_arrow(prices: &Float64Array, period: usize) -> Float64Array {
     let len = prices.len();
-    if len < period + 1 {
+    if period < 2 || len < period + 1 {
         return Float64Array::from(vec![] as Vec<f64>);
     }
 
     let values = prices.values();
-    let mut result = Vec::with_capacity(len - period);
+    let mut avg_gain = 0.0;
+    let mut avg_loss = 0.0;
 
-    for i in period..len {
-        let mut gains = Vec::with_capacity(period);
-        let mut losses = Vec::with_capacity(period);
-
-        for j in (i - period + 1)..=i {
-            let change = values[j] - values[j - 1];
-            if change > 0.0 {
-                gains.push(change);
-                losses.push(0.0);
-            } else {
-                gains.push(0.0);
-                losses.push(change.abs());
-            }
-        }
-
-        let avg_gain = gains.iter().sum::<f64>() / period as f64;
-        let avg_loss = losses.iter().sum::<f64>() / period as f64;
-
-        if avg_loss == 0.0 {
-            result.push(100.0);
+    for i in 1..=period {
+        let change = values[i] - values[i - 1];
+        if change > 0.0 {
+            avg_gain += change;
         } else {
-            let rs = avg_gain / avg_loss;
-            let rsi = 100.0 - (100.0 / (1.0 + rs));
-            result.push(rsi);
+            avg_loss += change.abs();
         }
+    }
+    avg_gain /= period as f64;
+    avg_loss /= period as f64;
+
+    let mut result = Vec::with_capacity(len - period);
+    result.push(if avg_loss == 0.0 {
+        100.0
+    } else {
+        100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+    });
+
+    for i in (period + 1)..len {
+        let change = values[i] - values[i - 1];
+        let gain = if change > 0.0 { change } else { 0.0 };
+        let loss = if change < 0.0 { change.abs() } else { 0.0 };
+        avg_gain = (avg_gain * (period - 1) as f64 + gain) / period as f64;
+        avg_loss = (avg_loss * (period - 1) as f64 + loss) / period as f64;
+        result.push(if avg_loss == 0.0 {
+            100.0
+        } else {
+            100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+        });
     }
 
     Float64Array::from(result)
 }
 
-/// 布林带 Arrow 结果
 #[cfg(feature = "arrow-backend")]
 pub struct BollingerBandsResultArrow {
     pub upper: Float64Array,
@@ -177,7 +170,6 @@ pub struct BollingerBandsResultArrow {
     pub lower: Float64Array,
 }
 
-/// 使用 Arrow 数组计算布林带
 #[cfg(feature = "arrow-backend")]
 pub fn bollinger_bands_arrow(
     prices: &Float64Array,
@@ -192,14 +184,10 @@ pub fn bollinger_bands_arrow(
 
     for (i, &mid) in middle.values().iter().enumerate() {
         let window = &values[i..i + period];
-        let mean = mid;
-
-        // 计算标准差（使用迭代器，避免中间向量）
-        let variance = window.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / period as f64;
+        let variance = window.iter().map(|&x| (x - mid).powi(2)).sum::<f64>() / period as f64;
         let std = variance.sqrt();
-
-        upper.push(mean + std_dev * std);
-        lower.push(mean - std_dev * std);
+        upper.push(mid + std_dev * std);
+        lower.push(mid - std_dev * std);
     }
 
     BollingerBandsResultArrow {
@@ -209,24 +197,81 @@ pub fn bollinger_bands_arrow(
     }
 }
 
-/// Python 接口：使用 PyArrow 零拷贝（pyo3-arrow 0.17 API 需要更新）
-/// TODO: 更新到 pyo3-arrow 0.17 新 API
 #[cfg(all(feature = "arrow-backend", feature = "extension-module"))]
 #[pyo3::prelude::pyfunction]
 #[pyo3(signature = (prices, period))]
 pub fn ma_arrow_py(
     py: pyo3::prelude::Python,
-    prices: &pyo3::prelude::Bound<'_, pyo3::types::PyAny>,
+    prices: &pyo3::prelude::Bound<'_, pyo3::prelude::PyAny>,
     period: usize,
-) -> pyo3::prelude::PyResult<pyo3::Py<pyo3::PyAny>> {
-    // 暂时使用纯 Python 后备实现
-    // TODO: 实现真正的零拷贝接口
-    Err(pyo3::exceptions::PyNotImplementedError::new_err(
-        "Arrow Python interface temporarily disabled. Use Rust API directly: ma_arrow()",
-    ))
+) -> pyo3::prelude::PyResult<pyo3::prelude::Py<pyo3::prelude::PyAny>> {
+    use pyo3::types::PyAnyMethods;
+    use pyo3_arrow::PyArray;
+
+    let array: PyArray = prices.extract()?;
+    let float64_array = array
+        .as_ref()
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| {
+            pyo3::exceptions::PyTypeError::new_err("Arrow array must be Float64 type")
+        })?;
+
+    let result = ma_arrow(float64_array, period);
+    let result_array = PyArray::from_array_ref(Arc::new(result));
+    result_array.to_pyarrow(py).map(|b| b.unbind())
 }
 
-/// 批量计算多个指标的零拷贝接口
+#[cfg(all(feature = "arrow-backend", feature = "extension-module"))]
+#[pyo3::prelude::pyfunction]
+#[pyo3(signature = (prices, period))]
+pub fn ema_arrow_py(
+    py: pyo3::prelude::Python,
+    prices: &pyo3::prelude::Bound<'_, pyo3::prelude::PyAny>,
+    period: usize,
+) -> pyo3::prelude::PyResult<pyo3::prelude::Py<pyo3::prelude::PyAny>> {
+    use pyo3::types::PyAnyMethods;
+    use pyo3_arrow::PyArray;
+
+    let array: PyArray = prices.extract()?;
+    let float64_array = array
+        .as_ref()
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| {
+            pyo3::exceptions::PyTypeError::new_err("Arrow array must be Float64 type")
+        })?;
+
+    let result = ema_arrow(float64_array, period);
+    let result_array = PyArray::from_array_ref(Arc::new(result));
+    result_array.to_pyarrow(py).map(|b| b.unbind())
+}
+
+#[cfg(all(feature = "arrow-backend", feature = "extension-module"))]
+#[pyo3::prelude::pyfunction]
+#[pyo3(signature = (prices, period=14))]
+pub fn rsi_arrow_py(
+    py: pyo3::prelude::Python,
+    prices: &pyo3::prelude::Bound<'_, pyo3::prelude::PyAny>,
+    period: usize,
+) -> pyo3::prelude::PyResult<pyo3::prelude::Py<pyo3::prelude::PyAny>> {
+    use pyo3::types::PyAnyMethods;
+    use pyo3_arrow::PyArray;
+
+    let array: PyArray = prices.extract()?;
+    let float64_array = array
+        .as_ref()
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| {
+            pyo3::exceptions::PyTypeError::new_err("Arrow array must be Float64 type")
+        })?;
+
+    let result = rsi_arrow(float64_array, period);
+    let result_array = PyArray::from_array_ref(Arc::new(result));
+    result_array.to_pyarrow(py).map(|b| b.unbind())
+}
+
 #[cfg(feature = "arrow-backend")]
 pub struct IndicatorBatch {
     prices: Float64Array,
@@ -234,17 +279,14 @@ pub struct IndicatorBatch {
 
 #[cfg(feature = "arrow-backend")]
 impl IndicatorBatch {
-    /// 创建批量计算器
     pub fn new(prices: Float64Array) -> Self {
         Self { prices }
     }
 
-    /// 计算 MA 序列（多个周期）
     pub fn compute_ma_batch(&self, periods: &[usize]) -> Vec<Float64Array> {
         periods.iter().map(|&p| ma_arrow(&self.prices, p)).collect()
     }
 
-    /// 计算常用指标组合
     pub fn compute_all(&self) -> BatchResult {
         BatchResult {
             ma20: ma_arrow(&self.prices, 20),
@@ -255,7 +297,6 @@ impl IndicatorBatch {
     }
 }
 
-/// 批量计算结果
 #[cfg(feature = "arrow-backend")]
 pub struct BatchResult {
     pub ma20: Float64Array,
@@ -294,7 +335,6 @@ mod tests {
         let result = rsi_arrow(&prices, 3);
 
         assert!(!result.is_empty());
-        // RSI 应该在 0-100 之间
         for i in 0..result.len() {
             let r = result.value(i);
             assert!(r >= 0.0 && r <= 100.0);
@@ -307,7 +347,6 @@ mod tests {
         let result = macd_arrow(&prices, 12, 26, 9);
 
         assert!(!result.macd.is_empty());
-        // 价格恒定时，MACD 应该接近 0
         for i in 0..result.macd.len() {
             assert!(result.macd.value(i).abs() < 1e-6);
         }
@@ -315,17 +354,10 @@ mod tests {
 
     #[test]
     fn test_zero_copy_efficiency() {
-        // 测试零拷贝效率
         let prices = Float64Array::from((0..10000).map(|i| i as f64).collect::<Vec<_>>());
-
-        // 获取底层数据引用
         let values = prices.values();
-
-        // 直接操作底层数据（零拷贝）
         let sum: f64 = values.iter().sum();
-
         assert!(sum > 0.0);
-        // 验证没有额外的内存分配
         assert_eq!(values.len(), prices.len());
     }
 }

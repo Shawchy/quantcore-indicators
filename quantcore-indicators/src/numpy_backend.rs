@@ -3,19 +3,16 @@
 //! 适合小到中等规模数据，API 友好
 
 #[cfg(feature = "numpy-backend")]
-use numpy::{IntoPyArray, PyArray1, PyArrayMethods};
+use numpy::{IntoPyArray, PyArray1};
 use pyo3::prelude::*;
 
-// 重新导出核心函数
 pub use crate::core::*;
 
-/// 将 `&[f64]` 转换为 NumPy 数组
 #[cfg(feature = "numpy-backend")]
 pub fn to_numpy_array<'py>(py: Python<'py>, data: &[f64]) -> PyResult<Bound<'py, PyArray1<f64>>> {
     Ok(data.to_vec().into_pyarray(py))
 }
 
-/// 从 Python 提取数据并计算 MA，返回 NumPy 数组
 #[cfg(feature = "numpy-backend")]
 #[pyfunction]
 #[pyo3(signature = (prices, period))]
@@ -24,12 +21,27 @@ pub fn ma_numpy<'py>(
     prices: &Bound<'py, PyAny>,
     period: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let prices_vec = extract_prices(prices)?;
-    let result = ma(&prices_vec, period);
-    Ok(result.into_pyarray(py))
+    // 注意：extension-module 特性已通过 numpy-backend 自动启用
+    // 此 cfg 检查作为额外的安全保护
+    #[cfg(feature = "extension-module")]
+    {
+        let prices_vec = crate::pyo3_bindings::extract_prices(prices)?;
+        let result = ma(&prices_vec, period);
+        Ok(result.into_pyarray(py))
+    }
+    
+    // 此分支在正常情况下不应执行（因为 numpy-backend 已包含 extension-module）
+    // 仅作为防御性编程的最终保障
+    #[cfg(not(feature = "extension-module"))]
+    {
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Internal error: extension-module feature not enabled. \
+             This should not happen when numpy-backend is active. \
+             Please report this issue."
+        ))
+    }
 }
 
-/// 从 Python 提取数据并计算 RSI，返回 NumPy 数组
 #[cfg(feature = "numpy-backend")]
 #[pyfunction]
 #[pyo3(signature = (prices, period=14))]
@@ -38,32 +50,25 @@ pub fn rsi_numpy<'py>(
     prices: &Bound<'py, PyAny>,
     period: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let prices_vec = extract_prices(prices)?;
-    let result = rsi(&prices_vec, period);
-    Ok(result.into_pyarray(py))
-}
-
-/// 辅助函数：从 Python 对象提取价格向量
-fn extract_prices(prices: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
-    use pyo3::types::PyList;
-
-    // 尝试作为 numpy 数组处理
-    if let Ok(array) = prices.cast::<PyArray1<f64>>() {
-        return Ok(array.to_vec()?);
+    // 注意：extension-module 特性已通过 numpy-backend 自动启用
+    // 此 cfg 检查作为额外的安全保护
+    #[cfg(feature = "extension-module")]
+    {
+        let prices_vec = crate::pyo3_bindings::extract_prices(prices)?;
+        let result = rsi(&prices_vec, period);
+        Ok(result.into_pyarray(py))
     }
-
-    // 尝试作为列表处理
-    if let Ok(list) = prices.cast::<PyList>() {
-        let mut vec = Vec::with_capacity(list.len());
-        for item in list.iter() {
-            vec.push(item.extract::<f64>()?);
-        }
-        return Ok(vec);
+    
+    // 此分支在正常情况下不应执行（因为 numpy-backend 已包含 extension-module）
+    // 仅作为防御性编程的最终保障
+    #[cfg(not(feature = "extension-module"))]
+    {
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Internal error: extension-module feature not enabled. \
+             This should not happen when numpy-backend is active. \
+             Please report this issue."
+        ))
     }
-
-    Err(pyo3::exceptions::PyTypeError::new_err(
-        "prices 必须是 numpy 数组或列表",
-    ))
 }
 
 #[cfg(test)]

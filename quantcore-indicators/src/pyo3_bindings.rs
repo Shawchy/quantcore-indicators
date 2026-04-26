@@ -9,17 +9,19 @@ use pyo3::types::{PyDict, PyList};
 use crate::{adx, atr, bollinger_bands, cci, ema, kdj, ma, macd, obv, rsi, williams_r};
 
 /// 辅助函数：从 Python 对象提取价格向量
-fn extract_prices(prices: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
-    // 尝试作为 numpy 数组处理
-    if let Ok(array) = prices.downcast::<PyArray1<f64>>() {
+pub fn extract_prices(prices: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
+    if let Ok(array) = prices.cast::<PyArray1<f64>>() {
         return Ok(array.to_vec()?);
     }
 
-    // 尝试作为列表处理
-    if let Ok(list) = prices.downcast::<PyList>() {
+    if let Ok(array) = prices.cast::<PyArray1<i64>>() {
+        return Ok(array.to_vec()?.into_iter().map(|v| v as f64).collect());
+    }
+
+    if let Ok(list) = prices.cast::<PyList>() {
         let mut vec = Vec::with_capacity(list.len());
         for item in list.iter() {
-            vec.push(item.extract::<f64>()?);
+            vec.push(item.extract::<f64>().or_else(|_| item.extract::<i64>().map(|v| v as f64))?);
         }
         return Ok(vec);
     }
@@ -29,18 +31,19 @@ fn extract_prices(prices: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
     ))
 }
 
-/// 辅助函数：从 Python 对象提取成交量向量
-fn extract_volume(volume: &Bound<'_, PyAny>) -> PyResult<Vec<i64>> {
-    // 尝试作为 numpy 数组处理
-    if let Ok(array) = volume.downcast::<PyArray1<i64>>() {
+pub fn extract_volume(volume: &Bound<'_, PyAny>) -> PyResult<Vec<i64>> {
+    if let Ok(array) = volume.cast::<PyArray1<i64>>() {
         return Ok(array.to_vec()?);
     }
 
-    // 尝试作为列表处理
-    if let Ok(list) = volume.downcast::<PyList>() {
+    if let Ok(array) = volume.cast::<PyArray1<f64>>() {
+        return Ok(array.to_vec()?.into_iter().map(|v| v as i64).collect());
+    }
+
+    if let Ok(list) = volume.cast::<PyList>() {
         let mut vec = Vec::with_capacity(list.len());
         for item in list.iter() {
-            vec.push(item.extract::<i64>()?);
+            vec.push(item.extract::<f64>().map(|v| v as i64)?);
         }
         return Ok(vec);
     }
@@ -257,6 +260,22 @@ pub fn quantcore_indicators(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(obv_py, m)?)?;
     m.add_function(wrap_pyfunction!(williams_r_py, m)?)?;
     m.add_function(wrap_pyfunction!(adx_py, m)?)?;
+
+    #[cfg(feature = "arrow-backend")]
+    {
+        m.add_function(wrap_pyfunction!(
+            crate::arrow_backend::ma_arrow_py,
+            m
+        )?)?;
+        m.add_function(wrap_pyfunction!(
+            crate::arrow_backend::ema_arrow_py,
+            m
+        )?)?;
+        m.add_function(wrap_pyfunction!(
+            crate::arrow_backend::rsi_arrow_py,
+            m
+        )?)?;
+    }
 
     Ok(())
 }

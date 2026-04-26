@@ -1,0 +1,1 @@
+error: path at `H:\Project\Quant\quantcore-indicators\Cargo.toml` was not valid utf-8

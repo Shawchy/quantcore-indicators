@@ -67,6 +67,7 @@ from quantcore.indicators import (
     cci,
     williams_r,
     obv,
+    adx,
 )
 
 # 日志系统

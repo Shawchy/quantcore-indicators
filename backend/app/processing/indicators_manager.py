@@ -1,7 +1,8 @@
 """
 技术指标管理器
 
-集成 pandas-ta 和 TA-Lib，提供统一的技术指标计算接口
+集成 quantcore-indicators (Rust)、pandas-ta 和 TA-Lib
+提供统一的技术指标计算接口，优先使用 Rust 高性能版本
 添加性能监控功能
 """
 from typing import Optional, Dict, Any, List
@@ -16,6 +17,34 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas_ta')
 warnings.filterwarnings('ignore', category=UserWarning, message='.*copy_on_write.*')
 warnings.filterwarnings('ignore', category=Warning, message='.*Pandas4Warning.*')
+
+# 尝试导入 QuantCore Rust 指标库
+try:
+    import sys
+    from app.config import get_quantcore_indicators_path
+    
+    indicators_path = get_quantcore_indicators_path()
+    if indicators_path not in sys.path:
+        sys.path.insert(0, indicators_path)
+    
+    from quantcore_indicators import (
+        ma as rust_ma,
+        ema as rust_ema,
+        macd as rust_macd,
+        rsi as rust_rsi,
+        bollinger_bands as rust_bollinger_bands,
+        atr as rust_atr,
+        cci as rust_cci,
+        kdj as rust_kdj,
+        obv as rust_obv,
+        williams_r as rust_williams_r,
+        adx as rust_adx,
+    )
+    RUST_INDICATORS_AVAILABLE = True
+    logger.info("✅ QuantCore Indicators (Rust) 已加载，将用于高性能指标计算")
+except ImportError as e:
+    RUST_INDICATORS_AVAILABLE = False
+    logger.warning(f"⚠️ QuantCore Indicators (Rust) 未加载: {e}")
 
 # 尝试导入 TA-Lib
 try:
@@ -59,23 +88,37 @@ def performance_monitor(func):
 
 
 class IndicatorsManager:
-    """技术指标管理器"""
+    """技术指标管理器（优先使用 Rust 版本）"""
     
-    def __init__(self, prefer_talib: bool = True, enable_performance_monitoring: bool = True):
+    def __init__(
+        self, 
+        prefer_rust: bool = True,
+        prefer_talib: bool = True, 
+        enable_performance_monitoring: bool = True
+    ):
         """
         Args:
+            prefer_rust: 是否优先使用 Rust 指标库（如果可用）
             prefer_talib: 是否优先使用 TA-Lib（如果可用）
             enable_performance_monitoring: 是否启用性能监控
         """
-        self.prefer_talib = prefer_talib and TALIB_AVAILABLE
+        self.prefer_rust = prefer_rust and RUST_INDICATORS_AVAILABLE
+        self.prefer_talib = prefer_talib and TALIB_AVAILABLE and not self.prefer_rust
         self.use_pandas_ta = PANDAS_TA_AVAILABLE
         self.enable_performance_monitoring = enable_performance_monitoring
         
         # 性能统计
         self.performance_stats = {}
         
-        if not self.use_pandas_ta and not self.prefer_talib:
-            logger.error("pandas-ta 和 TA-Lib 都不可用，指标计算功能将受限")
+        if self.prefer_rust:
+            logger.info("🚀 指标计算优先级: Rust (QuantCore) > TA-Lib > pandas-ta")
+        elif self.prefer_talib:
+            logger.info("📊 指标计算优先级: TA-Lib > pandas-ta")
+        else:
+            logger.info("🐍 使用 pandas-ta 计算指标")
+        
+        if not self.use_pandas_ta and not self.prefer_talib and not self.prefer_rust:
+            logger.error("pandas-ta、TA-Lib 和 Rust 指标库都不可用，指标计算功能将受限")
     
     def _update_stats(self, indicator_name: str, elapsed_ms: float):
         """更新性能统计"""
@@ -124,7 +167,13 @@ class IndicatorsManager:
         start_time = time.time()
         df = df.copy()
         
-        if self.prefer_talib:
+        if self.prefer_rust:
+            # 使用 Rust 高性能版本
+            prices = df[price_column].values
+            for period in periods:
+                result = rust_ma(prices, period)
+                df[f'ma{period}'] = pd.Series(result, index=df.index[-len(result):])
+        elif self.prefer_talib:
             # 使用 TA-Lib
             for period in periods:
                 df[f'ma{period}'] = talib.SMA(df[price_column].values, timeperiod=period)
@@ -151,7 +200,15 @@ class IndicatorsManager:
         """计算 MACD 指标"""
         df = df.copy()
         
-        if self.prefer_talib:
+        if self.prefer_rust:
+            # 使用 Rust 高性能版本
+            prices = df[price_column].values
+            result = rust_macd(prices, fast=fast, slow=slow, signal=signal)
+            idx = df.index[-len(result['macd']):]
+            df['macd'] = pd.Series(result['macd'], index=idx)
+            df['macd_signal'] = pd.Series(result['signal'], index=idx)
+            df['macd_hist'] = pd.Series(result['histogram'], index=idx)
+        elif self.prefer_talib:
             df['macd'], df['macd_signal'], df['macd_hist'] = talib.MACD(
                 df[price_column].values,
                 fastperiod=fast,
@@ -183,7 +240,13 @@ class IndicatorsManager:
         """计算 RSI 指标"""
         df = df.copy()
         
-        if self.prefer_talib:
+        if self.prefer_rust:
+            # 使用 Rust 高性能版本
+            prices = df[price_column].values
+            for period in periods:
+                result = rust_rsi(prices, period)
+                df[f'rsi{period}'] = pd.Series(result, index=df.index[-len(result):])
+        elif self.prefer_talib:
             for period in periods:
                 df[f'rsi{period}'] = talib.RSI(df[price_column].values, timeperiod=period)
         else:
@@ -199,10 +262,20 @@ class IndicatorsManager:
         m1: int = 3,
         m2: int = 3
     ) -> pd.DataFrame:
-        """计算 KDJ 指标（只有 pandas-ta 支持）"""
+        """计算 KDJ 指标"""
         df = df.copy()
         
-        if self.use_pandas_ta:
+        if self.prefer_rust:
+            # 使用 Rust 高性能版本
+            high = df['high'].values
+            low = df['low'].values
+            close = df['close'].values
+            result = rust_kdj(high, low, close, n=n, m1=m1, m2=m2)
+            idx = df.index[-len(result['k']):]
+            df['kdj_k'] = pd.Series(result['k'], index=idx)
+            df['kdj_d'] = pd.Series(result['d'], index=idx)
+            df['kdj_j'] = pd.Series(result['j'], index=idx)
+        elif self.use_pandas_ta:
             kdj_df = ta.kdj(df['high'], df['low'], df['close'], length=n, signal=m1)
             if kdj_df is not None:
                 df['kdj_k'] = kdj_df[f'K_{n}_{m1}']
@@ -211,7 +284,7 @@ class IndicatorsManager:
             else:
                 logger.warning("KDJ 计算失败")
         else:
-            logger.warning("KDJ 指标需要 pandas-ta 支持")
+            logger.warning("KDJ 指标需要 Rust 或 pandas-ta 支持")
         
         return df
     
@@ -225,7 +298,15 @@ class IndicatorsManager:
         """计算布林带"""
         df = df.copy()
         
-        if self.prefer_talib:
+        if self.prefer_rust:
+            # 使用 Rust 高性能版本
+            prices = df[price_column].values
+            result = rust_bollinger_bands(prices, period=period, std_dev=std_dev)
+            idx = df.index[-len(result['middle']):]
+            df['bb_upper'] = pd.Series(result['upper'], index=idx)
+            df['bb_middle'] = pd.Series(result['middle'], index=idx)
+            df['bb_lower'] = pd.Series(result['lower'], index=idx)
+        elif self.prefer_talib:
             df['bb_upper'], df['bb_middle'], df['bb_lower'] = talib.BBANDS(
                 df[price_column].values,
                 timeperiod=period,
@@ -251,7 +332,14 @@ class IndicatorsManager:
         """计算 ATR 指标"""
         df = df.copy()
         
-        if self.prefer_talib:
+        if self.prefer_rust:
+            # 使用 Rust 高性能版本
+            high = df['high'].values
+            low = df['low'].values
+            close = df['close'].values
+            result = rust_atr(high, low, close, period)
+            df['atr'] = pd.Series(result, index=df.index[-len(result):])
+        elif self.prefer_talib:
             df['atr'] = talib.ATR(
                 df['high'].values,
                 df['low'].values,
@@ -290,9 +378,8 @@ class IndicatorsManager:
         # 布林带
         df = self.calculate_bollinger_bands(df, price_column=price_column)
         
-        # KDJ (只有 pandas-ta 支持)
-        if self.use_pandas_ta:
-            df = self.calculate_kdj(df)
+        # KDJ (Rust 或 pandas-ta 支持)
+        df = self.calculate_kdj(df)
         
         # ATR
         df = self.calculate_atr(df)
@@ -330,9 +417,12 @@ class IndicatorsManager:
 # 全局指标管理器实例
 _indicators_manager: Optional[IndicatorsManager] = None
 
-def get_indicators_manager(prefer_talib: bool = True) -> IndicatorsManager:
+def get_indicators_manager(prefer_rust: bool = True, prefer_talib: bool = True) -> IndicatorsManager:
     """获取全局指标管理器实例"""
     global _indicators_manager
     if _indicators_manager is None:
-        _indicators_manager = IndicatorsManager(prefer_talib=prefer_talib)
+        _indicators_manager = IndicatorsManager(
+            prefer_rust=prefer_rust, 
+            prefer_talib=prefer_talib
+        )
     return _indicators_manager

@@ -1,7 +1,7 @@
 # =============================================================================
 # TickFlow 量化交易系统 - 依赖清单
 # =============================================================================
-# 更新日期：2026-04-02
+# 更新日期：2026-04-27
 # Python 版本：>=3.12
 # =============================================================================
 
@@ -41,8 +41,19 @@ curl_cffi>=0.6.0b         # curl 的 Python 绑定，支持 TLS 指纹伪装
 # -----------------------------------------------------------------------------
 # 技术指标计算
 # -----------------------------------------------------------------------------
-pandas-ta>=0.3.14b        # 技术指标分析库（推荐）
-# TA-Lib>=0.4.28          # 技术分析库（需要预编译 C 库，可选）
+# 优先级：Rust (quantcore-indicators) > TA-Lib > pandas-ta
+# 系统会自动检测并使用最优版本
+pandas-ta>=0.3.14b        # 技术指标分析库（回退方案，必装）
+# TA-Lib>=0.4.28          # 技术分析库（需要预编译 C 库，可选，性能中等）
+# quantcore-indicators    # Rust 高性能指标库（可选，需从本地编译安装）
+                           # 安装方法：cd quantcore-indicators && maturin develop
+
+# -----------------------------------------------------------------------------
+# 量化计算框架（可选，需从本地编译安装）
+# -----------------------------------------------------------------------------
+# quantcore             # Rust 高性能回测引擎（可选，需从本地编译安装）
+                        # 安装方法：cd quantcore && maturin develop
+                        # 未安装时系统自动回退到内置 Python 回测引擎
 
 # -----------------------------------------------------------------------------
 # 科学计算
@@ -144,11 +155,16 @@ pytest-cov>=6.0.0         # 测试覆盖率
 #    pip install -r requirements.txt
 #    pip install torch  # 如需深度学习
 #
-# 4. 开发环境安装:
+# 4. Rust 高性能模块安装（可选，显著提升性能）:
+#    cd quantcore-indicators && maturin develop  # 安装 Rust 指标库
+#    cd quantcore && maturin develop             # 安装 Rust 回测引擎
+#    pip install maturin                         # 如未安装 maturin
+#
+# 5. 开发环境安装:
 #    pip install -r requirements.txt
 #    pip install black flake8 mypy isort
 #
-# 5. 生产环境安装:
+# 6. 生产环境安装:
 #    pip install -r requirements.txt
 #    pip install gunicorn supervisor
 #
@@ -167,5 +183,8 @@ pytest-cov>=6.0.0         # 测试覆盖率
 # 9. TickFlow 和 Tushare 为可选数据源，需要注册获取 API Key/Token
 # 10. curl_cffi 是反爬虫核心依赖，用于 TLS 指纹伪装（必装）
 # 11. tls-client 为可选 TLS 库，与 curl_cffi 二选一即可
+# 12. quantcore-indicators 和 quantcore 为本地 Rust 模块，需编译安装
+# 13. 系统会自动检测可用模块：Rust > TA-Lib > pandas-ta（智能降级）
+# 14. websockets 依赖在 requirements.lock 中锁定，用于 TickFlow WebSocket
 #
 # =============================================================================

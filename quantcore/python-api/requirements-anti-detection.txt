@@ -1,0 +1,21 @@
+# QuantCore Anti-Detection Module Dependencies
+# 反风控模块依赖
+
+# HTTP 客户端（支持 TLS 指纹模拟）
+curl-cffi>=0.6.0
+
+# 异步 HTTP 客户端
+aiohttp>=3.9.0
+aiohttp-socks>=0.8.0
+
+# 配置解析
+pyyaml>=6.0
+
+# 浏览器自动化（可选，用于 Cookie 获取）
+playwright>=1.40.0
+
+# 代理支持
+requests[socks]>=2.31.0
+
+# 类型提示
+typing-extensions>=4.9.0

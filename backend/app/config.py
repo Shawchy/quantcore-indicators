@@ -11,6 +11,22 @@ def get_default_data_dir() -> str:
     return os.path.join(Path.home(), ".quant")
 
 
+@lru_cache(maxsize=1)
+def get_project_root() -> str:
+    """获取项目根目录（backend 的上一级目录）"""
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+def get_quantcore_path() -> str:
+    """获取 QuantCore Python API 路径"""
+    return os.path.join(get_project_root(), 'quantcore', 'python-api')
+
+
+def get_quantcore_indicators_path() -> str:
+    """获取 QuantCore Indicators Python 路径"""
+    return os.path.join(get_project_root(), 'quantcore-indicators', 'python')
+
+
 class Settings(BaseSettings):
     """应用配置类
     

@@ -1,9 +1,27 @@
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from datetime import datetime
+import uuid
 import pandas as pd
 import numpy as np
 from enum import Enum
+from loguru import logger
+
+# 尝试导入 QuantCore 回测引擎
+try:
+    import sys
+    from app.config import get_quantcore_path
+    
+    quantcore_path = get_quantcore_path()
+    if quantcore_path not in sys.path:
+        sys.path.insert(0, quantcore_path)
+    
+    from quantcore import BacktestEngine as QCBacktestEngine, BacktestConfig, Bar
+    QUANTCORE_AVAILABLE = True
+    logger.info("✅ QuantCore Rust 回测引擎已加载")
+except ImportError as e:
+    QUANTCORE_AVAILABLE = False
+    logger.warning(f"⚠️ QuantCore 未加载: {e}")
 
 
 class SignalType(Enum):
@@ -294,13 +312,20 @@ class BacktestEngine:
         self,
         initial_capital: float = 1000000,
         commission_rate: float = 0.0003,
-        slippage: float = 0.0
+        slippage: float = 0.0,
+        prefer_quantcore: bool = True
     ):
         self.initial_capital = initial_capital
         self.commission_rate = commission_rate
         self.slippage = slippage
+        self.prefer_quantcore = prefer_quantcore and QUANTCORE_AVAILABLE
         self.signal_generator = SignalGenerator()
         self.performance_calc = PerformanceCalculator()
+        
+        if self.prefer_quantcore:
+            logger.info(f"🚀 使用 QuantCore Rust 回测引擎: 初始资金={initial_capital:,.0f}")
+        else:
+            logger.info(f"📊 使用内置 Python 回测引擎: 初始资金={initial_capital:,.0f}")
     
     def run(
         self,
@@ -313,6 +338,108 @@ class BacktestEngine:
         if df.empty or len(df) < 2:
             return self._empty_result()
         
+        # 优先使用 QuantCore Rust 引擎
+        if self.prefer_quantcore:
+            try:
+                return self._run_quantcore(df, strategy_type, strategy_params)
+            except Exception as e:
+                logger.warning(f"QuantCore 回测失败，回退到 Python 引擎: {e}")
+        
+        return self._run_python(df, strategy_type, strategy_params, position_size, max_positions)
+    
+    def _run_quantcore(
+        self,
+        df: pd.DataFrame,
+        strategy_type: str,
+        strategy_params: Optional[Dict[str, Any]]
+    ) -> BacktestResult:
+        """使用 QuantCore Rust 引擎运行回测"""
+        config = BacktestConfig(
+            initial_capital=self.initial_capital,
+            commission_rate=self.commission_rate,
+            slippage=self.slippage
+        )
+        
+        engine = QCBacktestEngine(config)
+        
+        # 转换为 QuantCore Bar 格式
+        bars = []
+        symbol = df.iloc[0].get('code', df.iloc[0].get('symbol', 'UNKNOWN'))
+        for _, row in df.iterrows():
+            bar = Bar(
+                timestamp=row.get('date', ''),
+                open=row['open'],
+                high=row['high'],
+                low=row['low'],
+                close=row['close'],
+                volume=row.get('volume', 0),
+                symbol=symbol
+            )
+            bars.append(bar)
+        
+        # 创建动态策略
+        class DynamicStrategy:
+            def __init__(self, params):
+                self.params = params
+                self.bars = []
+            
+            def on_bar(self, bar, engine):
+                self.bars.append(bar)
+                
+                if len(self.bars) < 20:
+                    return
+                
+                short_period = self.params.get('short_period', 5)
+                long_period = self.params.get('long_period', 20)
+                
+                if len(self.bars) >= long_period:
+                    recent = self.bars[-long_period:]
+                    ma_short = sum(b.close for b in recent[-short_period:]) / short_period
+                    ma_long = sum(b.close for b in recent) / long_period
+                    
+                    # 安全获取 symbol（优先 bar.symbol，其次 params 中的 symbol）
+                    symbol = getattr(bar, 'symbol', self.params.get('symbol', 'UNKNOWN'))
+                    
+                    if ma_short > ma_long and not engine.portfolio.has_position(symbol):
+                        engine.buy(symbol, bar.close, 100)
+                    elif ma_short < ma_long and engine.portfolio.has_position(symbol):
+                        engine.sell(symbol, bar.close, 100)
+        
+        strategy = DynamicStrategy(strategy_params or {})
+        
+        # 运行回测
+        qc_result = engine.run(strategy, bars)
+        
+        # 转换为内部格式
+        return self._convert_quantcore_result(qc_result)
+    
+    def _convert_quantcore_result(self, qc_result) -> BacktestResult:
+        """转换 QuantCore 结果为内部格式"""
+        return BacktestResult(
+            backtest_id=f"qc_{uuid.uuid4().hex[:12]}",
+            initial_capital=qc_result.initial_capital,
+            final_capital=qc_result.final_capital,
+            total_return=qc_result.total_return,
+            annual_return=qc_result.annual_return,
+            max_drawdown=qc_result.max_drawdown,
+            sharpe_ratio=qc_result.sharpe_ratio,
+            win_rate=qc_result.win_rate,
+            total_trades=qc_result.total_trades,
+            winning_trades=qc_result.winning_trades,
+            losing_trades=qc_result.losing_trades,
+            equity_curve=qc_result.equity_curve,
+            trades=qc_result.trades
+        )
+    
+    def _run_python(
+        self,
+        df: pd.DataFrame,
+        strategy_type: str,
+        strategy_params: Optional[Dict[str, Any]],
+        position_size: float,
+        max_positions: int
+    ) -> BacktestResult:
+        """使用内置 Python 引擎运行回测（回退方案）"""
         params = strategy_params or {}
         
         signals = self._generate_signals(df, strategy_type, params)

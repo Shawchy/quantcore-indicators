@@ -673,7 +673,28 @@ class UnifiedStorageService:
 
         items = ranking_data.get(ranking_type, [])
         if not items:
+            logger.debug(f"市场排行数据为空：{ranking_type}")
             return 0
+        
+        # 验证关键字段
+        if not ranking_date or not ranking_type:
+            logger.warning("市场排行数据缺少关键字段（ranking_date/ranking_type），跳过保存")
+            return 0
+        
+        # 过滤无效数据（缺少 ts_code）
+        valid_items = []
+        for idx, item in enumerate(items):
+            ts_code = item.get("code", "")
+            if not ts_code:
+                logger.warning(f"第 {idx+1} 条数据缺少 code 字段，跳过")
+                continue
+            valid_items.append(item)
+        
+        if not valid_items:
+            logger.warning(f"市场排行数据全部无效：{ranking_type}")
+            return 0
+        
+        items = valid_items
 
         # 构建批量插入数据
         values = []

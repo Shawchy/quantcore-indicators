@@ -15,18 +15,28 @@ pub struct PerformanceAnalyzer {
 
     /// 无风险利率（年化）
     risk_free_rate: f64,
+
+    /// 基准收益率序列（可选，用于计算超额收益）
+    /// 如果为空，则使用无风险利率作为基准
+    benchmark_returns: Vec<f64>,
 }
 
 #[pymethods]
 impl PerformanceAnalyzer {
     /// 创建绩效分析器
     #[new]
-    #[pyo3(signature = (trades, portfolio_values, risk_free_rate=0.03))]
-    fn new(trades: Vec<Trade>, portfolio_values: Vec<f64>, risk_free_rate: f64) -> Self {
+    #[pyo3(signature = (trades, portfolio_values, risk_free_rate=0.03, benchmark_returns=None))]
+    fn new(
+        trades: Vec<Trade>, 
+        portfolio_values: Vec<f64>, 
+        risk_free_rate: f64,
+        benchmark_returns: Option<Vec<f64>>,
+    ) -> Self {
         Self {
             trades,
             portfolio_values,
             risk_free_rate,
+            benchmark_returns: benchmark_returns.unwrap_or_default(),
         }
     }
 
@@ -45,7 +55,8 @@ impl PerformanceAnalyzer {
         };
         let (win_rate, profit_loss_ratio, total_trades, winning, losing) = self.calculate_trade_stats();
 
-        let benchmark_return = 0.0; // 需要基准数据
+        // 计算基准收益和超额收益
+        let benchmark_return = self.calculate_benchmark_return();
         let excess_return = total_return - benchmark_return;
 
         Ok(PerformanceMetrics {
@@ -254,5 +265,23 @@ impl PerformanceAnalyzer {
         };
 
         (win_rate, profit_loss_ratio, total_trades, winning, losing)
+    }
+
+    /// 计算基准收益率
+    /// 
+    /// 计算逻辑：
+    /// 1. 如果提供了 benchmark_returns 序列，计算累计收益率
+    /// 2. 如果未提供，使用无风险利率作为基准（按天数折算）
+    fn calculate_benchmark_return(&self) -> f64 {
+        if !self.benchmark_returns.is_empty() {
+            // 使用提供的基准收益率序列计算累计收益
+            // 假设 benchmark_returns 是日收益率序列
+            self.benchmark_returns.iter().fold(1.0, |acc, &r| acc * (1.0 + r)) - 1.0
+        } else {
+            // 使用无风险利率作为基准（按持有天数折算）
+            let days = self.portfolio_values.len().max(1) as f64;
+            let years = days / 365.0;
+            (1.0 + self.risk_free_rate).powf(years) - 1.0
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 use super::metrics::PerformanceMetrics;
 use crate::core::{OrderSide, Trade};
+use log::warn;
 use pyo3::prelude::*;
 
 /// 绩效分析器
@@ -281,9 +282,9 @@ impl PerformanceAnalyzer {
             
             // 处理长度不匹配的情况
             if benchmark_len != portfolio_len {
-                // 记录警告（实际应用中应该使用 logger）
-                eprintln!(
-                    "警告：基准序列长度 ({}) 与投资组合期数 ({}) 不匹配，将使用较短者",
+                // 使用 log crate 记录警告
+                warn!(
+                    "基准序列长度 ({}) 与投资组合期数 ({}) 不匹配，将使用较短者",
                     benchmark_len, portfolio_len
                 );
                 

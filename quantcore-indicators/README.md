@@ -6,10 +6,11 @@
 
 - 🚀 **极致性能**: Rust 核心，比纯 Python 快 10-100 倍
 - 📊 **零拷贝**: Apache Arrow 列式内存，高效数据交换
-- 🐍 **Python 友好**: 简洁的 Python API，无缝集成
-- 📈 **丰富指标**: 20+ 常用技术指标
+- 🐍 **Python 3.14 支持**: 完全兼容最新 Python 版本
+- 📈 **丰富指标**: 11 种常用技术指标，持续扩展
 - 🔒 **类型安全**: Rust 强类型系统保证
 - 📦 **易于安装**: `pip install quantcore-indicators`
+- 🔧 **PyO3 0.28**: 使用最新的 Python-Rust 绑定技术
 
 ## 安装
 
@@ -57,39 +58,40 @@ prices = np.random.rand(10000).tolist()
 ## 支持的指标
 
 ### 趋势指标
-- MA - 移动平均
-- EMA - 指数移动平均
-- MACD - 异同移动平均
-- ADX - 平均趋向指标
-- SAR - 抛物线转向
-- AROON - 阿隆指标
-- TRIX - 三重指数平滑
-- DMI - 动向指标
+- **MA** - 移动平均 (Simple Moving Average)
+- **EMA** - 指数移动平均 (Exponential Moving Average)
+- **MACD** - 异同移动平均 (Moving Average Convergence Divergence)
+- **ADX** - 平均趋向指标 (Average Directional Index)
 
 ### 动量指标
-- RSI - 相对强弱指标
-- KDJ - 随机指标
-- CCI - 商品通道指标
-- Williams %R - 威廉指标
-- ROC - 变动率指标
-- STOCH - 随机指标
+- **RSI** - 相对强弱指标 (Relative Strength Index)
+- **KDJ** - 随机指标 (KDJ Indicator)
+- **CCI** - 商品通道指标 (Commodity Channel Index)
+- **Williams %R** - 威廉指标 (Williams Percent Range)
 
 ### 成交量指标
-- OBV - 能量潮
-- MFI - 资金流量指标
-- VWAP - 成交量加权平均价
+- **OBV** - 能量潮 (On-Balance Volume)
 
 ### 波动率指标
-- ATR - 平均真实波幅
-- BOLL - 布林带
+- **ATR** - 平均真实波幅 (Average True Range)
+- **BOLL** - 布林带 (Bollinger Bands)
 
 ## 开发指南
+
+### 环境要求
+
+- **Python**: 3.14+
+- **Rust**: 1.83+ (PyO3 0.28 要求)
+- **maturin**: 1.0+
 
 ### 构建
 
 ```bash
 # 安装 maturin
 pip install maturin
+
+# 设置 Python 路径 (Windows)
+$env:PYO3_PYTHON = "path\to\python.exe"
 
 # 开发模式构建
 maturin develop
@@ -103,9 +105,6 @@ maturin build --release
 ```bash
 # Rust 测试
 cargo test
-
-# Python 测试
-pytest tests/
 
 # 基准测试
 cargo bench

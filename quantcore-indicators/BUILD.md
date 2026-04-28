@@ -3,9 +3,12 @@
 ## 环境要求
 
 ### 必需
-- **Rust** >= 1.70.0
-- **Python** >= 3.8
+- **Rust** >= 1.83.0 (PyO3 0.28 要求)
+- **Python** >= 3.14
 - **maturin** >= 1.0
+
+### Windows 特殊要求
+- **PYO3_PYTHON 环境变量**: 必须设置指向 Python 3.14 可执行文件路径
 
 ### 可选
 - **pytest** (用于测试)
@@ -42,6 +45,9 @@ pip install pytest pytest-benchmark numpy pandas
 ```bash
 # 克隆仓库
 cd quantcore-indicators
+
+# Windows: 设置 Python 路径
+$env:PYO3_PYTHON = "h:\Project\Quant\venv314\Scripts\python.exe"
 
 # 开发模式构建（自动安装到当前 Python 环境）
 maturin develop
@@ -184,9 +190,9 @@ maturin develop
 # 检查 Python 版本
 python --version
 
-# 确保使用 Python 3.8+
-python3.9 -m pip install maturin
-python3.9 -m maturin develop
+# 确保使用 Python 3.14+
+python3.14 -m pip install maturin
+python3.14 -m maturin develop
 ```
 
 ### 问题：导入错误
@@ -245,7 +251,7 @@ jobs:
     - name: Install Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.14'
     
     - name: Install dependencies
       run: |

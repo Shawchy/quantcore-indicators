@@ -1,9 +1,10 @@
 # QuantCore
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![Python](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
+[![Rust](https://img.shields.io/badge/rust-1.83+-orange.svg)](https://www.rust-lang.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![PyO3](https://img.shields.io/badge/PyO3-0.28-yellow.svg)](https://github.com/PyO3/pyo3)
 
 **A 股原生全栈式量化交易框架 - Rust 引擎 + Python 接口**
 
@@ -61,13 +62,23 @@ pip install -e .
 
 ### 系统要求
 
-- Python 3.8+
-- Rust 1.70+
+- Python 3.14+
+- Rust 1.83+ (PyO3 0.28 要求)
 - 操作系统：Windows / Linux / macOS
 
 ## 🚀 快速开始
 
-### 1. 第一个策略
+### 1. 环境准备
+
+```bash
+# 激活 Python 3.14 虚拟环境
+h:\Project\Quant\venv314\Scripts\Activate.ps1
+
+# 设置 PyO3 环境变量 (Windows)
+$env:PYO3_PYTHON = "h:\Project\Quant\venv314\Scripts\python.exe"
+```
+
+### 2. 第一个策略
 
 ```python
 from quantcore import Strategy, Bar, BacktestEngine, BacktestConfig
@@ -239,6 +250,9 @@ risk.set_max_drawdown(0.15)
 ### 构建 Rust 引擎
 
 ```bash
+# 设置环境变量 (Windows)
+$env:PYO3_PYTHON = "path\to\python.exe"
+
 cd rust-engine
 cargo build --release
 ```
@@ -260,7 +274,7 @@ python benchmarks/backtrader_compare.py
 ### 代码格式化
 
 ```bash
-# Python
+# Python (目标版本: py314)
 black python-api/
 ruff check python-api/
 

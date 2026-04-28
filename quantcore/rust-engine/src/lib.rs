@@ -23,7 +23,7 @@ pub mod utils;
 
 /// Python 模块入口
 #[pymodule]
-fn quantcore_engine(_py: Python, m: &PyModule) -> PyResult<()> {
+fn quantcore_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     use core::{Bar, Order, OrderSide, OrderStatus, OrderType, Portfolio, Position, Tick, Trade};
     use engine::{BacktestConfig, BacktestEngine, BacktestResult};
     use performance::PerformanceAnalyzer;

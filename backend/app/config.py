@@ -119,13 +119,23 @@ class Settings(BaseSettings):
     }
     
     # JWT 认证配置
-    SECRET_KEY: str  # 必须设置，建议使用：openssl rand -hex 32
+    # 强制要求设置 SECRET_KEY，不能使用默认值
+    SECRET_KEY: str = os.getenv("QUANT_SECRET_KEY")
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 小时
     
-    # 默认用户密码（开发环境）
-    DEFAULT_ADMIN_PASSWORD: str = "admin123"
-    DEFAULT_USER_PASSWORD: str = "user123"
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def check_secret_key(cls, v):
+        if not v:
+            raise ValueError("QUANT_SECRET_KEY 环境变量必须设置！请使用 openssl rand -hex 32 生成安全密钥。")
+        if "change-me" in v:
+            raise ValueError("QUANT_SECRET_KEY 不能使用默认值！请使用 openssl rand -hex 32 生成安全密钥。")
+        return v
+    
+    # 默认用户密码（开发环境，生产环境应通过环境变量覆盖）
+    DEFAULT_ADMIN_PASSWORD: str = os.getenv("QUANT_DEFAULT_ADMIN_PASSWORD", "admin123")
+    DEFAULT_USER_PASSWORD: str = os.getenv("QUANT_DEFAULT_USER_PASSWORD", "user123")
 
 
 @lru_cache()

@@ -270,17 +270,38 @@ impl PerformanceAnalyzer {
     /// 计算基准收益率
     /// 
     /// 计算逻辑：
-    /// 1. 如果提供了 benchmark_returns 序列，计算累计收益率
-    /// 2. 如果未提供，使用无风险利率作为基准（按天数折算）
+    /// 1. 如果提供了 benchmark_returns 序列，计算累计收益率（需处理长度匹配）
+    /// 2. 如果未提供，使用无风险利率作为基准（按 252 个交易日年化）
     fn calculate_benchmark_return(&self) -> f64 {
         if !self.benchmark_returns.is_empty() {
             // 使用提供的基准收益率序列计算累计收益
             // 假设 benchmark_returns 是日收益率序列
-            self.benchmark_returns.iter().fold(1.0, |acc, &r| acc * (1.0 + r)) - 1.0
+            let benchmark_len = self.benchmark_returns.len();
+            let portfolio_len = self.portfolio_values.len();
+            
+            // 处理长度不匹配的情况
+            if benchmark_len != portfolio_len {
+                // 记录警告（实际应用中应该使用 logger）
+                eprintln!(
+                    "警告：基准序列长度 ({}) 与投资组合期数 ({}) 不匹配，将使用较短者",
+                    benchmark_len, portfolio_len
+                );
+                
+                // 使用较短的长度，避免数据错位
+                let actual_len = benchmark_len.min(portfolio_len);
+                self.benchmark_returns
+                    .iter()
+                    .take(actual_len)
+                    .fold(1.0, |acc, &r| acc * (1.0 + r)) - 1.0
+            } else {
+                // 长度匹配，直接计算
+                self.benchmark_returns.iter().fold(1.0, |acc, &r| acc * (1.0 + r)) - 1.0
+            }
         } else {
-            // 使用无风险利率作为基准（按持有天数折算）
-            let days = self.portfolio_values.len().max(1) as f64;
-            let years = days / 365.0;
+            // 使用无风险利率作为基准（按 252 个交易日年化）
+            // 金融行业标准：252 个交易日/年
+            let trading_days = self.portfolio_values.len().max(1) as f64;
+            let years = trading_days / 252.0;
             (1.0 + self.risk_free_rate).powf(years) - 1.0
         }
     }

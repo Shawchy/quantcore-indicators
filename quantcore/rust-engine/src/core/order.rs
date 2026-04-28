@@ -71,9 +71,13 @@ pub struct Order {
     #[pyo3(get)]
     pub order_type: OrderType,
 
-    /// 委托价格
+    /// 委托价格（止损单为触发价，限价单为限价）
     #[pyo3(get)]
     pub price: Decimal,
+
+    /// 限价（仅止损限价单有效）
+    #[pyo3(get)]
+    pub limit_price: Decimal,
 
     /// 委托数量
     #[pyo3(get)]
@@ -100,7 +104,7 @@ pub struct Order {
 impl Order {
     /// 创建新订单
     #[new]
-    #[pyo3(signature = (order_id, strategy_id, symbol, side, order_type, price, quantity))]
+    #[pyo3(signature = (order_id, strategy_id, symbol, side, order_type, price, quantity, limit_price=None))]
     fn new(
         order_id: String,
         strategy_id: String,
@@ -109,8 +113,12 @@ impl Order {
         order_type: OrderType,
         price: f64,
         quantity: i64,
+        limit_price: Option<f64>,
     ) -> Self {
         let now = Utc::now();
+        let limit_price_val = limit_price
+            .and_then(|p| Decimal::from_f64_retain(p))
+            .unwrap_or_else(|| Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO));
         Self {
             order_id,
             strategy_id,
@@ -118,6 +126,7 @@ impl Order {
             side,
             order_type,
             price: Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO),
+            limit_price: limit_price_val,
             quantity,
             filled_quantity: 0,
             status: OrderStatus::Pending,

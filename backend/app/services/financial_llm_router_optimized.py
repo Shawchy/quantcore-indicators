@@ -6,9 +6,15 @@
 from typing import Dict, Any, Optional, List
 from enum import Enum
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from collections import OrderedDict
+
+# Ollama 配置（支持环境变量覆盖）
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
+OLLAMA_PORT = os.getenv("OLLAMA_PORT", "11434")
+OLLAMA_BASE_URL = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}"
 
 
 class ModelType(Enum):
@@ -166,8 +172,19 @@ class MemoryOptimizedRouter:
         model_name = self._model_configs[model_type]["name"]
         print(f"[显存优化] 卸载模型：{model_name}")
         
-        # TODO: 调用 Ollama API 卸载模型
-        # ollama unload {model_name}
+        # 通过 Ollama API 卸载模型（如果服务可用）
+        try:
+            import requests
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/delete",
+                json={"name": model_name},
+                timeout=10
+            )
+            if response.status_code not in (200, 404):
+                print(f"  ⚠️ 卸载失败：{response.status_code}")
+        except Exception as e:
+            # Ollama 服务不可用时跳过
+            print(f"  ℹ️ Ollama 服务不可用，跳过卸载：{e}")
         
         del self._model_cache[model_type]
         self._stats["total_unloads"] += 1
@@ -193,8 +210,24 @@ class MemoryOptimizedRouter:
         
         print(f"[显存优化] 加载模型：{model_name}")
         
-        # TODO: 调用 Ollama API 加载模型
-        # ollama load {model_name}
+        # 通过 Ollama API 加载模型（如果服务可用）
+        try:
+            import requests
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": model_name,
+                    "prompt": "ready",
+                    "stream": False,
+                    "options": {"num_predict": 1}
+                },
+                timeout=30
+            )
+            if response.status_code != 200:
+                print(f"  ⚠️ 加载失败：{response.status_code}")
+        except Exception as e:
+            # Ollama 服务不可用时跳过
+            print(f"  ℹ️ Ollama 服务不可用，跳过加载：{e}")
         
         # 创建实例
         instance = ModelInstance(
@@ -287,12 +320,30 @@ class MemoryOptimizedRouter:
         context: Optional[Dict] = None,
         stock_data: Optional[Dict] = None
     ) -> Any:
-        """执行查询（占位符，实际需调用模型 API）"""
-        # TODO: 实现真实的模型调用
-        return {
-            "message": f"使用 {model_name} 处理查询",
-            "query": query
-        }
+        """执行查询，通过 Ollama API 调用模型"""
+        try:
+            import requests
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": model_name,
+                    "prompt": query,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.3,
+                        "num_predict": 1024,
+                        "top_p": 0.9
+                    }
+                },
+                timeout=120
+            )
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("response", "无响应")
+            else:
+                return f"模型调用失败：HTTP {response.status_code}"
+        except Exception as e:
+            return f"模型服务不可用：{e}"
     
     def get_memory_stats(self) -> Dict[str, Any]:
         """获取显存使用统计"""

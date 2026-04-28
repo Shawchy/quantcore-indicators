@@ -604,7 +604,10 @@ class TickFlowAdapter(BaseDataAdapter):
                                 'count': getattr(exc, 'count', 0),
                             })
 
-                    # TODO: 交易所数据缓存功能待实现（需要时可使用 storage_service）
+                    # 缓存交易所数据到内存
+                    cache_key = "tickflow_exchanges"
+                    await self._save_to_cache(cache_key, result, 'exchanges')
+                    
                     logger.info(f"✅ TickFlow 获取交易所列表成功：{len(result)}个")
                     return result
             else:
@@ -631,7 +634,10 @@ class TickFlowAdapter(BaseDataAdapter):
                         for exc, count in exchange_stats.items()
                     ]
                     
-                    # TODO: 交易所数据缓存功能待实现（需要时可使用 storage_service）
+                    # 缓存交易所推断数据到内存
+                    cache_key = "tickflow_exchanges_inferred"
+                    await self._save_to_cache(cache_key, result, 'exchanges')
+                    
                     logger.info(f"TickFlow 推断交易所列表成功：{len(result)}个")
                     return result
             
@@ -711,8 +717,6 @@ class TickFlowAdapter(BaseDataAdapter):
                     
                     # 保存到内存缓存
                     await self._save_to_cache(cache_key, result, 'instruments')
-
-                    # TODO: 持久化存储功能待实现（需要时可使用 storage_service）
 
                     logger.info(f"✅ TickFlow 获取 {exchange} 标的列表成功：{len(result)}个")
                     return result

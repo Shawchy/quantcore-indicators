@@ -6,6 +6,10 @@
 from typing import Dict, Any, Optional, List
 from enum import Enum
 import asyncio
+import logging
+import time
+
+logger = logging.getLogger(__name__)
 
 
 class TaskType(Enum):
@@ -166,16 +170,65 @@ class FinancialLLMRouter:
         stock_data: Optional[Dict] = None
     ) -> Any:
         """
-        执行查询（占位符，实际需调用模型 API）
+        执行查询（集成到 qwen_assistant.py）
         
-        TODO: 集成到 llm_assistant.py
+        实际调用时通过 QwenAssistant 服务执行模型推理
         """
-        # 这里应该调用对应的模型服务
-        # 目前返回模拟响应
-        return {
-            "message": f"使用模型 {model_name} 处理 {task_type.value} 类型任务",
-            "query": query
+        max_retries = 2
+        last_error = None
+        
+        for attempt in range(max_retries + 1):
+            try:
+                from app.services.qwen_assistant import get_assistant
+                assistant = get_assistant()
+                
+                # 根据任务类型调用不同的助手方法
+                if task_type == TaskType.SENTIMENT_ANALYSIS:
+                    result = await assistant.analyze_sentiment(
+                        text=query,
+                        symbol=context.get("symbol") if context else None
+                    )
+                    return result.content
+                elif task_type == TaskType.STRATEGY_GENERATION:
+                    result = await assistant.generate_strategy(
+                        description=query,
+                        strategy_type="technical",
+                        symbols=context.get("symbols") if context else None
+                    )
+                    return result.content
+                elif task_type == TaskType.CODE_GENERATION:
+                    result = await assistant.explain_code(code=query)
+                    return result.content
+                else:
+                    result = await assistant.query_stock(
+                        symbol=context.get("symbol", "unknown") if context else "unknown",
+                        question=query,
+                        market_data=stock_data
+                    )
+                    return result.content
+            except Exception as e:
+                last_error = e
+                logger.error(f"LLM 调用失败 (尝试 {attempt + 1}/{max_retries + 1}): 模型={model_name}, 任务={task_type.value}, 错误={e}")
+                
+                # 如果不是最后一次尝试，等待后重试
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt  # 指数退避：2s, 4s
+                    logger.info(f"等待 {wait_time} 秒后重试...")
+                    await asyncio.sleep(wait_time)
+                    continue
+        
+        # 所有重试均失败
+        error_detail = {
+            "error_code": "model_service_unavailable",
+            "message": "模型服务暂时不可用，请稍后重试",
+            "model_name": model_name,
+            "task_type": task_type.value,
+            "error": str(last_error),
+            "timestamp": time.time(),
+            "retries_exhausted": True
         }
+        logger.error(f"LLM 调用最终失败: {error_detail}")
+        return error_detail
     
     def _calculate_confidence(
         self, 
@@ -312,13 +365,74 @@ class DualModelService:
         """
         综合两个模型的信号
         
-        TODO: 实现信号融合逻辑
+        融合逻辑:
+        1. 数值信号权重 60%（技术指标更客观）
+        2. 情感信号权重 40%（市场情绪辅助）
+        3. 综合判断生成最终信号
         """
+        signal_scores = {"bullish": 0, "neutral": 0, "bearish": 0}
+        factors = []
+        
+        # 解析数值模型信号
+        if numerical and not isinstance(numerical, Exception):
+            num_confidence = numerical.get("confidence", 0.5)
+            num_response = numerical.get("response", "")
+            
+            # 从响应中提取信号倾向
+            if any(kw in num_response.lower() for kw in ["买入", "看涨", "bullish", "金叉", "超卖"]):
+                signal_scores["bullish"] += 0.6 * num_confidence
+                factors.append(f"数值模型看涨（置信度 {num_confidence:.2f}）")
+            elif any(kw in num_response.lower() for kw in ["卖出", "看跌", "bearish", "死叉", "超买"]):
+                signal_scores["bearish"] += 0.6 * num_confidence
+                factors.append(f"数值模型看跌（置信度 {num_confidence:.2f}）")
+            else:
+                signal_scores["neutral"] += 0.6 * num_confidence
+                factors.append(f"数值模型中性（置信度 {num_confidence:.2f}）")
+        
+        # 解析情感模型信号
+        if sentiment and not isinstance(sentiment, Exception):
+            sent_confidence = sentiment.get("confidence", 0.5)
+            sent_response = sentiment.get("response", "")
+            
+            if any(kw in sent_response.lower() for kw in ["积极", "利好", "positive", "乐观"]):
+                signal_scores["bullish"] += 0.4 * sent_confidence
+                factors.append(f"情感模型积极（置信度 {sent_confidence:.2f}）")
+            elif any(kw in sent_response.lower() for kw in ["消极", "利空", "negative", "悲观"]):
+                signal_scores["bearish"] += 0.4 * sent_confidence
+                factors.append(f"情感模型消极（置信度 {sent_confidence:.2f}）")
+            else:
+                signal_scores["neutral"] += 0.4 * sent_confidence
+                factors.append(f"情感模型中性（置信度 {sent_confidence:.2f}）")
+        
+        # 确定最终信号
+        max_signal = max(signal_scores, key=signal_scores.get)
+        max_score = signal_scores[max_signal]
+        
+        # 计算综合置信度
+        total_confidence = sum(signal_scores.values())
+        combined_confidence = max_score / total_confidence if total_confidence > 0 else 0.5
+        
         return {
-            "signal": "neutral",
-            "confidence": 0.5,
-            "factors": []
+            "signal": max_signal,
+            "confidence": round(combined_confidence, 2),
+            "scores": signal_scores,
+            "factors": factors,
+            "recommendation": self._generate_recommendation(max_signal, combined_confidence, factors)
         }
+    
+    def _generate_recommendation(
+        self,
+        signal: str,
+        confidence: float,
+        factors: list
+    ) -> str:
+        """生成操作建议"""
+        if signal == "bullish" and confidence >= 0.6:
+            return f"建议：可轻仓试多，综合置信度 {confidence:.0%}。{'；'.join(factors)}"
+        elif signal == "bearish" and confidence >= 0.6:
+            return f"建议：建议减仓或观望，综合置信度 {confidence:.0%}。{'；'.join(factors)}"
+        else:
+            return f"建议：信号不明确，建议观望。{'；'.join(factors)}"
 
 
 # 使用示例

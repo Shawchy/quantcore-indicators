@@ -275,6 +275,7 @@ class MarketRanking(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     
     __table_args__ = (
+        UniqueConstraint("ranking_date", "ranking_type", "ts_code", name="u_ranking_date_type_code"),
         Index("idx_ranking_date_type", "ranking_date", "ranking_type"),
         Index("idx_ranking_date_position", "ranking_date", "rank_position"),
         Index("idx_ranking_code_date", "ts_code", "ranking_date"),

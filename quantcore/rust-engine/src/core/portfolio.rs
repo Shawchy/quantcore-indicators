@@ -123,4 +123,73 @@ impl Portfolio {
             self.market_value / self.total_asset
         }
     }
+
+    /// 买入
+    pub fn buy(&mut self, symbol: &str, price: f64, quantity: i64, commission: f64, tax: f64) -> PyResult<()> {
+        let price_dec = Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO);
+        let cost = price_dec * Decimal::from(quantity);
+        let commission_dec = Decimal::from_f64_retain(commission).unwrap_or(Decimal::ZERO);
+        let tax_dec = Decimal::from_f64_retain(tax).unwrap_or(Decimal::ZERO);
+        let total_cost = cost + commission_dec + tax_dec;
+
+        if self.cash < total_cost {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "资金不足：需要 {} 可用 {}",
+                total_cost, self.cash
+            )));
+        }
+
+        self.cash -= total_cost;
+
+        let position = self.positions.entry(symbol.to_string()).or_insert_with(|| {
+            Position::new(symbol.to_string(), "long".to_string(), 0, 0.0, 0.0)
+        });
+
+        let total_qty = position.quantity + quantity;
+        if total_qty > 0 {
+            let new_avg = (position.avg_cost * position.quantity as f64 + price * quantity as f64) / total_qty as f64;
+            position.avg_cost = new_avg;
+            position.quantity = total_qty;
+        }
+
+        self.update();
+        Ok(())
+    }
+
+    /// 卖出
+    pub fn sell(&mut self, symbol: &str, price: f64, quantity: i64, commission: f64, tax: f64) -> PyResult<()> {
+        if let Some(position) = self.positions.get_mut(symbol) {
+            if position.quantity < quantity {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "持仓不足：需要 {} 持有 {}",
+                    quantity, position.quantity
+                )));
+            }
+
+            let price_dec = Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO);
+            let revenue = price_dec * Decimal::from(quantity);
+            let commission_dec = Decimal::from_f64_retain(commission).unwrap_or(Decimal::ZERO);
+            let tax_dec = Decimal::from_f64_retain(tax).unwrap_or(Decimal::ZERO);
+            let net_revenue = revenue - commission_dec - tax_dec;
+
+            self.cash += net_revenue;
+            position.quantity -= quantity;
+
+            if position.quantity == 0 {
+                self.positions.remove(symbol);
+            }
+
+            self.update();
+            Ok(())
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "无持仓：{}", symbol
+            )))
+        }
+    }
+
+    /// 获取所有持仓列表
+    pub fn get_positions(&self) -> Vec<&Position> {
+        self.positions.values().collect()
+    }
 }

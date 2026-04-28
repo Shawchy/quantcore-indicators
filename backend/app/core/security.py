@@ -132,9 +132,12 @@ import secrets
 DEFAULT_ADMIN_PASSWORD = settings.DEFAULT_ADMIN_PASSWORD
 DEFAULT_USER_PASSWORD = settings.DEFAULT_USER_PASSWORD
 
-# 开发环境打印默认密码
+# 开发环境安全提示：显示默认密码已配置的警告（不显示具体密码）
 if settings.DEBUG:
-    logger.warning(f"开发环境默认密码 - admin: {DEFAULT_ADMIN_PASSWORD}, user: {DEFAULT_USER_PASSWORD}")
+    logger.warning(
+        "⚠️ 开发模式已启用：请确保生产环境中 DEBUG=False 且修改默认密码。\n"
+        "   详细信息请查看 .env 文件中的 DEFAULT_ADMIN_PASSWORD 和 DEFAULT_USER_PASSWORD 配置"
+    )
 
 
 async def get_user(username: str) -> Optional[User]:

@@ -647,6 +647,143 @@ class UnifiedStorageService:
         """获取存储统计信息"""
         return self.parquet_manager.get_storage_stats()
 
+    async def save_market_ranking(
+        self,
+        ranking_data: Dict[str, Any],
+        ranking_type: str,
+        data_source: str
+    ) -> int:
+        """
+        保存市场排行数据到数据库（批量 UPSERT 实现）
+
+        Args:
+            ranking_data: 包含排行列表的数据字典
+            ranking_type: 排行类型 (gainers/losers/amount/turnover)
+            data_source: 数据来源
+
+        Returns:
+            保存的记录数
+        """
+        from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
+        from app.storage.sqlite import MarketRanking
+        from datetime import datetime
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ranking_date = datetime.now().strftime("%Y-%m-%d")
+
+        items = ranking_data.get(ranking_type, [])
+        if not items:
+            return 0
+
+        # 构建批量插入数据
+        values = []
+        for idx, item in enumerate(items):
+            values.append({
+                "ranking_date": ranking_date,
+                "ranking_time": now_str,
+                "ts_code": item.get("code", ""),
+                "name": item.get("name", ""),
+                "price": item.get("price", 0),
+                "change": item.get("change", 0),
+                "change_pct": item.get("change_pct", 0),
+                "volume": item.get("volume", 0),
+                "amount": item.get("amount", 0),
+                "open": item.get("open", 0),
+                "high": item.get("high", 0),
+                "low": item.get("low", 0),
+                "prev_close": item.get("prev_close", 0),
+                "turnover_rate": item.get("turnover_rate"),
+                "ranking_type": ranking_type,
+                "rank_position": idx + 1,
+                "data_source": data_source,
+            })
+
+        # 使用 SQLite UPSERT（ON CONFLICT DO UPDATE）
+        upsert_stmt = sqlite_upsert(MarketRanking).values(values)
+        update_cols = [
+            "ranking_time", "name", "price", "change", "change_pct",
+            "volume", "amount", "open", "high", "low", "prev_close",
+            "turnover_rate", "rank_position", "data_source"
+        ]
+        upsert_stmt = upsert_stmt.on_conflict_do_update(
+            constraint="u_ranking_date_type_code",
+            set_={col: getattr(upsert_stmt.excluded, col) for col in update_cols}
+        )
+
+        async with get_session() as session:
+            result = await session.execute(upsert_stmt)
+            await session.commit()
+
+        total_saved = len(items)
+        logger.info(f"批量保存 {total_saved} 条市场排行数据：{ranking_type}")
+        return total_saved
+
+    async def get_market_ranking_history(
+        self,
+        ranking_type: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        获取市场排行历史数据
+
+        Args:
+            ranking_type: 排行类型 (gainers/losers/amount/turnover)
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+            limit: 返回记录数限制
+
+        Returns:
+            历史排行数据列表
+        """
+        from sqlalchemy import select, and_
+        from app.storage.sqlite import MarketRanking
+
+        if not end_date:
+            from datetime import datetime
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_date = end_date
+
+        async with get_session() as session:
+            query = select(MarketRanking).where(
+                and_(
+                    MarketRanking.ranking_type == ranking_type,
+                    MarketRanking.ranking_date >= start_date,
+                    MarketRanking.ranking_date <= end_date,
+                )
+            ).order_by(
+                MarketRanking.ranking_date.desc(),
+                MarketRanking.rank_position.asc()
+            ).limit(limit)
+
+            result = await session.execute(query)
+            records = result.scalars().all()
+
+            return [
+                {
+                    "ranking_date": r.ranking_date,
+                    "ranking_time": r.ranking_time,
+                    "ts_code": r.ts_code,
+                    "name": r.name,
+                    "price": r.price,
+                    "change": r.change,
+                    "change_pct": r.change_pct,
+                    "volume": r.volume,
+                    "amount": r.amount,
+                    "open": r.open,
+                    "high": r.high,
+                    "low": r.low,
+                    "prev_close": r.prev_close,
+                    "turnover_rate": r.turnover_rate,
+                    "ranking_type": r.ranking_type,
+                    "rank_position": r.rank_position,
+                    "data_source": r.data_source,
+                }
+                for r in records
+            ]
+
 
 # 全局实例
 storage_service = UnifiedStorageService()

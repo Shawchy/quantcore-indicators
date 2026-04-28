@@ -268,7 +268,7 @@ const StockHolderPage: React.FC = () => {
           1. 数据来源：巨潮资讯 - 数据中心 - 专题统计 - 股东股本
         </Text>
         <Text fontSize="sm" color="gray.600">
-          2. 报告期：可选值 XXXX0331（一季报）、XXXX0630（中报）、XXXX0930（三季报）、XXXX1231（年报）
+          2. 报告期：可选值 YYYY0331（一季报）、YYYY0630（中报）、YYYY0930（三季报）、YYYY1231（年报），其中 YYYY 代表年份
         </Text>
         <Text fontSize="sm" color="gray.600">
           3. 数据范围：从 20170331 开始至今

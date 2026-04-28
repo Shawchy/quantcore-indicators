@@ -40,7 +40,11 @@ class Settings(BaseSettings):
     
     APP_NAME: str = "Quant Analysis System"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = False  # 生产环境应关闭 DEBUG 模式
+    # DEBUG 模式说明：
+    # - True: 启用详细日志、SQL 回显、开发模式安全提示
+    # - False: 生产模式，关闭调试输出，使用安全配置
+    # - 环境变量覆盖：DEBUG=True/False
+    DEBUG: bool = False
     
     API_PREFIX: str = "/api/v1"
     

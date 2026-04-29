@@ -149,11 +149,11 @@ self.onmessage = function(e: MessageEvent<WorkerMessage>) {
         break
       
       case 'CALC_INDICATORS':
-        // 如果需要前端计算指标，可以在这里实现
-        // 目前由后端计算
+        // 所有指标计算已统一使用后端 quantcore-indicators (Rust) 模块
+        // 前端不实现指标计算，避免不一致
         self.postMessage({
           type: 'ERROR',
-          error: '前端指标计算未实现，请使用后端 API',
+          error: '指标计算已统一使用后端 quantcore-indicators (Rust) 模块，请通过 API 获取指标数据',
           id
         })
         break

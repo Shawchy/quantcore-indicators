@@ -13,15 +13,24 @@ try:
     from .quantcore_indicators import (
         ma_py as _ma,
         ema_py as _ema,
+        dema_py as _dema,
+        tema_py as _tema,
+        hma_py as _hma,
+        wma_py as _wma,
+        roc_py as _roc,
         macd_py as _macd,
         rsi_py as _rsi,
         bollinger_bands_py as _bollinger_bands,
         atr_py as _atr,
+        natr_py as _natr,
         cci_py as _cci,
         kdj_py as _kdj,
         obv_py as _obv,
         williams_r_py as _williams_r,
         adx_py as _adx,
+        stochastic_py as _stochastic,
+        vwap_py as _vwap,
+        psar_py as _psar,
     )
     _RUST_AVAILABLE = True
 except ImportError:
@@ -119,7 +128,7 @@ def macd(prices: ArrayLike, fast: int = 12, slow: int = 26, signal: int = 9) -> 
     if _RUST_AVAILABLE:
         return _macd(prices, fast, slow, signal)
     else:
-        if fast < 2 or slow < 2 or signal < 2:
+        if fast < 2 or slow < 2 or signal < 2 or len(prices) < slow:
             return {'macd': np.array([]), 'signal': np.array([]), 'histogram': np.array([])}
         
         fast_ema = ema(prices, fast)
@@ -209,7 +218,7 @@ def bollinger_bands(prices: ArrayLike, period: int = 20, std_dev: float = 2.0) -
     if _RUST_AVAILABLE:
         return _bollinger_bands(prices, period, std_dev)
     else:
-        if period < 2:
+        if period < 2 or len(prices) < period:
             return {'upper': np.array([]), 'middle': np.array([]), 'lower': np.array([])}
         
         middle = ma(prices, period)
@@ -524,17 +533,276 @@ def adx(high: ArrayLike, low: ArrayLike, close: ArrayLike, period: int = 14) -> 
         return ema(dx, period)
 
 
+def wma(prices: ArrayLike, period: int) -> np.ndarray:
+    """
+    WMA 指标 (Weighted Moving Average)
+    
+    Args:
+        prices: 价格序列
+        period: 周期
+        
+    Returns:
+        WMA 值 numpy 数组
+    """
+    prices = _to_numpy_array(prices)
+    
+    if _RUST_AVAILABLE:
+        return _wma(prices, period)
+    else:
+        if period < 2 or len(prices) < period:
+            return np.array([])
+        
+        weight_sum = period * (period + 1) / 2
+        result = []
+        
+        for i in range(period - 1, len(prices)):
+            weights = np.arange(1, period + 1)
+            weighted_avg = np.sum(prices[i - period + 1:i + 1] * weights) / weight_sum
+            result.append(weighted_avg)
+        
+        return np.array(result)
+
+
+def stochastic(high: ArrayLike, low: ArrayLike, close: ArrayLike, 
+             k_period: int = 14, d_period: int = 3) -> Dict[str, np.ndarray]:
+    """
+    Stochastic 指标（随机指标）
+    
+    Args:
+        high: 最高价序列
+        low: 最低价序列
+        close: 收盘价序列
+        k_period: %K 周期，默认 14
+        d_period: %D 周期，默认 3
+        
+    Returns:
+        字典 {'k': array, 'd': array}
+    """
+    high = _to_numpy_array(high)
+    low = _to_numpy_array(low)
+    close = _to_numpy_array(close)
+    
+    if _RUST_AVAILABLE:
+        return _stochastic(high, low, close, k_period, d_period)
+    else:
+        n = len(high)
+        if k_period < 2 or d_period < 2 or n < k_period or len(low) != n or len(close) != n:
+            return {'k': np.array([]), 'd': np.array([])}
+        
+        k_values = []
+        for i in range(k_period - 1, n):
+            highest = np.max(high[i - k_period + 1:i + 1])
+            lowest = np.min(low[i - k_period + 1:i + 1])
+            close_val = close[i]
+            
+            if highest != lowest:
+                k_val = (close_val - lowest) / (highest - lowest) * 100.0
+            else:
+                k_val = 50.0
+            k_values.append(k_val)
+        
+        k_array = np.array(k_values)
+        
+        if len(k_array) >= d_period:
+            d_values = []
+            for i in range(len(k_array) - d_period + 1):
+                d_val = np.mean(k_array[i:i + d_period])
+                d_values.append(d_val)
+            d_array = np.array(d_values)
+        else:
+            d_array = np.array([])
+        
+        return {'k': k_array, 'd': d_array}
+
+
+def vwap(high: ArrayLike, low: ArrayLike, close: ArrayLike, volume: ArrayLike) -> Dict[str, np.ndarray]:
+    """
+    VWAP 指标 (Volume Weighted Average Price)
+    
+    Args:
+        high: 最高价序列
+        low: 最低价序列
+        close: 收盘价序列
+        volume: 成交量序列
+        
+    Returns:
+        字典 {'vwap': array}
+    """
+    high = _to_numpy_array(high)
+    low = _to_numpy_array(low)
+    close = _to_numpy_array(close)
+    volume = _to_numpy_array(volume)
+    
+    if _RUST_AVAILABLE:
+        return _vwap(high, low, close, volume)
+    else:
+        n = len(high)
+        if n < 2 or n != len(low) or n != len(close) or n != len(volume):
+            return {'vwap': np.array([])}
+        
+        typical_prices = (high + low + close) / 3.0
+        cum_vp = np.cumsum(typical_prices * volume)
+        cum_volume = np.cumsum(volume)
+        
+        vwap_values = np.where(cum_volume > 0, cum_vp / cum_volume, typical_prices)
+        
+        return {'vwap': vwap_values}
+
+
+def dema(prices: ArrayLike, period: int) -> np.ndarray:
+    """DEMA 指标 (Double Exponential Moving Average)"""
+    prices = _to_numpy_array(prices)
+    if _RUST_AVAILABLE:
+        return _dema(prices, period)
+    else:
+        if period < 2 or len(prices) < period:
+            return np.array([])
+        ema1 = ema(prices, period)
+        ema2 = ema(ema1, period)
+        min_len = min(len(ema1), len(ema2))
+        if min_len == 0:
+            return np.array([])
+        return 2.0 * ema1[-min_len:] - ema2[-min_len:]
+
+
+def tema(prices: ArrayLike, period: int) -> np.ndarray:
+    """TEMA 指标 (Triple Exponential Moving Average)"""
+    prices = _to_numpy_array(prices)
+    if _RUST_AVAILABLE:
+        return _tema(prices, period)
+    else:
+        if period < 2 or len(prices) < period:
+            return np.array([])
+        ema1 = ema(prices, period)
+        ema2 = ema(ema1, period)
+        ema3 = ema(ema2, period)
+        min_len = min(len(ema1), len(ema2), len(ema3))
+        if min_len == 0:
+            return np.array([])
+        return 3.0 * ema1[-min_len:] - 3.0 * ema2[-min_len:] + ema3[-min_len:]
+
+
+def hma(prices: ArrayLike, period: int) -> np.ndarray:
+    """HMA 指标 (Hull Moving Average)"""
+    prices = _to_numpy_array(prices)
+    if _RUST_AVAILABLE:
+        return _hma(prices, period)
+    else:
+        if period < 4 or len(prices) < period:
+            return np.array([])
+        half = period // 2
+        sqrt_p = int(period ** 0.5)
+        if half < 2 or sqrt_p < 2:
+            return np.array([])
+        wma_half = wma(prices, half)
+        wma_full = wma(prices, period)
+        min_len = min(len(wma_half), len(wma_full))
+        if min_len == 0:
+            return np.array([])
+        diff = 2.0 * wma_half[-min_len:] - wma_full[-min_len:]
+        return wma(diff, sqrt_p)
+
+
+def roc(prices: ArrayLike, period: int) -> np.ndarray:
+    """ROC 指标 (Rate of Change)"""
+    prices = _to_numpy_array(prices)
+    if _RUST_AVAILABLE:
+        return _roc(prices, period)
+    else:
+        if period < 1 or len(prices) <= period:
+            return np.array([])
+        return (prices[period:] - prices[:-period]) / np.where(prices[:-period] != 0, prices[:-period], 1) * 100.0
+
+
+def natr(high: ArrayLike, low: ArrayLike, close: ArrayLike, period: int = 14) -> np.ndarray:
+    """NATR 指标 (Normalized Average True Range)"""
+    high = _to_numpy_array(high)
+    low = _to_numpy_array(low)
+    close = _to_numpy_array(close)
+    if _RUST_AVAILABLE:
+        return _natr(high, low, close, period)
+    else:
+        if period < 2 or len(high) < 2 or len(high) != len(low) or len(high) != len(close):
+            return np.array([])
+        atr_vals = atr(high, low, close, period)
+        if len(atr_vals) == 0:
+            return np.array([])
+        offset = len(close) - len(atr_vals)
+        c = close[offset + period - 1:]
+        min_len = min(len(atr_vals), len(c))
+        return atr_vals[:min_len] / np.where(c[:min_len] != 0, c[:min_len], 1) * 100.0
+
+
+def psar(high: ArrayLike, low: ArrayLike, close: ArrayLike, step: float = 0.02, max_step: float = 0.2) -> Dict[str, np.ndarray]:
+    """PSAR 指标 (Parabolic SAR)"""
+    high = _to_numpy_array(high)
+    low = _to_numpy_array(low)
+    close = _to_numpy_array(close)
+    if _RUST_AVAILABLE:
+        return _psar(high, low, close, step, max_step)
+    else:
+        n = len(high)
+        if n < 2 or n != len(low) or n != len(close):
+            return {'sar': np.array([]), 'trend': np.array([])}
+        sar = np.zeros(n)
+        trend = np.zeros(n, dtype=np.int32)
+        is_long = close[1] > close[0]
+        af = step
+        ep = high[1] if is_long else low[1]
+        sar[0] = low[0] if is_long else high[0]
+        trend[0] = 1 if is_long else -1
+        for i in range(1, n):
+            sar[i] = sar[i-1] + af * (ep - sar[i-1])
+            if is_long:
+                if i >= 2:
+                    sar[i] = min(sar[i], low[i-1], low[i-2])
+                sar[i] = min(sar[i], low[i])
+                if low[i] < sar[i]:
+                    is_long = False
+                    sar[i] = ep
+                    af = step
+                    ep = low[i]
+                else:
+                    if high[i] > ep:
+                        ep = high[i]
+                        af = min(af + step, max_step)
+            else:
+                if i >= 2:
+                    sar[i] = max(sar[i], high[i-1], high[i-2])
+                sar[i] = max(sar[i], high[i])
+                if high[i] > sar[i]:
+                    is_long = True
+                    sar[i] = ep
+                    af = step
+                    ep = high[i]
+                else:
+                    if low[i] < ep:
+                        ep = low[i]
+                        af = min(af + step, max_step)
+            trend[i] = 1 if is_long else -1
+        return {'sar': sar, 'trend': trend}
+
+
 # 导出所有指标
 __all__ = [
     'ma',
     'ema',
+    'dema',
+    'tema',
+    'hma',
+    'wma',
+    'roc',
     'macd',
     'rsi',
     'bollinger_bands',
     'atr',
+    'natr',
     'cci',
     'kdj',
     'obv',
     'williams_r',
     'adx',
+    'stochastic',
+    'vwap',
+    'psar',
 ]

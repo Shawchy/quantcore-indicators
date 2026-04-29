@@ -98,19 +98,14 @@ async def get_data_source_metrics(
             "rate_limiters": {},
             "circuit_breakers": {},
             "requests": {}
-            }
-    except Exception as e:
-        logger.error(f"获取交易日历状态失败：{e}")
-        raise HTTPException(status_code=500, detail="获取交易日历状态失败")
+        }
         
-        # 限流器统计
         for source, limiter in rate_limiters.items():
-        metrics["rate_limiters"][source] = limiter.get_stats()
-    
-    # 断路器统计
-    for source, breaker in circuit_breakers.items():
-        metrics["circuit_breakers"][source] = breaker.get_stats()
-    
+            metrics["rate_limiters"][source] = limiter.get_stats()
+        
+        for source, breaker in circuit_breakers.items():
+            metrics["circuit_breakers"][source] = breaker.get_stats()
+        
         return metrics
     except Exception as e:
         logger.error(f"获取数据源指标失败：{e}")
@@ -124,12 +119,11 @@ async def get_cache_metrics(
     """获取缓存详细指标"""
     try:
         cache_stats = cache_manager.get_all_stats()
-    
-    # 更新 Prometheus 指标
-    for cache_type, stats in cache_stats.items():
-        hit_rate = stats["hits"] / (stats["hits"] + stats["misses"]) if (stats["hits"] + stats["misses"]) > 0 else 0
-        MetricsCollector.record_cache_hit_rate(cache_type, hit_rate)
-    
+        
+        for cache_type, stats in cache_stats.items():
+            hit_rate = stats["hits"] / (stats["hits"] + stats["misses"]) if (stats["hits"] + stats["misses"]) > 0 else 0
+            MetricsCollector.record_cache_hit_rate(cache_type, hit_rate)
+        
         return cache_stats
     except Exception as e:
         logger.error(f"获取缓存指标失败：{e}")
@@ -142,36 +136,34 @@ async def get_storage_metrics():
     try:
         from pathlib import Path
         import os
-    
-    storage_info = {
-        "sqlite": {},
-        "parquet": {},
-        "total_size_mb": 0
-    }
-    
-    # SQLite 数据库信息
-    sqlite_path = Path("./data/sqlite/quant.db")
-    if sqlite_path.exists():
-        storage_info["sqlite"] = {
-            "path": str(sqlite_path),
-            "size_mb": round(sqlite_path.stat().st_size / 1024 / 1024, 2),
-            "exists": True
-        }
-        storage_info["total_size_mb"] += storage_info["sqlite"]["size_mb"]
-    
-    # Parquet 文件信息
-    parquet_path = Path("./data/stock/market/kline/daily")
-    if parquet_path.exists():
-        parquet_files = list(parquet_path.rglob("*.parquet"))
-        total_size = sum(f.stat().st_size for f in parquet_files)
         
-        storage_info["parquet"] = {
-            "path": str(parquet_path),
-            "file_count": len(parquet_files),
-            "total_size_mb": round(total_size / 1024 / 1024, 2)
+        storage_info = {
+            "sqlite": {},
+            "parquet": {},
+            "total_size_mb": 0
         }
-        storage_info["total_size_mb"] += storage_info["parquet"]["total_size_mb"]
-    
+        
+        sqlite_path = Path("./data/sqlite/quant.db")
+        if sqlite_path.exists():
+            storage_info["sqlite"] = {
+                "path": str(sqlite_path),
+                "size_mb": round(sqlite_path.stat().st_size / 1024 / 1024, 2),
+                "exists": True
+            }
+            storage_info["total_size_mb"] += storage_info["sqlite"]["size_mb"]
+        
+        parquet_path = Path("./data/stock/market/kline/daily")
+        if parquet_path.exists():
+            parquet_files = list(parquet_path.rglob("*.parquet"))
+            total_size = sum(f.stat().st_size for f in parquet_files)
+            
+            storage_info["parquet"] = {
+                "path": str(parquet_path),
+                "file_count": len(parquet_files),
+                "total_size_mb": round(total_size / 1024 / 1024, 2)
+            }
+            storage_info["total_size_mb"] += storage_info["parquet"]["total_size_mb"]
+        
         return storage_info
     except Exception as e:
         logger.error(f"获取存储指标失败：{e}")
@@ -233,25 +225,24 @@ async def get_metrics_summary(
             "cache": cache_manager.get_all_stats(),
             "storage": await get_storage_metrics()
         }
-    
-    # 数据源摘要
-    for source in rate_limiters.keys():
-        limiter_stats = rate_limiters[source].get_stats()
-        breaker_stats = circuit_breakers[source].get_stats()
         
-        summary["data_sources"][source] = {
-            "rate_limiter": {
-                "allowed": limiter_stats["allowed"],
-                "rejected": limiter_stats["rejected"],
-                "rejection_rate": limiter_stats["rejection_rate"]
-            },
-            "circuit_breaker": {
-                "state": breaker_stats["state"],
-                "failure_count": breaker_stats["failure_count"],
-                "success_rate": breaker_stats["success_rate"]
+        for source in rate_limiters.keys():
+            limiter_stats = rate_limiters[source].get_stats()
+            breaker_stats = circuit_breakers[source].get_stats()
+            
+            summary["data_sources"][source] = {
+                "rate_limiter": {
+                    "allowed": limiter_stats["allowed"],
+                    "rejected": limiter_stats["rejected"],
+                    "rejection_rate": limiter_stats["rejection_rate"]
+                },
+                "circuit_breaker": {
+                    "state": breaker_stats["state"],
+                    "failure_count": breaker_stats["failure_count"],
+                    "success_rate": breaker_stats["success_rate"]
+                }
             }
-        }
-    
+        
         return summary
     except Exception as e:
         logger.error(f"获取指标摘要失败：{e}")
@@ -265,15 +256,18 @@ async def get_trading_calendar_status(
     """获取交易日历状态"""
     try:
         status = trading_calendar.get_cache_status()
-    
-    latest_day = await trading_calendar.get_latest_trading_day()
-    recent_days = await trading_calendar.get_recent_trading_days(5)
-    
-    return {
-        "cache_status": status,
-        "latest_trading_day": latest_day,
-        "recent_trading_days": recent_days
-    }
+        
+        latest_day = await trading_calendar.get_latest_trading_day()
+        recent_days = await trading_calendar.get_recent_trading_days(5)
+        
+        return {
+            "cache_status": status,
+            "latest_trading_day": latest_day,
+            "recent_trading_days": recent_days
+        }
+    except Exception as e:
+        logger.error(f"获取交易日历状态失败：{e}")
+        raise HTTPException(status_code=500, detail="获取交易日历状态失败")
 
 
 @router.post("/trading-calendar/refresh")
@@ -283,9 +277,12 @@ async def refresh_trading_calendar(
     """强制刷新交易日历数据"""
     try:
         success = await trading_calendar.force_refresh()
-    
-    return {
-        "success": success,
-        "message": "交易日历刷新成功" if success else "交易日历刷新失败",
-        "status": trading_calendar.get_cache_status()
-    }
+        
+        return {
+            "success": success,
+            "message": "交易日历刷新成功" if success else "交易日历刷新失败",
+            "status": trading_calendar.get_cache_status()
+        }
+    except Exception as e:
+        logger.error(f"刷新交易日历失败：{e}")
+        raise HTTPException(status_code=500, detail="刷新交易日历失败")

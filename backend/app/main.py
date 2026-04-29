@@ -33,8 +33,11 @@ sys.stderr = _old_stderr
 
 
 def setup_logging():
-    log_path = Path(settings.LOG_FILE)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    import os
+    from pathlib import Path
+    
+    log_dir = os.path.dirname(settings.LOG_FILE)
+    os.makedirs(log_dir, exist_ok=True)
     
     def pandas_warning_filter(record):
         if 'Pandas4Warning' in record['message']:
@@ -50,15 +53,19 @@ def setup_logging():
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
         filter=pandas_warning_filter
     )
-    logger.add(
-        settings.LOG_FILE,
-        rotation="10 MB",
-        retention="7 days",
-        level=settings.LOG_LEVEL,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        filter=pandas_warning_filter,
-        enqueue=True
-    )
+    
+    try:
+        logger.add(
+            settings.LOG_FILE,
+            rotation="10 MB",
+            retention="7 days",
+            level=settings.LOG_LEVEL,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+            filter=pandas_warning_filter,
+            enqueue=True
+        )
+    except (FileNotFoundError, OSError) as e:
+        logger.warning(f"无法创建日志文件 {settings.LOG_FILE}: {e}，仅使用控制台日志")
 
 
 @asynccontextmanager

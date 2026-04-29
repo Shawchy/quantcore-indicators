@@ -1,281 +1,190 @@
-//! PyO3 Python 绑定模块 (PyO3 0.28 版本)
-//!
-//! 将 Rust 核心计算功能暴露给 Python
-
-use numpy::{IntoPyArray, PyArray1, PyArrayMethods};
+use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::PyDict;
 
-use crate::{adx, atr, bollinger_bands, cci, ema, kdj, ma, macd, obv, rsi, williams_r};
+use crate::{adx, atr, bollinger_bands, cci, dema, ema, hma, kdj, ma, macd, natr, obv, psar, roc, rsi, tema, williams_r, vwap, wma, stochastic};
 
-/// 辅助函数：从 Python 对象提取价格向量
-pub fn extract_prices(prices: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
-    if let Ok(array) = prices.cast::<PyArray1<f64>>() {
-        return Ok(array.to_vec()?);
-    }
-
-    if let Ok(array) = prices.cast::<PyArray1<i64>>() {
-        return Ok(array.to_vec()?.into_iter().map(|v| v as f64).collect());
-    }
-
-    if let Ok(list) = prices.cast::<PyList>() {
-        let mut vec = Vec::with_capacity(list.len());
-        for item in list.iter() {
-            vec.push(item.extract::<f64>().or_else(|_| item.extract::<i64>().map(|v| v as f64))?);
-        }
-        return Ok(vec);
-    }
-
-    Err(pyo3::exceptions::PyTypeError::new_err(
-        "prices 必须是 numpy 数组或列表",
-    ))
-}
-
-pub fn extract_volume(volume: &Bound<'_, PyAny>) -> PyResult<Vec<i64>> {
-    if let Ok(array) = volume.cast::<PyArray1<i64>>() {
-        return Ok(array.to_vec()?);
-    }
-
-    if let Ok(array) = volume.cast::<PyArray1<f64>>() {
-        return Ok(array.to_vec()?.into_iter().map(|v| v as i64).collect());
-    }
-
-    if let Ok(list) = volume.cast::<PyList>() {
-        let mut vec = Vec::with_capacity(list.len());
-        for item in list.iter() {
-            vec.push(item.extract::<f64>().map(|v| v as i64)?);
-        }
-        return Ok(vec);
-    }
-
-    Err(pyo3::exceptions::PyTypeError::new_err(
-        "volume 必须是 numpy 数组或列表",
-    ))
-}
-
-/// 移动平均 (Moving Average)
 #[pyfunction]
 #[pyo3(signature = (prices, period))]
-fn ma_py<'py>(
-    py: Python<'py>,
-    prices: &Bound<'_, PyAny>,
-    period: usize,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let prices_vec = extract_prices(prices)?;
-    let result = ma(&prices_vec, period);
+fn ma_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = ma(prices.as_slice()?, period);
     Ok(result.into_pyarray(py))
 }
 
-/// 指数移动平均 (Exponential Moving Average)
 #[pyfunction]
 #[pyo3(signature = (prices, period))]
-fn ema_py<'py>(
-    py: Python<'py>,
-    prices: &Bound<'_, PyAny>,
-    period: usize,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let prices_vec = extract_prices(prices)?;
-    let result = ema(&prices_vec, period);
+fn ema_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = ema(prices.as_slice()?, period);
     Ok(result.into_pyarray(py))
 }
 
-/// MACD 指标
+#[pyfunction]
+#[pyo3(signature = (prices, period))]
+fn dema_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = dema(prices.as_slice()?, period);
+    Ok(result.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (prices, period))]
+fn tema_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = tema(prices.as_slice()?, period);
+    Ok(result.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (prices, period))]
+fn hma_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = hma(prices.as_slice()?, period);
+    Ok(result.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (prices, period))]
+fn roc_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = roc(prices.as_slice()?, period);
+    Ok(result.into_pyarray(py))
+}
+
 #[pyfunction]
 #[pyo3(signature = (prices, fast=12, slow=26, signal=9))]
-fn macd_py(
-    py: Python,
-    prices: &Bound<'_, PyAny>,
-    fast: usize,
-    slow: usize,
-    signal: usize,
-) -> PyResult<Py<PyAny>> {
-    let prices_vec = extract_prices(prices)?;
-    let result = macd(&prices_vec, fast, slow, signal);
-
+fn macd_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, fast: usize, slow: usize, signal: usize) -> PyResult<Bound<'py, PyDict>> {
+    let result = macd(prices.as_slice()?, fast, slow, signal);
     let dict = PyDict::new(py);
     dict.set_item("macd", result.macd.into_pyarray(py))?;
     dict.set_item("signal", result.signal.into_pyarray(py))?;
     dict.set_item("histogram", result.histogram.into_pyarray(py))?;
-
-    Ok(dict.unbind().into_any())
+    Ok(dict)
 }
 
-/// RSI 指标
 #[pyfunction]
 #[pyo3(signature = (prices, period=14))]
-fn rsi_py<'py>(
-    py: Python<'py>,
-    prices: &Bound<'_, PyAny>,
-    period: usize,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let prices_vec = extract_prices(prices)?;
-    let result = rsi(&prices_vec, period);
+fn rsi_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = rsi(prices.as_slice()?, period);
     Ok(result.into_pyarray(py))
 }
 
-/// 布林带指标
 #[pyfunction]
 #[pyo3(signature = (prices, period=20, std_dev=2.0))]
-fn bollinger_bands_py(
-    py: Python,
-    prices: &Bound<'_, PyAny>,
-    period: usize,
-    std_dev: f64,
-) -> PyResult<Py<PyAny>> {
-    let prices_vec = extract_prices(prices)?;
-    let result = bollinger_bands(&prices_vec, period, std_dev);
-
+fn bollinger_bands_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize, std_dev: f64) -> PyResult<Bound<'py, PyDict>> {
+    let result = bollinger_bands(prices.as_slice()?, period, std_dev);
     let dict = PyDict::new(py);
     dict.set_item("upper", result.upper.into_pyarray(py))?;
     dict.set_item("middle", result.middle.into_pyarray(py))?;
     dict.set_item("lower", result.lower.into_pyarray(py))?;
-
-    Ok(dict.unbind().into_any())
+    Ok(dict)
 }
 
-/// ATR 指标
 #[pyfunction]
 #[pyo3(signature = (high, low, close, period=14))]
-fn atr_py<'py>(
-    py: Python<'py>,
-    high: &Bound<'_, PyAny>,
-    low: &Bound<'_, PyAny>,
-    close: &Bound<'_, PyAny>,
-    period: usize,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let high_vec = extract_prices(high)?;
-    let low_vec = extract_prices(low)?;
-    let close_vec = extract_prices(close)?;
-
-    let result = atr(&high_vec, &low_vec, &close_vec, period);
+fn atr_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = atr(high.as_slice()?, low.as_slice()?, close.as_slice()?, period);
     Ok(result.into_pyarray(py))
 }
 
-/// CCI 指标
+#[pyfunction]
+#[pyo3(signature = (high, low, close, period=14))]
+fn natr_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = natr(high.as_slice()?, low.as_slice()?, close.as_slice()?, period);
+    Ok(result.into_pyarray(py))
+}
+
 #[pyfunction]
 #[pyo3(signature = (high, low, close, period=20))]
-fn cci_py<'py>(
-    py: Python<'py>,
-    high: &Bound<'_, PyAny>,
-    low: &Bound<'_, PyAny>,
-    close: &Bound<'_, PyAny>,
-    period: usize,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let high_vec = extract_prices(high)?;
-    let low_vec = extract_prices(low)?;
-    let close_vec = extract_prices(close)?;
-
-    let result = cci(&high_vec, &low_vec, &close_vec, period);
+fn cci_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = cci(high.as_slice()?, low.as_slice()?, close.as_slice()?, period);
     Ok(result.into_pyarray(py))
 }
 
-/// KDJ 指标
 #[pyfunction]
 #[pyo3(signature = (high, low, close, n=9, m1=3, m2=3))]
-fn kdj_py(
-    py: Python,
-    high: &Bound<'_, PyAny>,
-    low: &Bound<'_, PyAny>,
-    close: &Bound<'_, PyAny>,
-    n: usize,
-    m1: usize,
-    m2: usize,
-) -> PyResult<Py<PyAny>> {
-    let high_vec = extract_prices(high)?;
-    let low_vec = extract_prices(low)?;
-    let close_vec = extract_prices(close)?;
-
-    let result = kdj(&high_vec, &low_vec, &close_vec, n, m1, m2);
-
+fn kdj_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, n: usize, m1: usize, m2: usize) -> PyResult<Bound<'py, PyDict>> {
+    let result = kdj(high.as_slice()?, low.as_slice()?, close.as_slice()?, n, m1, m2);
     let dict = PyDict::new(py);
     dict.set_item("k", result.k.into_pyarray(py))?;
     dict.set_item("d", result.d.into_pyarray(py))?;
     dict.set_item("j", result.j.into_pyarray(py))?;
-
-    Ok(dict.unbind().into_any())
+    Ok(dict)
 }
 
-/// OBV 指标
 #[pyfunction]
 #[pyo3(signature = (close, volume))]
-fn obv_py<'py>(
-    py: Python<'py>,
-    close: &Bound<'_, PyAny>,
-    volume: &Bound<'_, PyAny>,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let close_vec = extract_prices(close)?;
-    let volume_vec = extract_volume(volume)?;
-
-    let result = obv(&close_vec, &volume_vec);
+fn obv_py<'py>(py: Python<'py>, close: PyReadonlyArray1<'_, f64>, volume: PyReadonlyArray1<'_, f64>) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = obv(close.as_slice()?, volume.as_slice()?);
     Ok(result.into_pyarray(py))
 }
 
-/// Williams %R 指标
 #[pyfunction]
 #[pyo3(signature = (high, low, close, period=14))]
-fn williams_r_py<'py>(
-    py: Python<'py>,
-    high: &Bound<'_, PyAny>,
-    low: &Bound<'_, PyAny>,
-    close: &Bound<'_, PyAny>,
-    period: usize,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let high_vec = extract_prices(high)?;
-    let low_vec = extract_prices(low)?;
-    let close_vec = extract_prices(close)?;
-
-    let result = williams_r(&high_vec, &low_vec, &close_vec, period);
+fn williams_r_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = williams_r(high.as_slice()?, low.as_slice()?, close.as_slice()?, period);
     Ok(result.into_pyarray(py))
 }
 
-/// ADX 指标
 #[pyfunction]
 #[pyo3(signature = (high, low, close, period=14))]
-fn adx_py<'py>(
-    py: Python<'py>,
-    high: &Bound<'_, PyAny>,
-    low: &Bound<'_, PyAny>,
-    close: &Bound<'_, PyAny>,
-    period: usize,
-) -> PyResult<Bound<'py, PyArray1<f64>>> {
-    let high_vec = extract_prices(high)?;
-    let low_vec = extract_prices(low)?;
-    let close_vec = extract_prices(close)?;
-
-    let result = adx(&high_vec, &low_vec, &close_vec, period);
+fn adx_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = adx(high.as_slice()?, low.as_slice()?, close.as_slice()?, period);
     Ok(result.into_pyarray(py))
 }
 
-/// Python 模块定义
+#[pyfunction]
+#[pyo3(signature = (prices, period))]
+fn wma_py<'py>(py: Python<'py>, prices: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = wma(prices.as_slice()?, period);
+    Ok(result.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (high, low, close, k_period=14, d_period=3))]
+fn stochastic_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, k_period: usize, d_period: usize) -> PyResult<Bound<'py, PyDict>> {
+    let result = stochastic(high.as_slice()?, low.as_slice()?, close.as_slice()?, k_period, d_period);
+    let dict = PyDict::new(py);
+    dict.set_item("k", result.k.into_pyarray(py))?;
+    dict.set_item("d", result.d.into_pyarray(py))?;
+    Ok(dict)
+}
+
+#[pyfunction]
+#[pyo3(signature = (high, low, close, volume))]
+fn vwap_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, volume: PyReadonlyArray1<'_, f64>) -> PyResult<Bound<'py, PyDict>> {
+    let result = vwap(high.as_slice()?, low.as_slice()?, close.as_slice()?, volume.as_slice()?);
+    let dict = PyDict::new(py);
+    dict.set_item("vwap", result.vwap.into_pyarray(py))?;
+    Ok(dict)
+}
+
+#[pyfunction]
+#[pyo3(signature = (high, low, close, step=0.02, max_step=0.2))]
+fn psar_py<'py>(py: Python<'py>, high: PyReadonlyArray1<'_, f64>, low: PyReadonlyArray1<'_, f64>, close: PyReadonlyArray1<'_, f64>, step: f64, max_step: f64) -> PyResult<Bound<'py, PyDict>> {
+    let result = psar(high.as_slice()?, low.as_slice()?, close.as_slice()?, step, max_step);
+    let dict = PyDict::new(py);
+    dict.set_item("sar", result.sar.into_pyarray(py))?;
+    dict.set_item("trend", result.trend.into_pyarray(py))?;
+    Ok(dict)
+}
+
 #[pymodule]
 pub fn quantcore_indicators(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ma_py, m)?)?;
     m.add_function(wrap_pyfunction!(ema_py, m)?)?;
+    m.add_function(wrap_pyfunction!(dema_py, m)?)?;
+    m.add_function(wrap_pyfunction!(tema_py, m)?)?;
+    m.add_function(wrap_pyfunction!(hma_py, m)?)?;
+    m.add_function(wrap_pyfunction!(wma_py, m)?)?;
+    m.add_function(wrap_pyfunction!(roc_py, m)?)?;
     m.add_function(wrap_pyfunction!(macd_py, m)?)?;
     m.add_function(wrap_pyfunction!(rsi_py, m)?)?;
     m.add_function(wrap_pyfunction!(bollinger_bands_py, m)?)?;
     m.add_function(wrap_pyfunction!(atr_py, m)?)?;
+    m.add_function(wrap_pyfunction!(natr_py, m)?)?;
     m.add_function(wrap_pyfunction!(cci_py, m)?)?;
     m.add_function(wrap_pyfunction!(kdj_py, m)?)?;
     m.add_function(wrap_pyfunction!(obv_py, m)?)?;
     m.add_function(wrap_pyfunction!(williams_r_py, m)?)?;
     m.add_function(wrap_pyfunction!(adx_py, m)?)?;
-
-    #[cfg(feature = "arrow-backend")]
-    {
-        m.add_function(wrap_pyfunction!(
-            crate::arrow_backend::ma_arrow_py,
-            m
-        )?)?;
-        m.add_function(wrap_pyfunction!(
-            crate::arrow_backend::ema_arrow_py,
-            m
-        )?)?;
-        m.add_function(wrap_pyfunction!(
-            crate::arrow_backend::rsi_arrow_py,
-            m
-        )?)?;
-    }
-
+    m.add_function(wrap_pyfunction!(stochastic_py, m)?)?;
+    m.add_function(wrap_pyfunction!(vwap_py, m)?)?;
+    m.add_function(wrap_pyfunction!(psar_py, m)?)?;
     Ok(())
 }

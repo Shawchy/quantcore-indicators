@@ -173,8 +173,8 @@ impl BacktestEngine {
             // 清除已完成的订单
             ctx.clear_filled_orders();
 
-            // 记录每日账户价值（使用 ctx 中的 portfolio）
-            let daily_value = ctx.portfolio.total_asset.to_f64().unwrap_or(0.0);
+            // 记录每日账户价值（使用 ctx 中的 portfolio，实时计算）
+            let daily_value = ctx.portfolio.total_value().to_f64().unwrap_or(0.0);
             self.portfolio_values.push(daily_value);
         }
 

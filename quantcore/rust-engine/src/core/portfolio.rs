@@ -115,6 +115,12 @@ impl Portfolio {
         self.cash - self.frozen_cash
     }
 
+    /// 实时计算总资产（现金 + 持仓市值）
+    fn total_value(&self) -> Decimal {
+        let current_market_value: Decimal = self.positions.values().map(|p| p.market_value).sum();
+        self.cash + current_market_value
+    }
+
     /// 获取仓位比例
     fn position_ratio(&self) -> Decimal {
         if self.total_asset == Decimal::ZERO {

@@ -81,7 +81,7 @@ impl RiskMonitor {
 
     /// 监控当前组合风险
     fn monitor(&self, portfolio: &Portfolio) -> RiskMetrics {
-        let total_value = portfolio.total_asset.to_f64().unwrap_or(0.0);
+        let total_value = portfolio.total_value().to_f64().unwrap_or(0.0);
         let available_cash = portfolio.available_cash().to_f64().unwrap_or(0.0);
         let cash_ratio = if total_value > 0.0 {
             available_cash / total_value

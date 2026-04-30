@@ -85,8 +85,8 @@ impl RiskManager {
             ));
         }
 
-        // 4. 检查回撤限制
-        let current_value = portfolio.total_asset;
+        // 4. 检查回撤限制（实时计算总资产）
+        let current_value = portfolio.total_value();
         if self.peak_value > Decimal::ZERO {
             let drawdown = (self.peak_value - current_value) / self.peak_value;
             if drawdown > self.max_drawdown_limit {

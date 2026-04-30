@@ -1,449 +1,314 @@
 # 统一数据适配器 API 参考
 
-**版本:** 1.0  
-**更新日期:** 2026-03-19
+**版本:** 2.0  
+**更新日期:** 2026-04-29
 
 ---
 
-## 📚 目录
+## 目录
 
 1. [快速开始](#快速开始)
-2. [核心类](#核心类)
-3. [使用示例](#使用示例)
-4. [配置选项](#配置选项)
+2. [DataSourceManager](#datasourcemanager)
+3. [DataSourceFactory](#datasourcefactory)
+4. [BaseDataAdapter](#basedataadapter)
+5. [数据模型](#数据模型)
+6. [使用示例](#使用示例)
 
 ---
 
-## 🚀 快速开始
-
-### 安装依赖
-```bash
-pip install pandas pandas-ta sqlalchemy pydantic efinance baostock
-```
+## 快速开始
 
 ### 基本用法
+
 ```python
-from app.adapters.unified_adapter import EFinanceUnifiedAdapter
+from app.adapters.factory import data_source_manager
 
-adapter = EFinanceUnifiedAdapter()
-await adapter.initialize()
-
-klines = await adapter.get_unified_kline(
+# 获取 K 线数据（自动故障转移）
+klines = await data_source_manager.get_kline(
     code="600000",
     start_date="2024-01-01",
-    end_date="2024-03-31"
+    end_date="2024-12-31",
+    adjust="qfq"
+)
+
+# 获取实时行情
+quote = await data_source_manager.get_realtime_quote("600000")
+
+# 获取股票列表
+stocks = await data_source_manager.get_stock_list()
+
+# 指定数据源
+klines = await data_source_manager.get_kline(
+    code="600000",
+    source_type="akshare"
 )
 ```
 
 ---
 
-## 🏗️ 核心类
+## DataSourceManager
 
-### UnifiedDataAdapter
+统一数据源管理器，核心业务接口。
 
-统一数据适配器基类（抽象类）
-
-#### 属性
-- `source_type: DataSourceType` - 数据源类型
-
-#### 方法
-
-##### `get_unified_kline()`
-获取统一格式 K 线数据
+### 获取方式
 
 ```python
-async def get_unified_kline(
-    code: str,
-    start_date: str,
-    end_date: str,
-    adjust_type: str = "qfq",
-    save_to_storage: bool = True,
-    calculate_indicators: bool = False
-) -> List[UnifiedKLine]
+from app.adapters.factory import data_source_manager
 ```
 
-**参数:**
-- `code` - 股票代码（如 "600000"）
-- `start_date` - 开始日期（"YYYY-MM-DD"）
-- `end_date` - 结束日期（"YYYY-MM-DD"）
-- `adjust_type` - 复权类型（"qfq"前复权，"hfq"后复权，"qfq"不复权）
-- `save_to_storage` - 是否保存到存储（默认 True）
-- `calculate_indicators` - 是否计算技术指标（默认 False）
+### 核心方法
 
-**返回:**
-- `List[UnifiedKLine]` - 统一格式 K 线数据列表
+#### 股票数据
 
-**示例:**
-```python
-klines = await adapter.get_unified_kline(
-    code="600000",
-    start_date="2024-01-01",
-    end_date="2024-03-31",
-    calculate_indicators=True
-)
-```
+| 方法 | 返回类型 | 说明 |
+|------|---------|------|
+| `get_stock_list(market=None, source_type=None)` | `list[StockBasicInfo]` | 获取股票列表 |
+| `get_stock_info(code, source_type=None)` | `Optional[StockBasicInfo]` | 获取股票信息 |
+| `get_kline(code, start_date, end_date, adjust, source_type=None)` | `list[KLineData]` | 获取 K 线数据 |
+| `get_market_index_kline(index_code, start_date, end_date, source_type=None)` | `list[KLineData]` | 获取指数 K 线 |
+| `get_realtime_quote(code, source_type=None)` | `Dict[str, Any]` | 获取实时行情 |
+| `get_market_realtime_quotes(market_types, source_type=None)` | `list` | 获取市场行情列表 |
 
-##### `get_unified_kline_batch()`
-批量获取 K 线数据
+#### 板块数据
 
-```python
-async def get_unified_kline_batch(
-    codes: List[str],
-    start_date: str,
-    end_date: str,
-    adjust_type: str = "qfq",
-    save_to_storage: bool = True,
-    max_concurrent: int = 3
-) -> Dict[str, List[UnifiedKLine]]
-```
+| 方法 | 返回类型 | 说明 |
+|------|---------|------|
+| `get_sector_list(sector_type, source_type=None)` | `list[SectorInfo]` | 获取板块列表 |
+| `get_sector_components(sector_code, source_type=None)` | `list[str]` | 获取板块成分股 |
 
-**参数:**
-- `codes` - 股票代码列表（如 ["600000", "000001"]）
-- `start_date` - 开始日期
-- `end_date` - 结束日期
-- `adjust_type` - 复权类型
-- `save_to_storage` - 是否保存到存储
-- `max_concurrent` - 最大并发数（默认 3）
+#### 筹码数据
 
-**返回:**
-- `Dict[str, List[UnifiedKLine]]` - 字典：{code: [KLineData]}
+| 方法 | 返回类型 | 说明 |
+|------|---------|------|
+| `get_chip_data(code, start_date, end_date, source_type=None)` | `list[ChipData]` | 获取筹码数据 |
 
-**示例:**
-```python
-results = await adapter.get_unified_kline_batch(
-    codes=["600000", "000001", "300750"],
-    start_date="2024-01-01",
-    end_date="2024-03-31",
-    max_concurrent=2
-)
-```
+#### 基金数据
 
-##### `validate_across_sources()`
-跨数据源一致性校验
+| 方法 | 返回类型 | 说明 |
+|------|---------|------|
+| `get_fund_codes(fund_type, source_type=None)` | `list[dict]` | 获取基金代码列表 |
+| `get_fund_base_info(fund_codes, source_type=None)` | `Union[FundInfo, list[FundInfo]]` | 获取基金基本信息 |
+| `get_fund_realtime_increase_rate(fund_codes, source_type=None)` | `Union[dict, list[dict]]` | 获取基金实时涨跌幅 |
+| `get_fund_quote_history(fund_code, pz, source_type=None)` | `list[dict]` | 获取基金历史行情 |
+| `get_fund_quote_history_multi(fund_codes, pz, source_type=None)` | `dict` | 获取多只基金历史行情 |
+| `get_fund_invest_position(fund_code, dates, source_type=None)` | `list[dict]` | 获取基金持仓 |
+| `get_fund_period_change(fund_code, source_type=None)` | `list[dict]` | 获取基金阶段涨跌幅 |
+| `get_fund_types_percentage(fund_code, dates, source_type=None)` | `list[dict]` | 获取基金持仓类型占比 |
 
-```python
-async def validate_across_sources(
-    code: str,
-    date: str,
-    other_adapter: 'UnifiedDataAdapter'
-) -> Dict[str, Any]
-```
+#### 资金流向
 
-**参数:**
-- `code` - 股票代码
-- `date` - 校验日期
-- `other_adapter` - 另一个数据源适配器
+| 方法 | 返回类型 | 说明 |
+|------|---------|------|
+| `get_today_bill(trade_date, source_type=None)` | `list` | 获取今日资金流向 |
+| `get_history_bill(code, start_date, end_date, source_type=None)` | `list` | 获取历史资金流向 |
 
-**返回:**
-- `Dict[str, Any]` - 校验结果（包含一致性比率、评分等）
+#### 财务数据
 
-**示例:**
-```python
-ef_adapter = EFinanceUnifiedAdapter()
-ak_adapter = AkShareUnifiedAdapter()
+| 方法 | 返回类型 | 说明 |
+|------|---------|------|
+| `get_top10_stock_holder_info(code, top, source_type=None)` | `list` | 获取前十大股东 |
 
-result = await ef_adapter.validate_across_sources(
-    code="600000",
-    date="2024-03-19",
-    other_adapter=ak_adapter
-)
+### 内部机制
 
-print(f"一致性：{result['consistency_ratio']:.2%}")
-```
+- **故障转移**：`_try_sources(data_type, method_name, *args, **kwargs)` — 按优先级尝试多个数据源
+- **动态优先级**：`_get_source_priority(data_type)` — 根据数据类型获取优先级列表
+- **批量优化**：集成 `BatchRequestOptimizer`
+- **智能预加载**：集成 `SmartPreloader`
 
-##### `check_health()`
-检查数据源健康状态
+---
+
+## DataSourceFactory
+
+数据源工厂，管理适配器实例的创建和缓存。
+
+### 核心方法
+
+| 方法 | 说明 |
+|------|------|
+| `async initialize(default_source=None)` | 初始化所有启用的适配器 |
+| `get_adapter(source_type=None)` | 获取适配器（支持降级） |
+| `get_available_sources()` | 获取可用数据源列表 |
+| `async close_all()` | 关闭所有适配器 |
+
+### 适配器注册
 
 ```python
-async def check_health() -> Dict[str, Any]
-```
-
-**返回:**
-- `Dict[str, Any]` - 健康状态（status, latency, error_rate 等）
-
-**示例:**
-```python
-health = await adapter.check_health()
-print(f"状态：{health.get('status')}")
+_ADAPTER_CLASSES = {
+    DataSourceType.AKSHARE: AkShareAdapter,
+    DataSourceType.BAOSTOCK: BaostockAdapter,
+    DataSourceType.EFINANCE: EFinanceAdapter,
+    DataSourceType.TICKFLOW: TickFlowAdapter,
+    DataSourceType.YFINANCE: YFinanceAdapter,
+}
 ```
 
 ---
 
-### UnifiedKLine
+## BaseDataAdapter
 
-统一 K 线数据模型
+所有数据源适配器的抽象基类。
 
-#### 字段
-- `code: str` - 股票代码
-- `date: str` - 日期
-- `open: float` - 开盘价
-- `high: float` - 最高价
-- `low: float` - 最低价
-- `close: float` - 收盘价
-- `pre_close: Optional[float]` - 昨收价
-- `volume: float` - 成交量
-- `amount: Optional[float]` - 成交额
-- `turnover_rate: Optional[float]` - 换手率
-- `adjust_type: AdjustType` - 复权类型
-- `source: DataSourceType` - 数据源
-- `quality_score: float` - 质量评分
+### 抽象方法（子类必须实现）
 
-**示例:**
-```python
-kline = UnifiedKLine(
-    code="600000",
-    date="2024-03-19",
-    open=10.5,
-    high=10.8,
-    low=10.4,
-    close=10.7,
-    volume=5000000,
-    amount=52500000,
-    turnover_rate=2.5
-)
-```
+| 方法 | 说明 |
+|------|------|
+| `source_type -> DataSourceType` | 返回数据源类型枚举 |
+| `async initialize() -> bool` | 初始化适配器 |
+| `async close() -> None` | 关闭适配器 |
+| `async get_stock_list(market) -> List[StockBasicInfo]` | 获取股票列表 |
+| `async get_stock_info(code) -> Optional[StockBasicInfo]` | 获取股票信息 |
+| `async get_kline(code, start_date, end_date, adjust, period) -> List[KLineData]` | 获取 K 线数据 |
+
+### 内置功能
+
+- **智能缓存**：`_get_from_cache()` / `_save_to_cache()` — TTL 过期 + LRU 淘汰
+- **持久化**：`_get_from_sqlite()` / `_save_to_parquet()` — SQLite + Parquet 双存储
+- **异步上下文**：`async with adapter:` 支持
+
+### 适配器实现
+
+| 适配器 | 数据源 | 特点 |
+|--------|--------|------|
+| `EFinanceAdapter` | 东方财富 | 默认主力，TLS 指纹 + 凭证注入 |
+| `AkShareAdapter` | 开源财经 | 122+ 接口，TLS 指纹 + 凭证注入 |
+| `BaostockAdapter` | 证券宝 | 稳定历史数据 |
+| `TickFlowAdapter` | 专业数据 | WebSocket 实时推送 |
+| `YFinanceAdapter` | Yahoo | 海外市场 |
+| `UnifiedDataAdapter` | AKShare + Playwright | API/浏览器自动降级 |
 
 ---
 
-### DataSourceFactory
+## 数据模型
 
-数据源工厂类
+### 适配器层数据模型 (dataclass)
 
-#### 方法
+#### StockBasicInfo
 
-##### `get_unified_adapter()`
-获取统一适配器
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `code` | str | 股票代码 |
+| `name` | str | 股票名称 |
+| `market` | str | 市场 |
+| `industry` | str | 行业 |
+| `sector` | str | 板块 |
+| `area` | str | 地区 |
+| `list_date` | str | 上市日期 |
+| `total_shares` | float | 总股本 |
+| `float_shares` | float | 流通股本 |
 
-```python
-@classmethod
-def get_unified_adapter(cls, source_type: Optional[str] = None) -> UnifiedDataAdapter
-```
+#### KLineData
 
-**参数:**
-- `source_type` - 数据源类型（"efinance", "akshare", "baostock", "tickflow"）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `code` | str | 股票代码 |
+| `date` | str | 日期 |
+| `open` | float | 开盘价 |
+| `high` | float | 最高价 |
+| `low` | float | 最低价 |
+| `close` | float | 收盘价 |
+| `volume` | float | 成交量 |
+| `amount` | float | 成交额 |
+| `turnover_rate` | float | 换手率 |
+| `pre_close` | float | 昨收价 |
 
-**返回:**
-- `UnifiedDataAdapter` - 统一适配器实例
+#### MarketQuote
 
-**示例:**
-```python
-await DataSourceFactory.initialize()
-adapter = DataSourceFactory.get_unified_adapter("efinance")
-```
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `code` | str | 股票代码 |
+| `name` | str | 股票名称 |
+| `price` | float | 最新价 |
+| `change_pct` | float | 涨跌幅 |
+| `volume` | float | 成交量 |
+| `amount` | float | 成交额 |
+| `pe_ratio` | float | 市盈率 |
+| `total_market_cap` | float | 总市值 |
+| `float_market_cap` | float | 流通市值 |
 
-##### `get_adapter()`
-获取普通适配器（向后兼容）
+### 统一数据模型 (Pydantic)
 
-```python
-@classmethod
-def get_adapter(cls, source_type: Optional[str] = None) -> BaseDataAdapter
-```
+#### UnifiedKLine
 
-**示例:**
-```python
-adapter = DataSourceFactory.get_adapter("efinance")
-```
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `code` | str | 股票代码 |
+| `date` | str | 日期 |
+| `open/high/low/close` | float | OHLC |
+| `volume` | float | 成交量 |
+| `amount` | float | 成交额 |
+| `turnover_rate` | float | 换手率 |
+| `adjust_type` | AdjustType | 复权类型 |
+| `source` | DataSourceType | 数据来源 |
+| `quality_score` | float | 质量评分 |
+
+#### AdjustType 枚举
+
+| 值 | 说明 |
+|----|------|
+| `QFQ` | 前复权 |
+| `HFQ` | 后复权 |
+| `NONE` | 不复权 |
+
+#### MarketType 枚举
+
+| 值 | 说明 |
+|----|------|
+| `SH` | 上海 |
+| `SZ` | 深圳 |
+| `BJ` | 北京 |
 
 ---
 
-## 📖 使用示例
+## 使用示例
 
-### 示例 1: 基本 K 线获取
+### 基本数据获取
 
 ```python
-from app.adapters.unified_adapter import EFinanceUnifiedAdapter
+from app.adapters.factory import data_source_manager
 
-adapter = EFinanceUnifiedAdapter()
-await adapter.initialize()
-
-klines = await adapter.get_unified_kline(
+klines = await data_source_manager.get_kline(
     code="600000",
     start_date="2024-01-01",
-    end_date="2024-03-31"
+    end_date="2024-12-31",
+    adjust="qfq"
 )
-
-for kline in klines:
-    print(f"{kline.date}: 开{kline.open} 收{kline.close}")
 ```
 
-### 示例 2: 带技术指标
+### 指定数据源
 
 ```python
-klines = await adapter.get_unified_kline(
+klines = await data_source_manager.get_kline(
     code="600000",
     start_date="2024-01-01",
-    end_date="2024-03-31",
-    calculate_indicators=True
+    end_date="2024-12-31",
+    source_type="akshare"
 )
-
-# 指标数据已附加到 kline 对象
-# 可通过 DataFrame 访问
-df = adapter._klines_to_dataframe(klines)
-print(df.columns)  # 包含 ma5, ma10, macd 等指标列
 ```
 
-### 示例 3: 批量处理
-
-```python
-codes = ["600000", "000001", "300750"]
-results = await adapter.get_unified_kline_batch(
-    codes=codes,
-    start_date="2024-01-01",
-    end_date="2024-03-31",
-    max_concurrent=2
-)
-
-for code, klines in results.items():
-    print(f"{code}: {len(klines)} 条")
-```
-
-### 示例 4: 跨数据源校验
-
-```python
-from app.adapters.unified_adapter import EFinanceUnifiedAdapter, AkShareUnifiedAdapter
-
-ef_adapter = EFinanceUnifiedAdapter()
-ak_adapter = AkShareUnifiedAdapter()
-
-result = await ef_adapter.validate_across_sources(
-    code="600000",
-    date="2024-03-19",
-    other_adapter=ak_adapter
-)
-
-print(f"一致性：{result['consistency_ratio']:.2%}")
-print(f"评分：{result['score']:.2f}")
-print(f"建议：{result['recommendations']}")
-```
-
-### 示例 5: 使用工厂
+### 直接使用适配器
 
 ```python
 from app.adapters.factory import DataSourceFactory
 
-# 初始化
 await DataSourceFactory.initialize()
-
-# 获取统一适配器
-adapter = DataSourceFactory.get_unified_adapter("efinance")
-
-# 或使用普通适配器
-normal_adapter = DataSourceFactory.get_adapter("efinance")
+adapter = DataSourceFactory.get_adapter("efinance")
+klines = await adapter.get_kline(code="600000", start_date="2024-01-01")
 ```
 
----
-
-## ⚙️ 配置选项
-
-### 存储配置
+### 批量优化
 
 ```python
-STORAGE_CONFIG = {
-    "hot_threshold_days": 90,  # 热数据阈值（天）
-    "parquet_base_dir": "./data/parquet",  # Parquet 基础目录
-    "cache_ttl": {
-        "realtime": 60,    # 实时数据缓存 TTL
-        "kline": 300,      # K 线数据缓存 TTL
-        "indicators": 300, # 指标数据缓存 TTL
-    }
-}
-```
+from app.adapters.batch_optimizer import DataSourceBatchAdapter
 
-### 指标配置
-
-```python
-INDICATORS_CONFIG = {
-    "prefer_talib": True,   # 优先使用 TA-Lib
-    "use_pandas_ta": True,  # 使用 pandas-ta
-}
-```
-
-### 数据源配置
-
-```python
-DATA_SOURCE_CONFIG = {
-    "health_check_interval": 300,  # 健康检查间隔（秒）
-    "consistency_tolerance": 0.01, # 一致性容差率（1%）
-    "priority": ["efinance", "akshare", "baostock", "tickflow", "tushare"],
-}
-```
-
----
-
-## 🔧 高级功能
-
-### 自定义存储路由
-
-```python
-from app.storage.storage_router import StorageRouter
-
-router = StorageRouter(hot_threshold_days=60)  # 自定义 60 天阈值
-
-await router.save_kline(
-    code="600000",
-    kline_data=kline_dict,
-    adjust_type="qfq"
+batch_adapter = DataSourceBatchAdapter(adapter)
+results = await batch_adapter.get_kline_batch(
+    codes=["600000", "000001", "300750"],
+    start_date="2024-01-01",
+    end_date="2024-12-31"
 )
 ```
 
-### 自定义指标计算
-
-```python
-from app.services.indicators_manager import IndicatorsManager
-
-manager = IndicatorsManager(prefer_talib=False)
-
-# 计算单一指标
-df = manager.calculate_ma(df, periods=[5, 10, 20])
-df = manager.calculate_macd(df)
-
-# 计算所有指标
-df = manager.calculate_all_indicators(df)
-```
-
-### 数据版本管理
-
-```python
-from app.storage.data_versioning import DataVersionManager
-
-version_mgr = DataVersionManager()
-
-# 记录版本
-await version_mgr.record_change(
-    code="600000",
-    change_type="update",
-    description="更新 K 线数据"
-)
-
-# 查询历史
-history = await version_mgr.get_history("600000")
-```
-
 ---
 
-## ❓ 常见问题
-
-### Q: 如何切换数据源？
-A: 使用 `DataSourceFactory.get_unified_adapter(source_type)`
-
-### Q: 指标计算需要多少数据？
-A: 建议至少 30 条，MACD 等指标需要更多数据
-
-### Q: 如何禁用自动存储？
-A: 设置 `save_to_storage=False`
-
-### Q: 并发数设置多少合适？
-A: 默认 3，可根据网络和数据源负载调整（建议 1-5）
-
----
-
-## 📞 支持
-
-- **文档:** `/backend/API_REFERENCE.md`
-- **测试:** `/backend/test_unified_integration.py`
-- **示例:** `/backend/integration_example.py`
-
----
-
-**文档版本:** 1.0  
-**最后更新:** 2026-03-19
+**文档版本:** 2.0  
+**最后更新:** 2026-04-29

@@ -138,34 +138,24 @@ const StockDetail = () => {
   
   // 后端返回格式：{success: true, data: {code, name, klines: [...]}}
   const klines = (() => {
-    if (!klineData) {
-      console.log('[StockDetail] klineData 为空')
-      return []
-    }
-    
-    console.log('[StockDetail] klineData:', klineData)
+    if (!klineData) return []
     
     // 检查是否有 success 字段（ResponseModel 格式）
     if ((klineData as any).success && (klineData as any).data) {
       const innerData = (klineData as any).data
-      console.log('[StockDetail] innerData:', innerData)
       
       // 检查 klines 字段
       if (innerData.klines && Array.isArray(innerData.klines)) {
-        console.log('[StockDetail] 使用结构：{success: true, data: {klines: [...]}}')
-        console.log('[StockDetail] klines 长度:', innerData.klines.length)
         return innerData.klines
       }
       
       // 检查 data.data 字段
       if (innerData.data && Array.isArray(innerData.data)) {
-        console.log('[StockDetail] 使用结构：{success: true, data: {data: [...]}}')
         return innerData.data
       }
       
       // 检查 data 本身是数组
       if (Array.isArray(innerData)) {
-        console.log('[StockDetail] 使用结构：{success: true, data: [...]}')
         return innerData
       }
     }
@@ -174,7 +164,6 @@ const StockDetail = () => {
     if ((klineData as any).data) {
       const innerData = (klineData as any).data
       if (innerData.klines && Array.isArray(innerData.klines)) {
-        console.log('[StockDetail] 使用结构：{data: {klines: [...]}}')
         return innerData.klines
       }
       if (Array.isArray(innerData)) {
@@ -182,7 +171,6 @@ const StockDetail = () => {
       }
     }
     
-    console.log('[StockDetail] 未识别的数据结构，返回空数组')
     return []
   })()
   
@@ -211,10 +199,7 @@ const StockDetail = () => {
 
   // 调试日志
   useEffect(() => {
-    console.log('[StockDetail] klines 长度:', klines.length)
-    if (klines.length > 0) {
-      console.log('[StockDetail] 第一条 kline:', klines[0])
-    }
+    // K线数据加载状态
   }, [klines])
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

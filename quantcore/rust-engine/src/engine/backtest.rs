@@ -153,7 +153,7 @@ impl BacktestEngine {
         // 遍历 K 线数据
         for bar in &bars {
             // 更新当前时间
-            ctx.current_time = bar.date.clone();
+            ctx.current_time = bar.timestamp.clone();
 
             // 获取策略上下文中的待处理订单
             let orders_to_process: Vec<Order> = ctx.get_pending_orders().to_vec();
@@ -174,7 +174,7 @@ impl BacktestEngine {
             ctx.clear_filled_orders();
 
             // 记录每日账户价值（使用 ctx 中的 portfolio）
-            let daily_value = ctx.portfolio.total_value().to_f64().unwrap_or(0.0);
+            let daily_value = ctx.portfolio.total_asset.to_f64().unwrap_or(0.0);
             self.portfolio_values.push(daily_value);
         }
 

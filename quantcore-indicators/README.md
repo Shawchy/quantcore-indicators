@@ -7,7 +7,7 @@
 - 🚀 **极致性能**: Rust 核心，比纯 Python 快 10-100 倍
 - 📊 **零拷贝**: Apache Arrow 列式内存，高效数据交换
 - 🐍 **Python 3.14 支持**: 完全兼容最新 Python 版本
-- 📈 **丰富指标**: 11 种常用技术指标，持续扩展
+- 📈 **丰富指标**: 21 种常用技术指标，持续扩展
 - 🔒 **类型安全**: Rust 强类型系统保证
 - 📦 **易于安装**: `pip install quantcore-indicators`
 - 🔧 **PyO3 0.28**: 使用最新的 Python-Rust 绑定技术
@@ -60,20 +60,29 @@ prices = np.random.rand(10000).tolist()
 ### 趋势指标
 - **MA** - 移动平均 (Simple Moving Average)
 - **EMA** - 指数移动平均 (Exponential Moving Average)
+- **WMA** - 加权移动平均 (Weighted Moving Average)
+- **DEMA** - 双指数移动平均 (Double EMA)
+- **TEMA** - 三指数移动平均 (Triple EMA)
+- **HMA** - Hull 移动平均 (Hull Moving Average)
 - **MACD** - 异同移动平均 (Moving Average Convergence Divergence)
 - **ADX** - 平均趋向指标 (Average Directional Index)
+- **ROC** - 变动率 (Rate of Change)
+- **PSAR** - 抛物线指标 (Parabolic SAR)
 
 ### 动量指标
 - **RSI** - 相对强弱指标 (Relative Strength Index)
 - **KDJ** - 随机指标 (KDJ Indicator)
 - **CCI** - 商品通道指标 (Commodity Channel Index)
 - **Williams %R** - 威廉指标 (Williams Percent Range)
+- **Stochastic** - 随机指标 (Stochastic Oscillator)
 
 ### 成交量指标
 - **OBV** - 能量潮 (On-Balance Volume)
+- **VWAP** - 成交量加权平均价 (Volume Weighted Average Price)
 
 ### 波动率指标
 - **ATR** - 平均真实波幅 (Average True Range)
+- **NATR** - 归一化真实波幅 (Normalized ATR)
 - **BOLL** - 布林带 (Bollinger Bands)
 
 ## 开发指南

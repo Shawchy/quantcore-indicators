@@ -3,20 +3,21 @@
 
 提供手动触发归档、压缩、清理的接口
 """
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
 from loguru import logger
 from typing import List
 
 from app.storage.lifecycle_manager import lifecycle_manager
+from app.api.deps import get_current_user
 
 
 router = APIRouter(prefix="/lifecycle", tags=["生命周期管理"])
 
 
 @router.post("/archive/{code}")
-async def archive_stock_data(code: str, background_tasks: BackgroundTasks):
+async def archive_stock_data(code: str, background_tasks: BackgroundTasks, _=Depends(get_current_user)):
     """
-    手动归档指定股票的数据
+    手动归档指定股票的数据 (需要认证)
     
     将 90 天前的数据从 SQLite 迁移到 Parquet
     """
@@ -30,9 +31,9 @@ async def archive_stock_data(code: str, background_tasks: BackgroundTasks):
 
 
 @router.post("/archive/batch")
-async def batch_archive_data(codes: List[str], background_tasks: BackgroundTasks):
+async def batch_archive_data(codes: List[str], background_tasks: BackgroundTasks, _=Depends(get_current_user)):
     """
-    批量归档多只股票的数据
+    批量归档多只股票的数据 (需要认证)
     """
     for code in codes:
         background_tasks.add_task(lifecycle_manager.auto_archive, code)
@@ -45,9 +46,9 @@ async def batch_archive_data(codes: List[str], background_tasks: BackgroundTasks
 
 
 @router.post("/compress/{code}/{year}")
-async def compress_stock_data(code: str, year: int, background_tasks: BackgroundTasks):
+async def compress_stock_data(code: str, year: int, background_tasks: BackgroundTasks, _=Depends(get_current_user)):
     """
-    手动压缩指定股票的冷数据
+    手动压缩指定股票的冷数据 (需要认证)
     
     将指定年份的 Parquet 文件压缩到归档目录
     """
@@ -66,9 +67,9 @@ async def compress_stock_data(code: str, year: int, background_tasks: Background
 
 
 @router.post("/cleanup/{code}")
-async def cleanup_stock_data(code: str, background_tasks: BackgroundTasks):
+async def cleanup_stock_data(code: str, background_tasks: BackgroundTasks, _=Depends(get_current_user)):
     """
-    手动清理指定股票的过期数据
+    手动清理指定股票的过期数据 (需要认证)
     
     删除超过 5 年的数据
     """
@@ -82,8 +83,8 @@ async def cleanup_stock_data(code: str, background_tasks: BackgroundTasks):
 
 
 @router.get("/stats")
-async def get_lifecycle_stats():
-    """获取生命周期管理统计信息"""
+async def get_lifecycle_stats(_=Depends(get_current_user)):
+    """获取生命周期管理统计信息 (需要认证)"""
     stats = lifecycle_manager.get_stats()
     
     return {
@@ -93,8 +94,8 @@ async def get_lifecycle_stats():
 
 
 @router.post("/stats/reset")
-async def reset_lifecycle_stats():
-    """重置生命周期管理统计信息"""
+async def reset_lifecycle_stats(_=Depends(get_current_user)):
+    """重置生命周期管理统计信息 (需要认证)"""
     lifecycle_manager.reset_stats()
     
     return {
@@ -104,9 +105,9 @@ async def reset_lifecycle_stats():
 
 
 @router.get("/classify/{date}")
-async def classify_data_by_date(date: str):
+async def classify_data_by_date(date: str, _=Depends(get_current_user)):
     """
-    根据日期对数据进行分层
+    根据日期对数据进行分层 (需要认证)
     
     返回数据所属的层级 (hot/warm/cold/expired)
     """
@@ -123,8 +124,8 @@ async def classify_data_by_date(date: str):
 
 
 @router.get("/config")
-async def get_lifecycle_config():
-    """获取生命周期配置"""
+async def get_lifecycle_config(_=Depends(get_current_user)):
+    """获取生命周期配置 (需要认证)"""
     return {
         "success": True,
         "data": lifecycle_manager.lifecycle_config

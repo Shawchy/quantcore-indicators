@@ -58,10 +58,10 @@ impl RiskManager {
                     OrderSide::Sell => current_position - order.quantity,
                 };
 
-                if new_quantity > limit.max_quantity {
+                if new_quantity > limit.max_volume {
                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                         "超出仓位限制：{} 当前 {} + 委托 {} > 上限 {}",
-                        order.symbol, current_position, order.quantity, limit.max_quantity
+                        order.symbol, current_position, order.quantity, limit.max_volume
                     )));
                 }
             }
@@ -86,7 +86,7 @@ impl RiskManager {
         }
 
         // 4. 检查回撤限制
-        let current_value = portfolio.total_value();
+        let current_value = portfolio.total_asset;
         if self.peak_value > Decimal::ZERO {
             let drawdown = (self.peak_value - current_value) / self.peak_value;
             if drawdown > self.max_drawdown_limit {

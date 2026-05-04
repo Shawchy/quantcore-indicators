@@ -59,11 +59,7 @@ async def get_limit_up_pool(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取涨停股池失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/limit-down-pool", response_model=ResponseModel[List[LimitDownStock]])
@@ -100,11 +96,7 @@ async def get_limit_down_pool(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取跌停股池失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/broken-limit-pool", response_model=ResponseModel[List[BrokenLimitStock]])
@@ -140,11 +132,7 @@ async def get_broken_limit_pool(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取炸板股池失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/high-low-statistics", response_model=ResponseModel[List[HighLowStatistics]])
@@ -180,8 +168,4 @@ async def get_high_low_statistics(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取创新高/新低统计失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

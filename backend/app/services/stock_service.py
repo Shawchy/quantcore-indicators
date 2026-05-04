@@ -46,9 +46,9 @@ class StockService:
         # 使用统一的 cache_service
         data = await cache_service.get_or_fetch(
             key=cache_key,
-            fetch_func=self._fetch_stock_basic_from_source,
+            fetch_func=lambda: self._fetch_stock_basic_from_source(code),
             data_type="kline",
-            use_l2=False  # 股票基本信息不使用 L2 数据库缓存
+            use_l2=False
         )
         
         if data is None:
@@ -636,24 +636,21 @@ class StockService:
         """
         cache_key = f"kline_weekly_{code}_{start_date}_{end_date}_{adjust}"
         
-        # 1. 尝试从缓存读取
         if use_cache:
-            cached = await cache_manager.get("kline", cache_key)
+            cached = await cache_service.get("kline", cache_key)
             if cached:
                 logger.info(f"周线缓存命中：{code}, {len(cached)} 条")
                 return cached
         
-        # 2. 从数据库读取
-        db_klines = await data_persistence.get_klines_from_db(
-            code, start_date, end_date, adjust
+        klines = await storage_service.get_kline(
+            code=code,
+            start_date=start_date or "1970-01-01",
+            end_date=end_date or datetime.now().strftime("%Y-%m-%d"),
+            adjust=adjust,
+            use_cache=False
         )
         
-        if db_klines and len(db_klines) >= 50:
-            # 数据库有足够数据，直接使用
-            logger.info(f"周线数据库命中：{code}, {len(db_klines)} 条")
-            klines = db_klines
-        else:
-            # 3. 数据库不足，从数据源拉取
+        if not klines or len(klines) < 50:
             logger.info(f"周线数据库不足，从数据源拉取：{code}")
             try:
                 klines = await data_source_manager.get_weekly_kline(code, start_date, end_date, adjust)
@@ -664,13 +661,14 @@ class StockService:
                 logger.error(f"获取周线数据失败 {code}: {e}")
                 klines = []
             
-            # 4. 保存到数据库（如果启用持久化）
             if persist and klines:
-                await data_persistence.save_klines(code, klines, adjust)
+                try:
+                    await storage_service.save_kline(code=code, klines=klines, adjust=adjust, sync_to_parquet=True)
+                except Exception as e:
+                    logger.warning(f"保存周线数据失败：{e}")
         
-        # 5. 更新缓存
         if use_cache and klines:
-            await cache_manager.set("kline", cache_key, klines)
+            await cache_service.set("kline", cache_key, klines)
         
         return klines
     
@@ -699,24 +697,21 @@ class StockService:
         """
         cache_key = f"kline_monthly_{code}_{start_date}_{end_date}_{adjust}"
         
-        # 1. 尝试从缓存读取
         if use_cache:
-            cached = await cache_manager.get("kline", cache_key)
+            cached = await cache_service.get("kline", cache_key)
             if cached:
                 logger.info(f"月线缓存命中：{code}, {len(cached)} 条")
                 return cached
         
-        # 2. 从数据库读取
-        db_klines = await data_persistence.get_klines_from_db(
-            code, start_date, end_date, adjust
+        klines = await storage_service.get_kline(
+            code=code,
+            start_date=start_date or "1970-01-01",
+            end_date=end_date or datetime.now().strftime("%Y-%m-%d"),
+            adjust=adjust,
+            use_cache=False
         )
         
-        if db_klines and len(db_klines) >= 20:
-            # 数据库有足够数据，直接使用
-            logger.info(f"月线数据库命中：{code}, {len(db_klines)} 条")
-            klines = db_klines
-        else:
-            # 3. 数据库不足，从数据源拉取
+        if not klines or len(klines) < 20:
             logger.info(f"月线数据库不足，从数据源拉取：{code}")
             try:
                 klines = await data_source_manager.get_monthly_kline(code, start_date, end_date, adjust)
@@ -727,13 +722,14 @@ class StockService:
                 logger.error(f"获取月线数据失败 {code}: {e}")
                 klines = []
             
-            # 4. 保存到数据库（如果启用持久化）
             if persist and klines:
-                await data_persistence.save_klines(code, klines, adjust)
+                try:
+                    await storage_service.save_kline(code=code, klines=klines, adjust=adjust, sync_to_parquet=True)
+                except Exception as e:
+                    logger.warning(f"保存月线数据失败：{e}")
         
-        # 5. 更新缓存
         if use_cache and klines:
-            await cache_manager.set("kline", cache_key, klines)
+            await cache_service.set("kline", cache_key, klines)
         
         return klines
 

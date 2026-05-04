@@ -414,7 +414,7 @@ class MarketTurnoverService:
             
             # 获取深市数据前再次限流
             logger.info(f"获取深市成交额数据（使用凭证注入 + 智能路由）...")
-            await self._rate_limit()
+            await asyncio.sleep(random.uniform(3.0, 5.0))
             df_sz = await self._fetch_with_anti_wind(
                 ak.stock_sz_a_spot_em,
                 use_credential=True,

@@ -59,11 +59,7 @@ async def get_financial_indicator(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取财务分析指标失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/history-dividend/{code}", response_model=ResponseModel[List[HistoricalDividend]])
@@ -96,11 +92,7 @@ async def get_history_dividend(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取历史分红数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/dividend-detail/{code}", response_model=ResponseModel[List[Dict[str, Any]]])
@@ -132,11 +124,7 @@ async def get_dividend_detail(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取分红详情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/financial-abstract/{code}", response_model=ResponseModel[List[Dict[str, Any]]])
@@ -171,8 +159,4 @@ async def get_financial_abstract(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取财务摘要失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

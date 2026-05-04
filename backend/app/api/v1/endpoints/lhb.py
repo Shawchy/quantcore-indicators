@@ -59,11 +59,7 @@ async def get_lhb_detail(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取龙虎榜详情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/institutional-stats", response_model=ResponseModel[List[InstitutionalTrading]])
@@ -99,11 +95,7 @@ async def get_institutional_stats(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取机构买卖统计失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/broker-ranking", response_model=ResponseModel[List[Dict[str, Any]]])
@@ -139,11 +131,7 @@ async def get_broker_ranking(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取营业部排行失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/sina-detail/{symbol}", response_model=ResponseModel[List[Dict[str, Any]]])
@@ -184,8 +172,4 @@ async def get_lhb_detail_sina(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取新浪龙虎榜详情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

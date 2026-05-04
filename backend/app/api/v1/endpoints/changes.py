@@ -51,11 +51,7 @@ async def get_stock_changes(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取盘口异动数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/board-changes", response_model=ResponseModel[List[Dict[str, Any]]])
@@ -93,8 +89,4 @@ async def get_board_changes(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取板块异动详情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

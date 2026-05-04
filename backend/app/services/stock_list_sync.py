@@ -6,6 +6,7 @@
 """
 import akshare as ak
 import pandas as pd
+import asyncio
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from loguru import logger
@@ -32,7 +33,7 @@ class StockListSync:
             logger.info(f"从 {self.source_name} 获取 A 股股票列表...")
             
             # 使用 akshare 直接获取股票列表
-            df = ak.stock_info_a_code_name()
+            df = await asyncio.to_thread(ak.stock_info_a_code_name)
             
             if df.empty:
                 logger.warning(f"{self.source_name} 返回空数据")

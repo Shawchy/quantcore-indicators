@@ -45,8 +45,4 @@ async def get_market_fund_flow(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取大盘资金流失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

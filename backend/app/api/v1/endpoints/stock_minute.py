@@ -110,11 +110,7 @@ async def get_sina_minute(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取新浪财经分时数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/em-minute", response_model=ResponseModel[List[StockZhAMinuteEM]])
@@ -244,8 +240,4 @@ async def get_em_minute(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取东方财富分时数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

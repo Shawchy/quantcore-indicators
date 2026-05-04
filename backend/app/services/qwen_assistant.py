@@ -326,8 +326,11 @@ MACD 柱 = 0.06
         """
         client = self._get_client()
         
-        # 异步调用
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         
         def _call():
             return client.chat(
@@ -343,7 +346,10 @@ MACD 柱 = 0.06
                 }
             )
         
-        response = await loop.run_in_executor(None, _call)
+        response = await asyncio.wait_for(
+            loop.run_in_executor(None, _call),
+            timeout=120
+        )
         
         # 提取响应内容
         if hasattr(response, 'message'):

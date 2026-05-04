@@ -52,11 +52,7 @@ async def get_lhb_detail(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取龙虎榜详情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/lhb-stock-statistic", response_model=ResponseModel[List[StockLhbStockStatisticEm]])
@@ -96,8 +92,4 @@ async def get_lhb_stock_statistic(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取个股上榜统计失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

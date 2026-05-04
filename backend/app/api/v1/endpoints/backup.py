@@ -3,13 +3,13 @@
 
 提供手动触发备份、恢复、查看备份列表的接口
 """
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 from loguru import logger
 
 from app.storage.backup_manager import backup_manager
-from app.api.deps import get_current_user
+from app.api.deps import CurrentAdminUser
 from app.core.security import get_password_hash
 
 
@@ -27,7 +27,7 @@ class RestoreRequest(BaseModel):
 
 
 @router.post("/create")
-async def create_backup(request: BackupRequest, background_tasks: BackgroundTasks, _=Depends(get_current_user)):
+async def create_backup(request: BackupRequest, background_tasks: BackgroundTasks, _=CurrentAdminUser):
     """
     手动创建备份 (需要认证)
     
@@ -59,7 +59,7 @@ async def create_backup(request: BackupRequest, background_tasks: BackgroundTask
 
 
 @router.post("/restore")
-async def restore_backup(request: RestoreRequest, background_tasks: BackgroundTasks, _=Depends(get_current_user)):
+async def restore_backup(request: RestoreRequest, background_tasks: BackgroundTasks, _=CurrentAdminUser):
     """
     从备份恢复数据 (需要认证)
     
@@ -77,7 +77,7 @@ async def restore_backup(request: RestoreRequest, background_tasks: BackgroundTa
 
 
 @router.get("/list")
-async def list_backups(_=Depends(get_current_user)):
+async def list_backups(_=CurrentAdminUser):
     """获取所有备份列表 (需要认证)"""
     backups = await backup_manager.list_backups()
     
@@ -89,7 +89,7 @@ async def list_backups(_=Depends(get_current_user)):
 
 
 @router.post("/cleanup")
-async def cleanup_old_backups(background_tasks: BackgroundTasks, _=Depends(get_current_user)):
+async def cleanup_old_backups(background_tasks: BackgroundTasks, _=CurrentAdminUser):
     """清理过期备份 (需要认证)"""
     background_tasks.add_task(backup_manager.cleanup_old_backups)
     
@@ -100,7 +100,7 @@ async def cleanup_old_backups(background_tasks: BackgroundTasks, _=Depends(get_c
 
 
 @router.get("/stats")
-async def get_backup_stats(_=Depends(get_current_user)):
+async def get_backup_stats(_=CurrentAdminUser):
     """获取备份统计信息 (需要认证)"""
     stats = backup_manager.get_stats()
     
@@ -111,7 +111,7 @@ async def get_backup_stats(_=Depends(get_current_user)):
 
 
 @router.get("/config")
-async def get_backup_config(_=Depends(get_current_user)):
+async def get_backup_config(_=CurrentAdminUser):
     """获取备份配置 (需要认证)"""
     return {
         "success": True,
@@ -120,7 +120,7 @@ async def get_backup_config(_=Depends(get_current_user)):
 
 
 @router.delete("/{backup_name}")
-async def delete_backup(backup_name: str, _=Depends(get_current_user)):
+async def delete_backup(backup_name: str, _=CurrentAdminUser):
     """
     删除指定备份 (需要认证)
     

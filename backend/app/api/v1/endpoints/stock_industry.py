@@ -63,11 +63,7 @@ async def get_industry_category(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取行业分类数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/industry-change", response_model=ResponseModel[List[StockIndustryChangeCNINFO]])
@@ -103,11 +99,7 @@ async def get_industry_change(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取行业归属变动数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 # ========== 申万行业信息 ==========
@@ -136,11 +128,7 @@ async def get_sw_index_first(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取申万一级行业信息失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/sw-index-second", response_model=ResponseModel[List[SWIndexSecond]])
@@ -167,11 +155,7 @@ async def get_sw_index_second(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取申万二级行业信息失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/sw-index-third", response_model=ResponseModel[List[SWIndexThird]])
@@ -198,11 +182,7 @@ async def get_sw_index_third(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取申万三级行业信息失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/sw-index-third-cons/{symbol}", response_model=ResponseModel[List[SWIndexThirdCons]])
@@ -235,8 +215,4 @@ async def get_sw_index_third_cons(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取申万三级行业成份失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

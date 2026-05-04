@@ -89,11 +89,7 @@ async def get_em_intraday(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取东方财富日内分时数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/sina-intraday", response_model=ResponseModel[List[StockIntradaySina]])
@@ -182,8 +178,4 @@ async def get_sina_intraday(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取新浪财经日内分时数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

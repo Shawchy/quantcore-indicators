@@ -212,7 +212,7 @@ class FinancialLLMRouter:
                 
                 # 如果不是最后一次尝试，等待后重试
                 if attempt < max_retries:
-                    wait_time = 2 ** attempt  # 指数退避：2s, 4s
+                    wait_time = 2 ** (attempt + 1)
                     logger.info(f"等待 {wait_time} 秒后重试...")
                     await asyncio.sleep(wait_time)
                     continue

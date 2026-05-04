@@ -10,6 +10,7 @@ from loguru import logger
 
 from app.monitoring.query_optimizer import query_optimizer
 from app.services.cache_service import cache_service
+from app.api.deps import CurrentAdminUser
 
 
 router = APIRouter(prefix="/performance", tags=["性能优化"])
@@ -30,7 +31,7 @@ class CachePolicyRequest(BaseModel):
 
 
 @router.get("/query/stats")
-async def get_query_stats():
+async def get_query_stats(admin: CurrentAdminUser):
     """获取查询统计信息"""
     stats = query_optimizer.get_query_stats()
     
@@ -41,7 +42,7 @@ async def get_query_stats():
 
 
 @router.get("/query/slow")
-async def get_slow_queries(threshold: Optional[float] = None):
+async def get_slow_queries(threshold: Optional[float] = None, admin: CurrentAdminUser = None):
     """获取慢查询列表"""
     slow_queries = query_optimizer.get_slow_queries(threshold)
     
@@ -53,7 +54,9 @@ async def get_slow_queries(threshold: Optional[float] = None):
 
 
 @router.post("/query/analyze")
-async def analyze_query(request: QueryAnalyzeRequest):
+async def analyze_query(request: QueryAnalyzeRequest, admin: CurrentAdminUser):
+    if any(kw in request.query.upper() for kw in ["DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE", "EXEC"]):
+        raise HTTPException(status_code=400, detail="不允许执行修改性SQL分析")
     """分析查询"""
     analysis = await query_optimizer.analyze_query(request.query)
     
@@ -64,7 +67,7 @@ async def analyze_query(request: QueryAnalyzeRequest):
 
 
 @router.get("/query/index-suggestions")
-async def get_index_suggestions():
+async def get_index_suggestions(admin: CurrentAdminUser = None):
     """获取索引建议"""
     suggestions = query_optimizer.get_index_suggestions()
     
@@ -75,7 +78,7 @@ async def get_index_suggestions():
 
 
 @router.post("/query/reset-stats")
-async def reset_query_stats():
+async def reset_query_stats(admin: CurrentAdminUser):
     """重置查询统计"""
     query_optimizer.reset_stats()
     
@@ -86,7 +89,7 @@ async def reset_query_stats():
 
 
 @router.get("/cache/stats")
-async def get_cache_stats():
+async def get_cache_stats(admin: CurrentAdminUser = None):
     """获取缓存统计信息"""
     stats = cache_service.get_cache_stats_for_api()
 
@@ -97,7 +100,7 @@ async def get_cache_stats():
 
 
 @router.post("/cache/warmup")
-async def warmup_cache(request: CacheWarmupRequest, background_tasks: BackgroundTasks):
+async def warmup_cache(request: CacheWarmupRequest, background_tasks: BackgroundTasks, admin: CurrentAdminUser):
     """缓存预热"""
     background_tasks.add_task(
         cache_service.warmup_cache_simple,
@@ -112,7 +115,7 @@ async def warmup_cache(request: CacheWarmupRequest, background_tasks: Background
 
 
 @router.post("/cache/clear")
-async def clear_cache(level: Optional[str] = None):
+async def clear_cache(level: Optional[str] = None, admin: CurrentAdminUser = None):
     """清空缓存"""
     await cache_service.clear_by_level(level)
 
@@ -123,7 +126,7 @@ async def clear_cache(level: Optional[str] = None):
 
 
 @router.get("/cache/policies")
-async def get_cache_policies():
+async def get_cache_policies(admin: CurrentAdminUser = None):
     """获取缓存策略"""
     policies = cache_service.get_policies()
 
@@ -134,7 +137,7 @@ async def get_cache_policies():
 
 
 @router.post("/cache/policy")
-async def set_cache_policy(request: CachePolicyRequest):
+async def set_cache_policy(request: CachePolicyRequest, admin: CurrentAdminUser):
     """设置缓存策略"""
     cache_service.set_policy(request.cache_type, request.policy)
 
@@ -145,7 +148,7 @@ async def set_cache_policy(request: CachePolicyRequest):
 
 
 @router.get("/overview")
-async def get_performance_overview():
+async def get_performance_overview(admin: CurrentAdminUser = None):
     """获取性能概览"""
     query_stats = query_optimizer.get_query_stats()
     cache_stats = cache_service.get_cache_stats_for_api()

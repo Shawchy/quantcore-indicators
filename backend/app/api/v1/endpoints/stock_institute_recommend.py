@@ -57,11 +57,7 @@ async def get_institute_recommend(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取机构推荐池失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/institute-recommend-detail", response_model=ResponseModel[List[StockInstituteRecommendDetail]])
@@ -92,11 +88,7 @@ async def get_institute_recommend_detail(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取股票评级记录失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/rank-forecast-cninfo", response_model=ResponseModel[List[StockRankForecastCninfo]])
@@ -128,8 +120,4 @@ async def get_rank_forecast_cninfo(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取投资评级失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

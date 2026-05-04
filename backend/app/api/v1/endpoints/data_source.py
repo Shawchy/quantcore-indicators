@@ -9,6 +9,7 @@ from datetime import datetime
 from loguru import logger
 
 from app.models.schemas import ResponseModel
+from app.api.deps import CurrentAdminUser
 
 router = APIRouter(prefix="/data-source", tags=["数据源管理"])
 
@@ -103,6 +104,7 @@ async def get_data_source_stats(source_name: str):
 async def switch_data_source(
     source_name: str = Query(..., description="数据源名称"),
     set_as_default: bool = Query(True, description="是否设为默认"),
+    admin: CurrentAdminUser = None
 ):
     """切换默认数据源"""
     from app.adapters.factory import data_source_manager

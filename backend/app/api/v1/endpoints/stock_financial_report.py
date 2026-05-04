@@ -49,11 +49,7 @@ async def get_zcfz(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取资产负债表失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/lrb", response_model=ResponseModel[List[StockLrbEM]])
@@ -82,11 +78,7 @@ async def get_lrb(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取利润表失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/xjll", response_model=ResponseModel[List[StockXjllEM]])
@@ -116,8 +108,4 @@ async def get_xjll(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取现金流量表失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

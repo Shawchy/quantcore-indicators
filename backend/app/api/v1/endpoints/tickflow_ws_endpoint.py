@@ -36,26 +36,25 @@ import json
 import uuid
 from typing import Dict, List, Any, Optional, Set
 from datetime import datetime
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException
 from loguru import logger
 
 router = APIRouter()
 
 
 class ConnectionManager:
-    """
-    WebSocket连接管理器
     
-    管理所有客户端的WebSocket连接，
-    处理订阅关系和数据分发。
-    """
+    MAX_CONNECTIONS = 200
     
     def __init__(self):
         self._connections: Dict[str, Dict] = {}
-        self._symbol_subscribers: Dict[str, Set[str]] = {}  # symbol -> {client_ids}
+        self._symbol_subscribers: Dict[str, Set[str]] = {}
         
     async def connect(self, websocket: WebSocket) -> str:
-        """接受新连接"""
+        if len(self._connections) >= self.MAX_CONNECTIONS:
+            await websocket.close(code=1013, reason="连接数已达上限")
+            raise HTTPException(status_code=503, detail="WebSocket连接数已达上限，请稍后重试")
+        
         await websocket.accept()
         client_id = str(uuid.uuid4())[:8]
         

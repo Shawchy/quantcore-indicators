@@ -14,8 +14,8 @@ router = APIRouter()
 
 @router.post("/query", response_model=ResponseModel[list])
 async def screen_stocks(
+    current_user: CurrentUser,
     conditions: dict = Body(..., description="选股条件"),
-    current_user: CurrentUser = Depends
 ):
     results = []
     
@@ -39,7 +39,7 @@ async def screen_stocks(
                 control_info = await chip_service.calculate_control_degree(stock["code"])
                 if control_info.get("control_degree", 0) < control_degree_min:
                     match = False
-            except:
+            except Exception:
                 match = False
         
         if match:
@@ -163,7 +163,7 @@ async def get_market_statistics(
 
 
 @router.get("/sector-stats/{sector_code}", response_model=ResponseModel[dict])
-async def get_sector_statistics(sector_code: str, current_user: CurrentUser = Depends):
+async def get_sector_statistics(sector_code: str, current_user: CurrentUser):
     components = await sector_service.get_sector_components(sector_code)
     leaders = await sector_service.get_sector_leaders(sector_code, 10)
     
@@ -175,7 +175,7 @@ async def get_sector_statistics(sector_code: str, current_user: CurrentUser = De
 
 
 @router.get("/preset-conditions", response_model=ResponseModel[list])
-async def get_preset_conditions(current_user: CurrentUser = Depends):
+async def get_preset_conditions(current_user: CurrentUser):
     return ResponseModel(data=[
         {
             "id": "low_pe",

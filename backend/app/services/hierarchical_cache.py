@@ -172,8 +172,18 @@ class HierarchicalCache:
             self._stats.misses += 1
             return None
         
+        if entry.value == "__NULL__":
+            if now > entry.expires_at:
+                async with self._lock:
+                    target_cache.pop(key, None)
+                self._stats.misses += 1
+                return None
+            self._stats.misses += 1
+            return None
+        
         if now > entry.expires_at:
-            del target_cache[key]
+            async with self._lock:
+                target_cache.pop(key, None)
             self._stats.misses += 1
             return None
         
@@ -301,8 +311,10 @@ class HierarchicalCache:
                 logger.info(f"数据源获取成功: {key} ({elapsed:.2f}ms)")
                 return (fresh_data, "fresh")
             else:
+                null_ttl = min(ttl_override or 300, 60)
+                await self.set(key, "__NULL__", data_type, null_ttl, CacheLevel.L1)
                 self._stats.misses += 1
-                logger.warning(f"数据源返回空: {key}")
+                logger.warning(f"数据源返回空（已缓存空值标记）: {key}")
                 return (None, "miss")
                 
         except Exception as e:
@@ -351,7 +363,7 @@ class HierarchicalCache:
                 ]
                 for k in keys_to_delete:
                     del cache[k]
-                    count += len(keys_to_delete)
+                count += len(keys_to_delete)
             
             elif data_type:
                 keys_to_delete = [
@@ -360,7 +372,7 @@ class HierarchicalCache:
                 ]
                 for k in keys_to_delete:
                     del cache[k]
-                    count += len(keys_to_delete)
+                count += len(keys_to_delete)
         
         if count > 0:
             logger.info(f"缓存失效: {count} 条 (key={key}, pattern={pattern}, type={data_type})")

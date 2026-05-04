@@ -46,11 +46,7 @@ async def get_restricted_detail(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取限售解禁详情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/restricted-queue", response_model=ResponseModel[List[Dict[str, Any]]])
@@ -90,11 +86,7 @@ async def get_restricted_queue(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取限售解禁批次失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/restricted-stockholder/{code}", response_model=ResponseModel[List[Dict[str, Any]]])
@@ -126,8 +118,4 @@ async def get_restricted_stockholder(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取解禁股东失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

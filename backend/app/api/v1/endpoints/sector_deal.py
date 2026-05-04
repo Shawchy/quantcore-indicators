@@ -66,11 +66,7 @@ async def get_szse_sector_summary(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取深交所股票行业成交失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/sse-deal-daily", response_model=ResponseModel[List[SSEDealDaily]])
@@ -124,11 +120,7 @@ async def get_sse_deal_daily(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取上交所每日概况失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/stock-info-em/{symbol}", response_model=ResponseModel[List[StockIndividualInfoEM]])
@@ -180,11 +172,7 @@ async def get_stock_info_em(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取东方财富个股信息失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/stock-info-xq/{symbol}", response_model=ResponseModel[List[StockIndividualBasicInfoXQ]])
@@ -272,8 +260,4 @@ async def get_stock_info_xq(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取雪球财经个股信息失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

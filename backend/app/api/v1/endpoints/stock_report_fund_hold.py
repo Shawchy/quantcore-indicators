@@ -63,11 +63,7 @@ async def get_report_fund_hold(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取基金持仓汇总失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/report-fund-hold-detail", response_model=ResponseModel[List[StockReportFundHoldDetail]])
@@ -105,8 +101,4 @@ async def get_report_fund_hold_detail(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取基金持仓明细失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

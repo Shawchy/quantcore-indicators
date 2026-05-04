@@ -143,8 +143,4 @@ async def get_pre_min(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取东方财富盘前分钟数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

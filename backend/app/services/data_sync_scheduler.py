@@ -71,8 +71,10 @@ class DataSyncScheduler:
                 )
                 
                 if now >= target_time:
-                    # 已经过了今天的目标时间，等待到明天
-                    await asyncio.sleep(24 * 3600)
+                    target_time = target_time + timedelta(days=1)
+                    delay = (target_time - now).total_seconds()
+                    logger.info(f"已过今日同步时间，等待至明日：{delay/3600:.1f}小时后执行")
+                    await asyncio.sleep(delay)
                     continue
                 
                 # 计算距离目标时间的秒数
@@ -143,7 +145,7 @@ class DataSyncScheduler:
             
             if not stock_list:
                 logger.warning("本地数据库无股票列表，先同步股票列表")
-                await self._do_sync_stock_list()
+                await self._sync_stock_list_daily()
                 stock_list = await local_db_service.get_stock_list_from_db()
             
             # 只同步前 N 只股票

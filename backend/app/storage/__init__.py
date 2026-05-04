@@ -13,6 +13,7 @@ from .sqlite import (
     RealtimeQuote,
     MarketRanking,
     MarketTurnover,
+    RevokedToken,
     init_database,
     get_session
 )
@@ -35,6 +36,7 @@ __all__ = [
     "RealtimeQuote",
     "MarketRanking",
     "MarketTurnover",
+    "RevokedToken",
     
     # Fund Models (migrated from local_database.py)
     "FundBasic",

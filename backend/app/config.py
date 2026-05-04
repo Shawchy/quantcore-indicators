@@ -34,8 +34,9 @@ class Settings(BaseSettings):
     """
     model_config = SettingsConfigDict(
         env_file=".env",
+        env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore"  # 忽略额外的环境变量
+        extra="ignore"
     )
     
     APP_NAME: str = "Quant Analysis System"
@@ -123,8 +124,8 @@ class Settings(BaseSettings):
     }
     
     # JWT 认证配置
-    # 强制要求设置 SECRET_KEY，不能使用默认值
-    SECRET_KEY: str = os.getenv("QUANT_SECRET_KEY")
+    # 优先读取 QUANT_SECRET_KEY（向后兼容），其次读取 SECRET_KEY
+    SECRET_KEY: str = os.getenv("QUANT_SECRET_KEY") or os.getenv("SECRET_KEY", "")
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 小时
     
@@ -132,9 +133,19 @@ class Settings(BaseSettings):
     @classmethod
     def check_secret_key(cls, v):
         if not v:
-            raise ValueError("QUANT_SECRET_KEY 环境变量必须设置！请使用 openssl rand -hex 32 生成安全密钥。")
-        if "change-me" in v:
-            raise ValueError("QUANT_SECRET_KEY 不能使用默认值！请使用 openssl rand -hex 32 生成安全密钥。")
+            raise ValueError(
+                "SECRET_KEY 未设置！请通过以下方式之一配置：\n"
+                "  1. 设置环境变量：export SECRET_KEY=$(openssl rand -hex 32)\n"
+                "     （也支持 QUANT_SECRET_KEY 环境变量名，向后兼容）\n"
+                "  2. 复制 .env.example 为 .env 并填写 SECRET_KEY：cp .env.example .env"
+            )
+        insecure_keys = {"change-me", "your-super-secret-key", "secret-key", "example", "test"}
+        v_lower = v.lower()
+        for insecure in insecure_keys:
+            if insecure in v_lower:
+                raise ValueError(f"SECRET_KEY 不能使用不安全的默认值！请使用 openssl rand -hex 32 生成安全密钥。")
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY 长度必须至少 32 个字符！请使用 openssl rand -hex 32 生成安全密钥。")
         return v
     
     # 默认用户密码（开发环境，生产环境应通过环境变量覆盖）

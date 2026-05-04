@@ -57,8 +57,4 @@ async def get_main_fund_flow(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取主力净流入排名失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

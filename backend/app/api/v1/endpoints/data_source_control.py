@@ -8,7 +8,7 @@ from loguru import logger
 from enum import Enum
 
 from app.models.schemas import ResponseModel
-from app.api.deps import OptionalCurrentUser
+from app.api.deps import CurrentAdminUser
 
 router = APIRouter()
 
@@ -58,7 +58,7 @@ data_source_status = DataSourceStatus()
 
 @router.get("/status", response_model=ResponseModel[Dict[str, Any]])
 async def get_data_source_status(
-    current_user: OptionalCurrentUser = None
+    current_user: CurrentAdminUser = None
 ):
     """
     获取当前数据源状态
@@ -77,7 +77,7 @@ async def get_data_source_status(
 @router.post("/mode", response_model=ResponseModel[Dict[str, Any]])
 async def set_data_source_mode(
     mode: str = Query(..., description="模式：online-在线，offline-离线"),
-    current_user: OptionalCurrentUser = None
+    current_user: CurrentAdminUser = None
 ):
     """
     设置数据源模式
@@ -109,7 +109,7 @@ async def set_data_source_mode(
 async def toggle_data_source(
     source: str = Query(..., description="数据源名称：tushare, akshare, baostock, yfinance"),
     enabled: bool = Query(..., description="是否启用"),
-    current_user: OptionalCurrentUser = None
+    current_user: CurrentAdminUser = None
 ):
     """
     单独启用/禁用某个数据源
@@ -134,7 +134,7 @@ async def toggle_data_source(
 
 @router.post("/reset", response_model=ResponseModel[Dict[str, Any]])
 async def reset_data_source(
-    current_user: OptionalCurrentUser = None
+    current_user: CurrentAdminUser = None
 ):
     """
     重置数据源状态（恢复默认）

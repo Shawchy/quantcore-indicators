@@ -37,6 +37,6 @@ async def get_sector_components(sector_code: str, current_user: CurrentUser):
 
 
 @router.get("/leaders/{sector_code}", response_model=ResponseModel[list])
-async def get_sector_leaders(sector_code: str, top_n: int = Query(5), current_user: CurrentUser = Depends):
+async def get_sector_leaders(sector_code: str, current_user: CurrentUser, top_n: int = Query(5)):
     data = await sector_service.get_sector_leaders(sector_code, top_n)
     return ResponseModel(data=data)

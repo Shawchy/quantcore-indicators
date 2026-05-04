@@ -88,6 +88,7 @@ class LocalDatabaseService:
             logger.error("数据库未初始化")
             return 0
         
+        session = None
         try:
             session = self.get_session()
             count = 0
@@ -129,10 +130,14 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"同步股票列表失败：{e}")
-            session.rollback()
+            if session:
+
+                    session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                    session.close()
     
     async def sync_kline_data(
         self,
@@ -200,10 +205,14 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"同步 K 线数据失败 {code}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def sync_quote_data(self, quotes: List[Dict[str, Any]]) -> int:
         """
@@ -228,30 +237,44 @@ class LocalDatabaseService:
                 if not code:
                     continue
                 
-                # 删除旧数据（保留最新）
-                session.query(StockQuote).filter(
+                existing = session.query(StockQuote).filter(
                     StockQuote.code == code
-                ).delete()
+                ).first()
                 
-                # 插入新数据
-                new_quote = StockQuote(
-                    code=code,
-                    name=quote_data.get('name', ''),
-                    price=quote_data.get('price', 0),
-                    change=quote_data.get('change', 0),
-                    change_pct=quote_data.get('change_pct', 0),
-                    volume=quote_data.get('volume', 0),
-                    amount=quote_data.get('amount', 0),
-                    high=quote_data.get('high', 0),
-                    low=quote_data.get('low', 0),
-                    open=quote_data.get('open', 0),
-                    prev_close=quote_data.get('prev_close', 0),
-                    turnover_rate=quote_data.get('turnover_rate', 0),
-                    total_market_cap=quote_data.get('total_market_cap', 0),
-                    float_market_cap=quote_data.get('float_market_cap', 0),
-                    quote_time=datetime.now()
-                )
-                session.add(new_quote)
+                if existing:
+                    existing.name = quote_data.get('name', existing.name)
+                    existing.price = quote_data.get('price', existing.price)
+                    existing.change = quote_data.get('change', existing.change)
+                    existing.change_pct = quote_data.get('change_pct', existing.change_pct)
+                    existing.volume = quote_data.get('volume', existing.volume)
+                    existing.amount = quote_data.get('amount', existing.amount)
+                    existing.high = quote_data.get('high', existing.high)
+                    existing.low = quote_data.get('low', existing.low)
+                    existing.open = quote_data.get('open', existing.open)
+                    existing.prev_close = quote_data.get('prev_close', existing.prev_close)
+                    existing.turnover_rate = quote_data.get('turnover_rate', existing.turnover_rate)
+                    existing.total_market_cap = quote_data.get('total_market_cap', existing.total_market_cap)
+                    existing.float_market_cap = quote_data.get('float_market_cap', existing.float_market_cap)
+                    existing.quote_time = datetime.now()
+                else:
+                    new_quote = StockQuote(
+                        code=code,
+                        name=quote_data.get('name', ''),
+                        price=quote_data.get('price', 0),
+                        change=quote_data.get('change', 0),
+                        change_pct=quote_data.get('change_pct', 0),
+                        volume=quote_data.get('volume', 0),
+                        amount=quote_data.get('amount', 0),
+                        high=quote_data.get('high', 0),
+                        low=quote_data.get('low', 0),
+                        open=quote_data.get('open', 0),
+                        prev_close=quote_data.get('prev_close', 0),
+                        turnover_rate=quote_data.get('turnover_rate', 0),
+                        total_market_cap=quote_data.get('total_market_cap', 0),
+                        float_market_cap=quote_data.get('float_market_cap', 0),
+                        quote_time=datetime.now()
+                    )
+                    session.add(new_quote)
                 count += 1
             
             session.commit()
@@ -260,25 +283,44 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"同步实时行情失败：{e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
-    async def get_stock_list_from_db(self) -> List[StockBasic]:
+    async def get_stock_list_from_db(self) -> List[Dict]:
         """从本地数据库获取股票列表"""
         if not self._initialized:
             return []
         
+        session = None
         try:
             session = self.get_session()
             stocks = session.query(StockBasic).all()
-            return stocks
+            result = []
+            for s in stocks:
+                result.append({
+                    "code": s.code,
+                    "name": s.name,
+                    "market": s.market,
+                    "industry": getattr(s, 'industry', None),
+                    "sector": getattr(s, 'sector', None),
+                    "list_date": getattr(s, 'list_date', None),
+                    "total_shares": getattr(s, 'total_shares', None),
+                    "float_shares": getattr(s, 'float_shares', None)
+                })
+            return result
         except Exception as e:
             logger.error(f"从数据库获取股票列表失败：{e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                    session.close()
     
     async def get_kline_from_db(
         self,
@@ -307,7 +349,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取 K 线数据失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_quote_from_db(self, code: str) -> Optional[StockQuote]:
         """从本地数据库获取实时行情"""
@@ -324,7 +368,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取行情失败 {code}: {e}")
             return None
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     # ========== 基金相关方法 ==========
     
@@ -385,10 +431,14 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"同步基金列表失败：{e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def sync_fund_nav(self, code: str, nav_data: List[Any]) -> int:
         """
@@ -444,10 +494,14 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"同步基金净值失败 {code}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def sync_fund_holding(self, code: str, report_date: str, holdings: List[Any]) -> int:
         """
@@ -495,10 +549,14 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"同步基金持仓失败 {code}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_fund_list_from_db(self) -> List[FundBasic]:
         """从本地数据库获取基金列表"""
@@ -513,7 +571,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取基金列表失败：{e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_fund_nav_from_db(
         self,
@@ -542,7 +602,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取基金净值失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_fund_holding_from_db(
         self,
@@ -568,7 +630,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取基金持仓失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     # ========== 周月线 K 线相关方法 ==========
     
@@ -613,10 +677,14 @@ class LocalDatabaseService:
             return count
         except Exception as e:
             logger.error(f"同步周线 K 线失败 {code}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def sync_kline_monthly(self, code: str, kline_data: List[Any]) -> int:
         """同步月线 K 线数据"""
@@ -659,10 +727,14 @@ class LocalDatabaseService:
             return count
         except Exception as e:
             logger.error(f"同步月线 K 线失败 {code}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_kline_weekly_from_db(
         self,
@@ -691,7 +763,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取周线 K 线失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_kline_monthly_from_db(
         self,
@@ -720,7 +794,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取月线 K 线失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     # ========== 龙虎榜/资金流向相关方法 ==========
     
@@ -754,10 +830,14 @@ class LocalDatabaseService:
             return count
         except Exception as e:
             logger.error(f"同步龙虎榜失败：{e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_billboard_from_db(
         self,
@@ -783,7 +863,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取龙虎榜失败：{e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def sync_moneyflow(self, moneyflow_data: List[Any]) -> int:
         """同步资金流向数据"""
@@ -821,10 +903,14 @@ class LocalDatabaseService:
             return count
         except Exception as e:
             logger.error(f"同步资金流向失败：{e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_moneyflow_from_db(
         self,
@@ -853,7 +939,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取资金流向失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     # ========== 股东/财务数据相关方法 ==========
     
@@ -891,10 +979,14 @@ class LocalDatabaseService:
             return count
         except Exception as e:
             logger.error(f"同步股东信息失败 {code}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_shareholder_from_db(
         self,
@@ -920,7 +1012,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取股东信息失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def sync_financial(self, code: str, financial_data: List[Any]) -> int:
         """同步财务数据"""
@@ -960,10 +1054,14 @@ class LocalDatabaseService:
             return count
         except Exception as e:
             logger.error(f"同步财务数据失败 {code}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_financial_from_db(
         self,
@@ -989,7 +1087,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取财务数据失败 {code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     # ========== 板块成分股相关方法 ==========
     
@@ -1023,10 +1123,14 @@ class LocalDatabaseService:
             return count
         except Exception as e:
             logger.error(f"同步板块成分股失败 {sector_name}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_sector_components_from_db(self, sector_code: str) -> List[SectorComponent]:
         """从本地数据库获取板块成分股"""
@@ -1043,7 +1147,9 @@ class LocalDatabaseService:
             logger.error(f"从数据库获取板块成分股失败 {sector_code}: {e}")
             return []
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     # ========== 数据清理相关方法 ==========
     
@@ -1082,10 +1188,14 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"清理过期数据失败：{e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def cleanup_kline_data(self, code: str, period: str = "daily", keep_years: int = 5):
         """
@@ -1127,10 +1237,14 @@ class LocalDatabaseService:
             
         except Exception as e:
             logger.error(f"清理 K 线数据失败 {code} {period}: {e}")
-            session.rollback()
+            if session:
+
+                session.rollback()
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     # ========== 数据删除方法 ==========
     
@@ -1156,7 +1270,9 @@ class LocalDatabaseService:
             logger.error(f"删除 K 线数据失败：{e}")
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def delete_kline_weekly(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
         """删除周线 K 线数据"""
@@ -1180,7 +1296,9 @@ class LocalDatabaseService:
             logger.error(f"删除周线 K 线数据失败：{e}")
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def delete_kline_monthly(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
         """删除月线 K 线数据"""
@@ -1204,7 +1322,9 @@ class LocalDatabaseService:
             logger.error(f"删除月线 K 线数据失败：{e}")
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def delete_quote_data(self, code: str) -> int:
         """删除实时行情数据"""
@@ -1221,7 +1341,9 @@ class LocalDatabaseService:
             logger.error(f"删除实时行情数据失败：{e}")
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def delete_fund_nav(self, code: str) -> int:
         """删除基金净值数据"""
@@ -1238,7 +1360,9 @@ class LocalDatabaseService:
             logger.error(f"删除基金净值数据失败：{e}")
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def delete_billboard(self, trade_date: Optional[str] = None, code: Optional[str] = None) -> int:
         """删除龙虎榜数据"""
@@ -1262,7 +1386,9 @@ class LocalDatabaseService:
             logger.error(f"删除龙虎榜数据失败：{e}")
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def delete_moneyflow(self, code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
         """删除资金流向数据"""
@@ -1286,7 +1412,9 @@ class LocalDatabaseService:
             logger.error(f"删除资金流向数据失败：{e}")
             return 0
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def get_database_stats(self) -> Dict[str, int]:
         """获取数据库统计信息"""
@@ -1316,7 +1444,9 @@ class LocalDatabaseService:
             logger.error(f"获取数据库统计失败：{e}")
             return {}
         finally:
-            session.close()
+            if session:
+
+                session.close()
     
     async def close(self):
         """关闭数据库连接"""

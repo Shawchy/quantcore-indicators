@@ -97,8 +97,4 @@ async def get_cy_a_spot(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取创业板实时行情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

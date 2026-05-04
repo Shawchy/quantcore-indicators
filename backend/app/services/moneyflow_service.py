@@ -34,7 +34,7 @@ class MoneyflowService:
         
         if use_cache:
             # 使用 cache_service 统一管理
-            cached = await cache_service.get("moneyflow", cache_key)
+            cached = await cache_service.get(cache_key, "moneyflow")
             if cached:
                 logger.debug(f"从缓存获取大盘资金流向数据")
                 return cached
@@ -54,7 +54,7 @@ class MoneyflowService:
             
             if data:
                 # 使用 cache_service 保存
-                await cache_service.set("moneyflow", cache_key, data, ttl=self._cache_ttl)
+                await cache_service.set(cache_key, data, "moneyflow", ttl=self._cache_ttl)
             
             return data
             

@@ -255,18 +255,35 @@ class TradingCalendarService:
         return None
     
     def _generate_estimate_cache(self) -> Set[str]:
-        """生成估算的交易日缓存（降级方案）"""
+        """生成估算的交易日缓存（降级方案，排除周末和主要法定假日）"""
         trading_days = set()
         current = datetime(2020, 1, 1)
         end = datetime.now() + timedelta(days=365)
         
         while current <= end:
             if current.weekday() < 5:
-                trading_days.add(current.strftime("%Y%m%d"))
+                date_str = current.strftime("%Y%m%d")
+                if not self._is_chinese_holiday(date_str):
+                    trading_days.add(date_str)
             current += timedelta(days=1)
         
         logger.info(f"生成估算交易日数据: {len(trading_days)} 天")
         return trading_days
+    
+    @staticmethod
+    def _is_chinese_holiday(date_str: str) -> bool:
+        """判断是否为中国法定假日（近似判断）"""
+        month = int(date_str[4:6])
+        day = int(date_str[6:8])
+        
+        if month == 1 and day <= 3:
+            return True
+        if month == 5 and day <= 5 and day >= 1:
+            return True
+        if month == 10 and day <= 7 and day >= 1:
+            return True
+        
+        return False
     
     def _start_background_refresh(self):
         """启动后台刷新任务"""

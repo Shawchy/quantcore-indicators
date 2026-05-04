@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from app.storage.audit_logger import audit_logger, AuditEventType, AuditSeverity
+from app.api.deps import CurrentAdminUser, CurrentUser
 
 
 router = APIRouter(prefix="/audit", tags=["审计日志"])
@@ -29,7 +30,7 @@ class AuditEventRequest(BaseModel):
 
 
 @router.post("/log")
-async def log_audit_event(request: AuditEventRequest):
+async def log_audit_event(request: AuditEventRequest, admin: CurrentAdminUser):
     """记录审计事件"""
     try:
         event_type = AuditEventType(request.event_type)
@@ -66,7 +67,8 @@ async def query_events(
     event_type: Optional[str] = None,
     severity: Optional[str] = None,
     user_id: Optional[str] = None,
-    limit: int = Query(100, ge=1, le=1000)
+    limit: int = Query(100, ge=1, le=1000),
+    admin: CurrentAdminUser = None
 ):
     """查询审计事件"""
     events = await audit_logger.query_events(
@@ -86,7 +88,7 @@ async def query_events(
 
 
 @router.get("/stats")
-async def get_audit_stats():
+async def get_audit_stats(admin: CurrentAdminUser):
     """获取审计统计信息"""
     stats = audit_logger.get_stats()
     
@@ -99,7 +101,8 @@ async def get_audit_stats():
 @router.get("/user-activity/{user_id}")
 async def get_user_activity(
     user_id: str,
-    days: int = Query(7, ge=1, le=30)
+    days: int = Query(7, ge=1, le=30),
+    admin: CurrentAdminUser = None
 ):
     """获取用户活动报告"""
     activity = await audit_logger.get_user_activity(user_id, days)
@@ -111,7 +114,7 @@ async def get_user_activity(
 
 
 @router.post("/cleanup")
-async def cleanup_old_logs(background_tasks: BackgroundTasks):
+async def cleanup_old_logs(background_tasks: BackgroundTasks, admin: CurrentAdminUser):
     """清理过期审计日志"""
     background_tasks.add_task(audit_logger.cleanup_old_logs)
     
@@ -140,7 +143,7 @@ async def get_severity_levels():
 
 
 @router.get("/report/daily")
-async def get_daily_report(date: Optional[str] = None):
+async def get_daily_report(date: Optional[str] = None, admin: CurrentAdminUser = None):
     """获取每日审计报告"""
     target_date = date or datetime.now().strftime("%Y-%m-%d")
     

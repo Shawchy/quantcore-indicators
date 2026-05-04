@@ -536,7 +536,12 @@ class TickFlowWebSocketService:
             
             if relevant_data:
                 try:
-                    await client.websocket.send_text(json_msg)
+                    filtered_msg = json.dumps({
+                        "op": "quotes",
+                        "data": relevant_data,
+                        "timestamp": datetime.now().isoformat()
+                    }, ensure_ascii=False)
+                    await client.websocket.send_text(filtered_msg)
                     client.last_activity = datetime.now()
                     
                 except Exception as e:

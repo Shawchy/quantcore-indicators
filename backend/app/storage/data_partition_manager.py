@@ -401,7 +401,7 @@ class DataPartitionManager:
         if (not force_refresh and
             self._stats_cache is not None and
             self._stats_cache_time is not None and
-            (datetime.now() - self._stats_cache_time).seconds < 300):  # 5分钟缓存
+            (datetime.now() - self._stats_cache_time).total_seconds() < 300):  # 5分钟缓存
             return self._stats_cache
 
         stats = {}

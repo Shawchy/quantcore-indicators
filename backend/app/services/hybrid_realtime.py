@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from loguru import logger
+import asyncio
 
 
 class DataSourcePriority(str, Enum):
@@ -219,7 +220,9 @@ class HybridRealtimeService:
         """处理WebSocket收到的行情"""
         for cb in self._callbacks["quotes_received"]:
             try:
-                cb(quotes)
+                result = cb(quotes)
+                if asyncio.iscoroutine(result):
+                    await result
             except Exception as e:
                 logger.error(f"行情回调执行失败: {e}")
     
@@ -237,7 +240,9 @@ class HybridRealtimeService:
             
             for cb in self._callbacks["source_changed"]:
                 try:
-                    cb(old_source.value, new_source.value)
+                    result = cb(old_source.value, new_source.value)
+                    if asyncio.iscoroutine(result):
+                        asyncio.create_task(result)
                 except Exception as e:
                     logger.error(f"数据源切换回调失败: {e}")
     

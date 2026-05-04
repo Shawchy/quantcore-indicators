@@ -4,6 +4,7 @@
 实现基于令牌桶算法的限流机制，防止数据源被过度请求
 """
 import time
+import asyncio
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, Optional
@@ -11,16 +12,8 @@ from loguru import logger
 
 
 class TokenBucketRateLimiter:
-    """令牌桶限流器"""
     
     def __init__(self, rate: float, capacity: int):
-        """
-        初始化令牌桶限流器
-        
-        Args:
-            rate: 令牌生成速率 (个/秒)
-            capacity: 桶容量 (最大令牌数)
-        """
         self.rate = rate
         self.capacity = capacity
         self._buckets: Dict[str, dict] = defaultdict(lambda: {
@@ -28,42 +21,32 @@ class TokenBucketRateLimiter:
             "last_update": time.time()
         })
         self._stats = defaultdict(lambda: {"allowed": 0, "rejected": 0})
+        self._lock = asyncio.Lock()
     
     async def acquire(self, key: str, tokens: int = 1) -> bool:
-        """
-        获取令牌
-        
-        Args:
-            key: 限流键 (如数据源名称)
-            tokens: 需要的令牌数
-        
-        Returns:
-            是否成功获取令牌
-        """
-        bucket = self._buckets[key]
-        now = time.time()
-        
-        # 添加令牌
-        elapsed = now - bucket["last_update"]
-        bucket["tokens"] = min(
-            self.capacity,
-            bucket["tokens"] + elapsed * self.rate
-        )
-        bucket["last_update"] = now
-        
-        # 检查是否有足够令牌
-        if bucket["tokens"] >= tokens:
-            bucket["tokens"] -= tokens
-            self._stats[key]["allowed"] += 1
-            return True
-        else:
-            self._stats[key]["rejected"] += 1
-            logger.warning(
-                f"限流触发: {key}, "
-                f"当前令牌: {bucket['tokens']:.2f}, "
-                f"需要: {tokens}"
+        async with self._lock:
+            bucket = self._buckets[key]
+            now = time.time()
+            
+            elapsed = now - bucket["last_update"]
+            bucket["tokens"] = min(
+                self.capacity,
+                bucket["tokens"] + elapsed * self.rate
             )
-            return False
+            bucket["last_update"] = now
+            
+            if bucket["tokens"] >= tokens:
+                bucket["tokens"] -= tokens
+                self._stats[key]["allowed"] += 1
+                return True
+            else:
+                self._stats[key]["rejected"] += 1
+                logger.warning(
+                    f"限流触发: {key}, "
+                    f"当前令牌: {bucket['tokens']:.2f}, "
+                    f"需要: {tokens}"
+                )
+                return False
     
     def get_stats(self, key: str) -> dict:
         """

@@ -10,6 +10,10 @@ class ResponseModel(BaseModel, Generic[T]):
     message: str = "操作成功"
     data: Optional[T] = None
 
+    @staticmethod
+    def error(message: str = "操作失败", code: str = "ERROR", data=None) -> "ResponseModel":
+        return ResponseModel(success=False, code=code, message=message, data=data)
+
 
 class PageInfo(BaseModel):
     page: int = 1

@@ -50,11 +50,7 @@ async def get_individual_fund_flow(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取个股资金流失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/individual-fund-flow-rank", response_model=ResponseModel[List[StockIndividualFundFlowRank]])
@@ -96,8 +92,4 @@ async def get_individual_fund_flow_rank(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取个股资金流排名失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

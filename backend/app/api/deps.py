@@ -45,6 +45,20 @@ async def get_current_user(
         )
     
     token = credentials.credentials
+    
+    from app.api.v1.endpoints.auth import token_blacklist
+    try:
+        if await token_blacklist.is_revoked(token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="令牌已被撤销",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"令牌黑名单检查失败，跳过撤销检查：{e}")
+    
     token_data = verify_access_token(token)
     
     if token_data is None:

@@ -103,11 +103,7 @@ async def get_growth_comparison(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取成长性比较数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/valuation-comparison", response_model=ResponseModel[List[StockZhValuationComparisonEM]])
@@ -207,11 +203,7 @@ async def get_valuation_comparison(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取估值比较数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/dupont-comparison", response_model=ResponseModel[List[StockZhDupontComparisonEM]])
@@ -301,11 +293,7 @@ async def get_dupont_comparison(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取杜邦分析比较数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/scale-comparison", response_model=ResponseModel[List[StockZhScaleComparisonEM]])
@@ -375,8 +363,4 @@ async def get_scale_comparison(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取公司规模比较数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

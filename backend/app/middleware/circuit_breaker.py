@@ -126,7 +126,7 @@ class CircuitBreaker:
             return True
         return (
             datetime.now() - self._last_failure_time
-        ).seconds >= self.recovery_timeout
+        ).total_seconds() >= self.recovery_timeout
     
     def get_state(self) -> str:
         """获取当前状态"""

@@ -47,11 +47,7 @@ async def get_sector_fund_flow_hist(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取行业历史资金流失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/concept-fund-flow-hist", response_model=ResponseModel[List[StockSectorFundFlowHist]])
@@ -85,8 +81,4 @@ async def get_concept_fund_flow_hist(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取概念历史资金流失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

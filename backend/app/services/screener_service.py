@@ -110,7 +110,7 @@ class Screener:
     def industry(self, industry: str) -> 'Screener':
         return self.add_condition("industry", "==", industry)
     
-    def build_from_dict(conditions: Dict[str, Any]) -> 'Screener':
+    def build_from_dict(self, conditions: Dict[str, Any]) -> 'Screener':
         screener = Screener()
         
         mapping = {

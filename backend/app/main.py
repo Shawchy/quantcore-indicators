@@ -337,7 +337,20 @@ def create_app() -> FastAPI:
             content={
                 "success": False,
                 "code": "VALIDATION_ERROR",
-                "message": str(exc),
+                "message": "请求参数验证失败" if not settings.DEBUG else str(exc),
+                "data": None
+            }
+        )
+    
+    @app.exception_handler(Exception)
+    async def generic_exception_handler(request: Request, exc: Exception):
+        logger.error(f"未处理的异常: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "code": "INTERNAL_ERROR",
+                "message": "服务器内部错误" if not settings.DEBUG else str(exc),
                 "data": None
             }
         )

@@ -115,8 +115,11 @@ class SmartPollingService:
         self._rate_limits: Dict[str, RateLimitInfo] = {}
         self._global_counter: Dict[str, int] = {}
         self._global_window_start: datetime = datetime.now()
-        self._cache: Dict[str, tuple] = {}  # {key: (data, timestamp)}
-        self._request_history: List[Dict] = []  # 请求历史（用于分析）
+        self._cache: Dict[str, tuple] = {}
+        self._cache_lock = asyncio.Lock()
+        self._request_history: List[Dict] = []
+        self._max_cache_size = 10000
+        self._max_history_size = 5000
         
         logger.info("SmartPollingService 初始化完成")
     
@@ -304,19 +307,20 @@ class SmartPollingService:
         cached_data = {}
         uncached_codes = []
         
-        for code in codes:
-            cache_key = f"realtime_{code}"
-            
-            if not force_refresh and cache_key in self._cache:
-                cached_timestamp, cached_value = self._cache[cache_key]
-                age = (now - cached_timestamp).total_seconds()
+        async with self._cache_lock:
+            for code in codes:
+                cache_key = f"realtime_{code}"
                 
-                if age < config.cache_ttl:
-                    cached_data[code] = cached_value
-                    result["cached_count"] += 1
-                    continue
-            
-            uncached_codes.append(code)
+                if not force_refresh and cache_key in self._cache:
+                    cached_timestamp, cached_value = self._cache[cache_key]
+                    age = (now - cached_timestamp).total_seconds()
+                    
+                    if age < config.cache_ttl:
+                        cached_data[code] = cached_value
+                        result["cached_count"] += 1
+                        continue
+                
+                uncached_codes.append(code)
         
         result["data"].update(cached_data)
         
@@ -329,11 +333,22 @@ class SmartPollingService:
                 )
                 
                 if fresh_data:
-                    for code, data in fresh_data.items():
-                        cache_key = f"realtime_{code}"
-                        self._cache[cache_key] = (now, data)
-                        result["data"][code] = data
-                        result["fresh_count"] += 1
+                    async with self._cache_lock:
+                        for code, data in fresh_data.items():
+                            cache_key = f"realtime_{code}"
+                            self._cache[cache_key] = (now, data)
+                            result["data"][code] = data
+                            result["fresh_count"] += 1
+                        
+                        if len(self._cache) > self._max_cache_size:
+                            sorted_items = sorted(
+                                self._cache.items(),
+                                key=lambda x: x[1][0]
+                            )
+                            keep_count = self._max_cache_size // 2
+                            keys_to_remove = [item[0] for item in sorted_items[:-keep_count]]
+                            for k in keys_to_remove:
+                                del self._cache[k]
                     
                     if user_id in self._rate_limits:
                         self._rate_limits[user_id].requests_made += 1
@@ -347,7 +362,7 @@ class SmartPollingService:
                 
                 self._record_request(user_id, len(uncached_codes), success=False)
         
-        self._cleanup_cache(max_size=1000)
+        await self._cleanup_cache(max_size=1000)
         
         return result
     
@@ -403,7 +418,7 @@ class SmartPollingService:
             
             if batch_idx < len(batches) - 1:
                 delay = random.uniform(0.5, 1.5)
-                await asyncio.delay(delay)
+                await asyncio.sleep(delay)
         
         return all_data
     
@@ -461,38 +476,40 @@ class SmartPollingService:
         return mock_data
     
     def _record_request(self, user_id: str, count: int, success: bool):
-        """记录请求历史"""
         self._request_history.append({
             "timestamp": datetime.now(),
             "user_id": user_id,
             "count": count,
             "success": success
         })
+        if len(self._request_history) > self._max_history_size:
+            self._request_history = self._request_history[-self._max_history_size // 2:]
         
         if len(self._request_history) > 1000:
             self._request_history = self._request_history[-500:]
     
-    def _cleanup_cache(self, max_size: int = 1000):
+    async def _cleanup_cache(self, max_size: int = 1000):
         """清理过期和过多的缓存"""
         now = datetime.now()
         
-        expired_keys = [
-            key for key, (ts, _) in self._cache.items()
-            if (now - ts).total_seconds() > 300
-        ]
-        
-        for key in expired_keys:
-            del self._cache[key]
-        
-        if len(self._cache) > max_size:
-            sorted_items = sorted(
-                self._cache.items(),
-                key=lambda x: x[1][0]
-            )
+        async with self._cache_lock:
+            expired_keys = [
+                key for key, (ts, _) in self._cache.items()
+                if (now - ts).total_seconds() > 300
+            ]
             
-            keys_to_remove = [item[0] for item in sorted_items[:-max_size]]
-            for key in keys_to_remove:
+            for key in expired_keys:
                 del self._cache[key]
+            
+            if len(self._cache) > max_size:
+                sorted_items = sorted(
+                    self._cache.items(),
+                    key=lambda x: x[1][0]
+                )
+                
+                keys_to_remove = [item[0] for item in sorted_items[:-max_size]]
+                for key in keys_to_remove:
+                    del self._cache[key]
     
     def get_statistics(self) -> Dict[str, Any]:
         """

@@ -68,6 +68,9 @@ class CacheService:
         # L1: 检查内存缓存
         cached = await self.cache_manager.get(data_type, key)
         if cached is not None:
+            if cached == "__NULL__":
+                logger.debug(f"L1 缓存命中（空值标记）：{key}")
+                return None
             logger.debug(f"L1 缓存命中：{key}")
             return cached
         
@@ -85,8 +88,11 @@ class CacheService:
         data = await fetch_func()
         
         if data is not None:
-            # 保存到缓存
             await self.set(key, data, data_type)
+        else:
+            null_ttl = min(config["ttl"], 60)
+            await self.cache_manager.set(data_type, key, "__NULL__", ttl=null_ttl)
+            logger.debug(f"缓存空结果（防穿透）：{key}, TTL={null_ttl}s")
         
         return data
     

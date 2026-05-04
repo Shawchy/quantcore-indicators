@@ -69,8 +69,12 @@ class ChartDataService:
                 freq=k_type
             )
         else:
-            # 日周月线使用特定方法
-            kline_method = getattr(stock_service, f'get_{k_type}_kline', stock_service.get_kline)
+            safe_methods = {
+                'daily': stock_service.get_kline,
+                'weekly': stock_service.get_weekly_kline,
+                'monthly': stock_service.get_monthly_kline,
+            }
+            kline_method = safe_methods.get(k_type, stock_service.get_kline)
             kline_result = await kline_method(
                 code=code,
                 start_date=start_date,

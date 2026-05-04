@@ -41,11 +41,7 @@ async def get_yjbb(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取业绩报表失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/yjkb", response_model=ResponseModel[List[StockYjkbEM]])
@@ -73,11 +69,7 @@ async def get_yjkb(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取业绩快报失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/yjyg", response_model=ResponseModel[List[StockYjygEM]])
@@ -104,8 +96,4 @@ async def get_yjyg(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取业绩预告失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

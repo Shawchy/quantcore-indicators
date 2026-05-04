@@ -56,11 +56,7 @@ async def get_fund_flow_individual(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取个股资金流失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/fund-flow-concept", response_model=ResponseModel[List[StockFundFlowConcept]])
@@ -97,11 +93,7 @@ async def get_fund_flow_concept(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取概念资金流失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/fund-flow-industry", response_model=ResponseModel[List[StockFundFlowIndustry]])
@@ -138,8 +130,4 @@ async def get_fund_flow_industry(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取行业资金流失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

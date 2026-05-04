@@ -146,12 +146,10 @@ class MemoryOptimizedRouter:
         
         return True
     
-    def _unload_least_recently_used(self):
-        """卸载最久未使用的模型"""
+    async def _unload_least_recently_used(self) -> bool:
         if not self._model_cache:
-            return
+            return False
         
-        # 找到最久未使用的模型
         lru_model = None
         lru_time = float('inf')
         
@@ -160,11 +158,12 @@ class MemoryOptimizedRouter:
                 lru_time = instance.last_used_at
                 lru_model = model_type
         
-        # 卸载
         if lru_model:
-            self._unload_model(lru_model)
+            await self._unload_model(lru_model)
+            return True
+        return False
     
-    def _unload_model(self, model_type: ModelType):
+    async def _unload_model(self, model_type: ModelType):
         """卸载指定模型"""
         if model_type not in self._model_cache:
             return
@@ -174,14 +173,15 @@ class MemoryOptimizedRouter:
         
         # 通过 Ollama API 卸载模型（如果服务可用）
         try:
-            import requests
-            response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/delete",
-                json={"name": model_name},
-                timeout=10
-            )
-            if response.status_code not in (200, 404):
-                print(f"  ⚠️ 卸载失败：{response.status_code}")
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/delete",
+                    json={"name": model_name},
+                    timeout=10
+                )
+                if response.status_code not in (200, 404):
+                    print(f"  ⚠️ 卸载失败：{response.status_code}")
         except Exception as e:
             # Ollama 服务不可用时跳过
             print(f"  ℹ️ Ollama 服务不可用，跳过卸载：{e}")
@@ -189,8 +189,7 @@ class MemoryOptimizedRouter:
         del self._model_cache[model_type]
         self._stats["total_unloads"] += 1
     
-    def _unload_expired_models(self):
-        """卸载超时的模型"""
+    async def _unload_expired_models(self):
         now = time.time()
         expired_models = []
         
@@ -201,7 +200,7 @@ class MemoryOptimizedRouter:
                     expired_models.append(model_type)
         
         for model_type in expired_models:
-            self._unload_model(model_type)
+            await self._unload_model(model_type)
     
     async def _load_model(self, model_type: ModelType) -> ModelInstance:
         """加载模型"""
@@ -212,19 +211,20 @@ class MemoryOptimizedRouter:
         
         # 通过 Ollama API 加载模型（如果服务可用）
         try:
-            import requests
-            response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": model_name,
-                    "prompt": "ready",
-                    "stream": False,
-                    "options": {"num_predict": 1}
-                },
-                timeout=30
-            )
-            if response.status_code != 200:
-                print(f"  ⚠️ 加载失败：{response.status_code}")
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/generate",
+                    json={
+                        "model": model_name,
+                        "prompt": "ready",
+                        "stream": False,
+                        "options": {"num_predict": 1}
+                    },
+                    timeout=30
+                )
+                if response.status_code != 200:
+                    print(f"  ⚠️ 加载失败：{response.status_code}")
         except Exception as e:
             # Ollama 服务不可用时跳过
             print(f"  ℹ️ Ollama 服务不可用，跳过加载：{e}")
@@ -262,8 +262,28 @@ class MemoryOptimizedRouter:
         self._stats["cache_misses"] += 1
         
         # 检查是否需要卸载其他模型
+        max_unload_attempts = 10
+        attempts = 0
+        unload_failures = 0
         while not self._can_load_model(required_type):
-            self._unload_least_recently_used()
+            if attempts >= max_unload_attempts:
+                logger.error(f"无法为 {required_type} 腾出显存，已尝试 {max_unload_attempts} 次卸载")
+                raise RuntimeError(f"显存不足，无法加载模型 {required_type}")
+            try:
+                unloaded = await self._unload_least_recently_used()
+                if not unloaded:
+                    unload_failures += 1
+                    if unload_failures >= 3:
+                        logger.error(f"连续 {unload_failures} 次卸载无可用模型，无法腾出显存")
+                        raise RuntimeError(f"显存不足，无法加载模型 {required_type}")
+            except RuntimeError:
+                raise
+            except Exception as e:
+                unload_failures += 1
+                logger.warning(f"卸载模型失败（第 {unload_failures} 次）：{e}")
+                if unload_failures >= 3:
+                    raise RuntimeError(f"显存不足，卸载模型反复失败：{e}")
+            attempts += 1
         
         # 加载模型
         return await self._load_model(required_type)
@@ -322,26 +342,27 @@ class MemoryOptimizedRouter:
     ) -> Any:
         """执行查询，通过 Ollama API 调用模型"""
         try:
-            import requests
-            response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": model_name,
-                    "prompt": query,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.3,
-                        "num_predict": 1024,
-                        "top_p": 0.9
-                    }
-                },
-                timeout=120
-            )
-            if response.status_code == 200:
-                result = response.json()
-                return result.get("response", "无响应")
-            else:
-                return f"模型调用失败：HTTP {response.status_code}"
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/generate",
+                    json={
+                        "model": model_name,
+                        "prompt": query,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.3,
+                            "num_predict": 1024,
+                            "top_p": 0.9
+                        }
+                    },
+                    timeout=120
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    return result.get("response", "无响应")
+                else:
+                    return f"模型调用失败：HTTP {response.status_code}"
         except Exception as e:
             return f"模型服务不可用：{e}"
     
@@ -366,19 +387,17 @@ class MemoryOptimizedRouter:
             )
         }
     
-    def unload_all(self):
-        """卸载所有模型（释放显存）"""
+    async def unload_all(self):
         for model_type in list(self._model_cache.keys()):
-            self._unload_model(model_type)
+            await self._unload_model(model_type)
         print("[显存优化] 已卸载所有模型，释放显存")
     
     def preload_high_priority(self):
         """预加载高优先级模型（可选）"""
-        # 只预加载数值模型（常用）
         for model_type, config in self._model_configs.items():
             if config["priority"] == 1:
-                # 异步加载
-                asyncio.create_task(self._load_model(model_type))
+                task = asyncio.create_task(self._load_model(model_type))
+                task.add_done_callback(lambda t: t.exception() if not t.cancelled() and t.exception() else None)
                 print(f"[显存优化] 预加载高优先级模型：{config['name']}")
 
 

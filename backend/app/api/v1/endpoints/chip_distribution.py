@@ -64,8 +64,4 @@ async def get_chip_distribution(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取筹码分布数据失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

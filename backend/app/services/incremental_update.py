@@ -14,6 +14,7 @@
 """
 
 import json
+import copy
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -234,7 +235,7 @@ class IncrementalUpdateService:
         
         delta_result["changed_fields"] = list(delta_result["changed_fields"])
         
-        self._last_snapshot = dict(new_data)
+        self._last_snapshot = copy.deepcopy(new_data)
         
         self._trim_history(max_records=500)
         

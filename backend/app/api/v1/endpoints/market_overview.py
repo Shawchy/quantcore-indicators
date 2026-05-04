@@ -57,11 +57,7 @@ async def get_sse_summary(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取上交所股票数据总貌失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")
 
 
 @router.get("/szse-summary", response_model=ResponseModel[List[SZSESummary]])
@@ -121,8 +117,4 @@ async def get_szse_summary(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取深交所市场总貌失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

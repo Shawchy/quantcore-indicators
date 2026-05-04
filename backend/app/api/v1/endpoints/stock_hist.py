@@ -147,8 +147,4 @@ async def get_zh_a_hist(
             "data": data
         }
     except Exception as e:
-        return {
-            "code": 500,
-            "message": f"获取历史行情失败：{str(e)}",
-            "data": []
-        }
+        raise HTTPException(status_code=500, detail="服务器内部错误")

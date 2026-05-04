@@ -43,8 +43,9 @@ class ChipService:
                         "date": c.date,
                         "shareholder_count": c.shareholder_count,
                         "avg_shares_per_holder": c.avg_shares_per_holder,
-                        "control_degree": c.control_degree,
-                        "concentration": c.concentration
+                        "top10_holders_ratio": getattr(c, 'top10_holders_ratio', None),
+                        "control_degree": getattr(c, 'control_degree', None),
+                        "concentration": getattr(c, 'concentration', None)
                     } for c in chip_data]
                     
                     await cache_manager.set("chip", cache_key, result)
@@ -73,7 +74,9 @@ class ChipService:
             "date": c.date,
             "shareholder_count": c.shareholder_count,
             "avg_shares_per_holder": c.avg_shares_per_holder,
-            "top10_holders_ratio": c.top10_holders_ratio
+            "top10_holders_ratio": getattr(c, 'top10_holders_ratio', None),
+            "control_degree": getattr(c, 'control_degree', None),
+            "concentration": getattr(c, 'concentration', None)
         } for c in chip_data]
         
         await cache_manager.set("chip", cache_key, result)
@@ -111,7 +114,10 @@ class ChipService:
                             code=code,
                             date=c.date,
                             shareholder_count=c.shareholder_count,
-                            avg_shares_per_holder=c.avg_shares_per_holder
+                            avg_shares_per_holder=c.avg_shares_per_holder,
+                            top10_holders_ratio=getattr(c, 'top10_holders_ratio', None),
+                            control_degree=getattr(c, 'control_degree', None),
+                            concentration=getattr(c, 'concentration', None)
                         )
                         to_insert.append(db_chip)
                 

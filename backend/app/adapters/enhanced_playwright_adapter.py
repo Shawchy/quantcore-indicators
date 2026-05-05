@@ -16,6 +16,7 @@ import asyncio
 import random
 import os
 import time
+from app.config import settings
 
 from .base import (
     BaseDataAdapter,
@@ -159,7 +160,7 @@ class EnhancedPlaywrightAdapter(BaseDataAdapter):
         
         browsers_path = os.environ.get(
             'PLAYWRIGHT_BROWSERS_PATH',
-            'd:/PROJ/Quant/backend/playwright_browsers'
+            os.path.join(str(settings.BASE_DIR), 'playwright_browsers')
         )
         chromium_exe = os.path.join(browsers_path, 'chromium-1148', 'chrome-win', 'chrome.exe')
         

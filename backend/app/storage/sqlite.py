@@ -615,7 +615,7 @@ async def create_default_users():
         await session.commit()
         
         if settings.DEBUG:
-            logger.info(f"已创建默认用户：admin/{settings.DEFAULT_ADMIN_PASSWORD}, user/{settings.DEFAULT_USER_PASSWORD}")
+            logger.info("已创建默认用户：admin, user（密码请通过环境变量 QUANT_DEFAULT_ADMIN_PASSWORD / QUANT_DEFAULT_USER_PASSWORD 设置）")
 
 
 async def auto_sync_stock_list_on_startup():

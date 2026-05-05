@@ -3,65 +3,50 @@
 use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// Tick 数据
+fn safe_tick_price(value: f64, field: &str) -> Decimal {
+    if value.is_nan() || value.is_infinite() {
+        log::error!("Tick 数据 {} 包含无效值: {}", field, value);
+        Decimal::ZERO
+    } else {
+        Decimal::from_f64_retain(value).unwrap_or_else(|| {
+            log::error!("Tick 数据 {} 转换失败: {}", field, value);
+            Decimal::ZERO
+        })
+    }
+}
+
 #[pyclass]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tick {
-    /// 时间戳
     #[pyo3(get)]
     pub timestamp: DateTime<Utc>,
-
-    /// 证券代码
     #[pyo3(get)]
     pub symbol: String,
-
-    /// 最新价
     #[pyo3(get)]
     pub last_price: Decimal,
-
-    /// 开盘价
     #[pyo3(get)]
     pub open_price: Decimal,
-
-    /// 最高价
     #[pyo3(get)]
     pub high_price: Decimal,
-
-    /// 最低价
     #[pyo3(get)]
     pub low_price: Decimal,
-
-    /// 昨收价
     #[pyo3(get)]
     pub prev_close: Decimal,
-
-    /// 买一价
     #[pyo3(get)]
     pub bid_price_1: Decimal,
-
-    /// 买一量
     #[pyo3(get)]
     pub bid_volume_1: i64,
-
-    /// 卖一价
     #[pyo3(get)]
     pub ask_price_1: Decimal,
-
-    /// 卖一量
     #[pyo3(get)]
     pub ask_volume_1: i64,
-
-    /// 成交量
     #[pyo3(get)]
     pub volume: i64,
-
-    /// 成交额
     #[pyo3(get)]
     pub turnover: Decimal,
-
-    /// 持仓量（期货）
     #[pyo3(get)]
     pub open_interest: Option<i64>,
 }
@@ -89,17 +74,17 @@ impl Tick {
         Self {
             timestamp,
             symbol,
-            last_price: Decimal::from_f64_retain(last_price).unwrap_or(Decimal::ZERO),
-            open_price: Decimal::from_f64_retain(open_price).unwrap_or(Decimal::ZERO),
-            high_price: Decimal::from_f64_retain(high_price).unwrap_or(Decimal::ZERO),
-            low_price: Decimal::from_f64_retain(low_price).unwrap_or(Decimal::ZERO),
-            prev_close: Decimal::from_f64_retain(prev_close).unwrap_or(Decimal::ZERO),
-            bid_price_1: Decimal::from_f64_retain(bid_price_1).unwrap_or(Decimal::ZERO),
+            last_price: safe_tick_price(last_price, "last_price"),
+            open_price: safe_tick_price(open_price, "open_price"),
+            high_price: safe_tick_price(high_price, "high_price"),
+            low_price: safe_tick_price(low_price, "low_price"),
+            prev_close: safe_tick_price(prev_close, "prev_close"),
+            bid_price_1: safe_tick_price(bid_price_1, "bid_price_1"),
             bid_volume_1,
-            ask_price_1: Decimal::from_f64_retain(ask_price_1).unwrap_or(Decimal::ZERO),
+            ask_price_1: safe_tick_price(ask_price_1, "ask_price_1"),
             ask_volume_1,
             volume,
-            turnover: Decimal::from_f64_retain(turnover).unwrap_or(Decimal::ZERO),
+            turnover: safe_tick_price(turnover, "turnover"),
             open_interest,
         }
     }

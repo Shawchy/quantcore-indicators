@@ -419,7 +419,7 @@ class HierarchicalCache:
         import sys
         try:
             return sys.getsizeof(value)
-        except:
+        except Exception:
             return 0
     
     def _update_avg_response_time(self, elapsed_ms: float):

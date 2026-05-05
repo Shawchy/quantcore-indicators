@@ -6,6 +6,7 @@ use crate::performance::PerformanceAnalyzer;
 use crate::strategy::context::StrategyContext;
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 
 /// 回测结果
 #[derive(Debug, Clone)]
@@ -153,7 +154,7 @@ impl BacktestEngine {
         // 遍历 K 线数据
         for bar in &bars {
             // 更新当前时间
-            ctx.current_time = bar.timestamp.clone();
+            ctx.current_time = bar.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
 
             // 获取策略上下文中的待处理订单
             let orders_to_process: Vec<Order> = ctx.get_pending_orders().to_vec();
@@ -204,21 +205,24 @@ impl BacktestEngine {
 
     /// 处理成交
     fn handle_trade(&mut self, trade: &Trade) -> PyResult<()> {
+        let price_f64 = trade.price.to_f64().unwrap_or(0.0);
+        let commission_f64 = trade.commission.to_f64().unwrap_or(0.0);
+        let tax_f64 = trade.tax.to_f64().unwrap_or(0.0);
         if trade.side == "buy" {
             self.portfolio.buy(
                 &trade.symbol,
-                trade.price,
+                price_f64,
                 trade.quantity,
-                trade.commission,
-                trade.tax,
+                commission_f64,
+                tax_f64,
             )?;
         } else if trade.side == "sell" {
             self.portfolio.sell(
                 &trade.symbol,
-                trade.price,
+                price_f64,
                 trade.quantity,
-                trade.commission,
-                trade.tax,
+                commission_f64,
+                tax_f64,
             )?;
         }
         Ok(())

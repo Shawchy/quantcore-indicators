@@ -61,7 +61,7 @@ cramjam==2.9.1
 loguru==0.7.3
 python-dotenv==1.0.1
 httpx==0.28.1
-websockets==14.1
+# websockets removed - not used in requirements.txt
 anyio==4.7.0
 idna==3.10
 certifi==2024.12.14
@@ -82,7 +82,7 @@ cffi==1.17.1
 pycparser==2.22
 
 # 性能优化
-numba==0.60.0
+# numba removed - incompatible with Python 3.14
 joblib==1.4.2
 llvmlite==0.43.0
 

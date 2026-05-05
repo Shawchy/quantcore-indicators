@@ -3,7 +3,7 @@
 
 提供 Prometheus 指标暴露和监控数据查询接口
 """
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Response, Depends
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from loguru import logger
 
@@ -11,9 +11,7 @@ from app.middleware.metrics_collector import MetricsCollector
 from app.middleware.rate_limiter import rate_limiters
 from app.middleware.circuit_breaker import circuit_breakers
 from app.storage.cache import cache_manager
-
-from fastapi import Depends, HTTPException
-from loguru import logger
+from app.api.deps import CurrentAdminUser
 
 
 # ==================== 依赖注入 ====================
@@ -21,63 +19,70 @@ from loguru import logger
 def get_rate_limiters():
     """获取限流器实例（依赖注入）"""
     try:
-        from app.middleware.rate_limiter import rate_limiters
-        if rate_limiters is None:
+        from app.middleware.rate_limiter import rate_limiters as rl
+        if rl is None:
             logger.error("限流器实例为 None")
+            from fastapi import HTTPException
             raise HTTPException(status_code=503, detail="服务未初始化")
-        return rate_limiters
+        return rl
     except ImportError as e:
         logger.error(f"限流器导入失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="服务初始化失败")
 
 
 def get_circuit_breakers():
     """获取断路器实例（依赖注入）"""
     try:
-        from app.middleware.circuit_breaker import circuit_breakers
-        if circuit_breakers is None:
+        from app.middleware.circuit_breaker import circuit_breakers as cb
+        if cb is None:
             logger.error("断路器实例为 None")
+            from fastapi import HTTPException
             raise HTTPException(status_code=503, detail="服务未初始化")
-        return circuit_breakers
+        return cb
     except ImportError as e:
         logger.error(f"断路器导入失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="服务初始化失败")
 
 
 def get_cache_manager():
     """获取缓存管理器实例（依赖注入）"""
     try:
-        from app.storage.cache import cache_manager
-        if cache_manager is None:
+        from app.storage.cache import cache_manager as cm
+        if cm is None:
             logger.error("缓存管理器实例为 None")
+            from fastapi import HTTPException
             raise HTTPException(status_code=503, detail="服务未初始化")
-        return cache_manager
+        return cm
     except ImportError as e:
         logger.error(f"缓存管理器导入失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="服务初始化失败")
 
 
 def get_trading_calendar():
     """获取交易日历服务实例（依赖注入）"""
     try:
-        from app.services.trading_calendar import trading_calendar
-        if trading_calendar is None:
+        from app.services.trading_calendar import trading_calendar as tc
+        if tc is None:
             logger.error("交易日历服务实例为 None")
+            from fastapi import HTTPException
             raise HTTPException(status_code=503, detail="服务未初始化")
-        return trading_calendar
+        return tc
     except ImportError as e:
         logger.error(f"交易日历服务导入失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="服务初始化失败")
-
 
 
 router = APIRouter(prefix="/metrics", tags=["监控"])
 
 
 @router.get("")
-async def get_metrics():
+async def get_metrics(_=Depends(CurrentAdminUser)):
     """
-    获取 Prometheus 指标
+    获取 Prometheus 指标 (需要管理员权限)
     
     Prometheus 会定期访问此端点收集指标数据
     """
@@ -89,10 +94,11 @@ async def get_metrics():
 
 @router.get("/data-sources")
 async def get_data_source_metrics(
+    _=Depends(CurrentAdminUser),
     rate_limiters=Depends(get_rate_limiters),
     circuit_breakers=Depends(get_circuit_breakers)
 ):
-    """获取数据源详细指标"""
+    """获取数据源详细指标 (需要管理员权限)"""
     try:
         metrics = {
             "rate_limiters": {},
@@ -109,14 +115,16 @@ async def get_data_source_metrics(
         return metrics
     except Exception as e:
         logger.error(f"获取数据源指标失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="获取指标失败")
 
 
 @router.get("/cache")
 async def get_cache_metrics(
+    _=Depends(CurrentAdminUser),
     cache_manager=Depends(get_cache_manager)
 ):
-    """获取缓存详细指标"""
+    """获取缓存详细指标 (需要管理员权限)"""
     try:
         cache_stats = cache_manager.get_all_stats()
         
@@ -127,15 +135,16 @@ async def get_cache_metrics(
         return cache_stats
     except Exception as e:
         logger.error(f"获取缓存指标失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="获取缓存指标失败")
 
 
 @router.get("/storage")
-async def get_storage_metrics():
-    """获取存储详细指标"""
+async def get_storage_metrics(_=Depends(CurrentAdminUser)):
+    """获取存储详细指标 (需要管理员权限)"""
     try:
         from pathlib import Path
-        import os
+        from app.config import settings
         
         storage_info = {
             "sqlite": {},
@@ -143,7 +152,7 @@ async def get_storage_metrics():
             "total_size_mb": 0
         }
         
-        sqlite_path = Path("./data/sqlite/quant.db")
+        sqlite_path = Path(settings.SQLITE_DIR) / "quant.db"
         if sqlite_path.exists():
             storage_info["sqlite"] = {
                 "path": str(sqlite_path),
@@ -167,12 +176,13 @@ async def get_storage_metrics():
         return storage_info
     except Exception as e:
         logger.error(f"获取存储指标失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="获取存储指标失败")
 
 
 @router.get("/health")
 async def health_check():
-    """健康检查端点"""
+    """健康检查端点（公开，供负载均衡器使用）"""
     health_status = {
         "status": "healthy",
         "timestamp": None,
@@ -182,14 +192,12 @@ async def health_check():
     from datetime import datetime
     health_status["timestamp"] = datetime.now().isoformat()
     
-    # 检查数据源状态
     for source, breaker in circuit_breakers.items():
         health_status["components"][f"data_source_{source}"] = {
             "status": "healthy" if breaker.get_state() == "closed" else "unhealthy",
             "circuit_breaker_state": breaker.get_state()
         }
     
-    # 检查缓存状态
     cache_stats = cache_manager.get_all_stats()
     for cache_type, stats in cache_stats.items():
         hit_rate = stats["hits"] / (stats["hits"] + stats["misses"]) if (stats["hits"] + stats["misses"]) > 0 else 0
@@ -198,11 +206,11 @@ async def health_check():
             "hit_rate": f"{hit_rate:.2%}"
         }
     
-    # 检查数据库连接
     try:
         from app.storage.sqlite import get_session
+        from sqlalchemy import text
         async with get_session() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
         health_status["components"]["database"] = {"status": "healthy"}
     except Exception as e:
         health_status["components"]["database"] = {
@@ -216,9 +224,10 @@ async def health_check():
 
 @router.get("/summary")
 async def get_metrics_summary(
+    _=Depends(CurrentAdminUser),
     cache_manager=Depends(get_cache_manager)
 ):
-    """获取指标摘要"""
+    """获取指标摘要 (需要管理员权限)"""
     try:
         summary = {
             "data_sources": {},
@@ -246,14 +255,16 @@ async def get_metrics_summary(
         return summary
     except Exception as e:
         logger.error(f"获取指标摘要失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="获取指标摘要失败")
 
 
 @router.get("/trading-calendar")
 async def get_trading_calendar_status(
+    _=Depends(CurrentAdminUser),
     trading_calendar=Depends(get_trading_calendar)
 ):
-    """获取交易日历状态"""
+    """获取交易日历状态 (需要管理员权限)"""
     try:
         status = trading_calendar.get_cache_status()
         
@@ -267,14 +278,16 @@ async def get_trading_calendar_status(
         }
     except Exception as e:
         logger.error(f"获取交易日历状态失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="获取交易日历状态失败")
 
 
 @router.post("/trading-calendar/refresh")
 async def refresh_trading_calendar(
+    _=Depends(CurrentAdminUser),
     trading_calendar=Depends(get_trading_calendar)
 ):
-    """强制刷新交易日历数据"""
+    """强制刷新交易日历数据 (需要管理员权限)"""
     try:
         success = await trading_calendar.force_refresh()
         
@@ -285,4 +298,5 @@ async def refresh_trading_calendar(
         }
     except Exception as e:
         logger.error(f"刷新交易日历失败：{e}")
+        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail="刷新交易日历失败")

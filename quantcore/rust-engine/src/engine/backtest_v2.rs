@@ -10,7 +10,10 @@
 use pyo3::prelude::*;
 use std::collections::{HashMap, VecDeque};
 use chrono::{DateTime, Utc, NaiveDate};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use crate::core::{Bar, Order, Trade, Position, Portfolio, OrderSide, OrderType, OrderStatus};
+use crate::performance::math::{calculate_annual_return, calculate_volatility, calculate_sharpe_ratio, calculate_max_drawdown};
 
 // ==================== 事件系统 ====================
 
@@ -138,33 +141,36 @@ impl PriceLimitChecker {
         let limit_up = prev_close * (1.0 + self.limit_up_ratio);
         let limit_down = prev_close * (1.0 - self.limit_down_ratio);
 
+        let order_price_f64 = order.price.to_f64().unwrap_or(0.0);
+
         match order.side {
             OrderSide::Buy => {
-                if order.price > limit_up {
+                if order_price_f64 > limit_up {
                     Err(format!(
                         "Buy price {} exceeds limit up price {:.2}",
-                        order.price, limit_up
+                        order_price_f64, limit_up
                     ))
                 } else {
-                    Ok(order.price.min(limit_up))
+                    Ok(order_price_f64.min(limit_up))
                 }
             }
             OrderSide::Sell => {
-                if order.price < limit_down {
+                if order_price_f64 < limit_down {
                     Err(format!(
                         "Sell price {} below limit down price {:.2}",
-                        order.price, limit_down
+                        order_price_f64, limit_down
                     ))
                 } else {
-                    Ok(order.price.max(limit_down))
+                    Ok(order_price_f64.max(limit_down))
                 }
             }
         }
     }
 
     fn get_prev_close(&self, bar: &Bar) -> f64 {
-        bar.close
+        bar.close.to_f64().unwrap_or(0.0)
     }
+}
 
 
 // ==================== 完整回测引擎 ====================
@@ -194,7 +200,7 @@ impl BacktestEngineV2 {
             config.min_commission,
         );
 
-        let price_checker = PriceLimitChecker::new(0.1, 0.1); // A股涨跌停10%
+        let price_checker = PriceLimitChecker::new(0.1, 0.1);
 
         Self {
             config: config.clone(),
@@ -217,24 +223,19 @@ impl BacktestEngineV2 {
         for (i, bar) in bars.iter().enumerate() {
             self.bar_index = i + 1;
 
-            // 检查日期变更（新的一天）
-            let current_date = Some(bar.timestamp.clone());
+            let current_date = Some(bar.timestamp.format("%Y-%m-%d").to_string());
             if prev_date.is_some() && prev_date != current_date {
                 self.on_day_start();
             }
             prev_date = current_date;
 
-            // 更新持仓价格
             self.update_positions(bar);
 
-            // 处理订单（应用T+1和涨跌停规则）
             self.process_orders_with_rules(bar)?;
 
-            // 记录每日资产值
-            self.daily_values.push(self.portfolio.total_asset());
+            self.daily_values.push(self.portfolio.total_value().to_f64().unwrap_or(0.0));
         }
 
-        // 计算绩效指标
         let result = self.calculate_performance_v2();
         Ok(result)
     }
@@ -244,11 +245,13 @@ impl BacktestEngineV2 {
         let order_id = format!("BUY-{}", self.orders.len() + 1);
         let order = Order::new(
             order_id,
+            "default".to_string(),
             symbol.to_string(),
             OrderSide::Buy,
             OrderType::Market,
             price,
             volume,
+            None,
         );
 
         self.orders.push(order.clone());
@@ -257,8 +260,8 @@ impl BacktestEngineV2 {
 
     /// 卖出（检查T+1）
     fn sell(&mut self, symbol: &str, price: f64, volume: i64) -> PyResult<Order> {
-        // 检查T+1规则
-        if !self.tplus1_manager.can_sell(symbol, NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()) {
+        let today = chrono::Local::now().date_naive();
+        if !self.tplus1_manager.can_sell(symbol, today) {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "Cannot sell: T+1 rule violation"
             ));
@@ -267,11 +270,13 @@ impl BacktestEngineV2 {
         let order_id = format!("SELL-{}", self.orders.len() + 1);
         let order = Order::new(
             order_id,
+            "default".to_string(),
             symbol.to_string(),
             OrderSide::Sell,
             OrderType::Market,
             price,
             volume,
+            None,
         );
 
         self.orders.push(order.clone());
@@ -297,9 +302,11 @@ impl BacktestEngineV2 {
     }
 
     fn update_positions(&mut self, bar: &Bar) {
-        if let Some(mut pos) = self.portfolio.get_position(&bar.symbol) {
-            pos.update_price(bar.close);
+        let close_f64 = bar.close.to_f64().unwrap_or(0.0);
+        if let Some(pos) = self.portfolio.get_position_mut(&bar.symbol) {
+            pos.update_price(close_f64);
         }
+        self.portfolio.update();
     }
 
     fn process_orders_with_rules(&mut self, bar: &Bar) -> Result<(), String> {
@@ -314,17 +321,15 @@ impl BacktestEngineV2 {
         for &i in &orders_to_process {
             let order = &mut self.orders[i];
 
-            // 检查涨跌停价格限制
             match self.price_checker.check_and_adjust_price(bar, order) {
                 Ok(adjusted_price) => {
-                    // 执行成交
                     if let Some(trade) = self.matching_engine.match_order_v2(order, bar, adjusted_price) {
                         self.update_position_from_trade(&trade, bar);
                         self.trades.push(trade);
                     }
                 }
                 Err(e) => {
-                    println!("⚠️ Order rejected: {}", e);
+                    log::warn!("Order rejected: {}", e);
                     order.status = OrderStatus::Rejected;
                 }
             }
@@ -335,36 +340,40 @@ impl BacktestEngineV2 {
 
     fn update_position_from_trade(&mut self, trade: &Trade, bar: &Bar) {
         if trade.side == "buy" {
-            let position = Position::new(
-                trade.symbol.clone(),
-                "long".to_string(),
+            let price_f64 = trade.price.to_f64().unwrap_or(0.0);
+            let _ = self.portfolio.buy(
+                &trade.symbol,
+                price_f64,
                 trade.quantity,
-                trade.price,
-                trade.price,
+                trade.commission.to_f64().unwrap_or(0.0),
+                trade.tax.to_f64().unwrap_or(0.0),
             );
-            self.portfolio.add_position(position);
 
-            // 记录买入日期（用于T+1）
-            if let Ok(date) = NaiveDate::parse_from_str(&bar.timestamp[..10], "%Y-%m-%d") {
+            let date_str = bar.timestamp.format("%Y-%m-%d").to_string();
+            if let Ok(date) = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
                 self.tplus1_manager.record_buy(&trade.symbol, date);
             }
-
-            self.portfolio.cash -= trade.turnover + trade.commission;
         } else {
-            if let Some(mut pos) = self.portfolio.get_position(&trade.symbol) {
-                pos.quantity -= trade.quantity;
+            let price_f64 = trade.price.to_f64().unwrap_or(0.0);
+            let _ = self.portfolio.sell(
+                &trade.symbol,
+                price_f64,
+                trade.quantity,
+                trade.commission.to_f64().unwrap_or(0.0),
+                trade.tax.to_f64().unwrap_or(0.0),
+            );
+
+            if let Some(pos) = self.portfolio.get_position(&trade.symbol) {
                 if pos.quantity <= 0 {
                     self.portfolio.remove_position(&trade.symbol);
                     self.tplus1_manager.remove_position(&trade.symbol);
                 }
             }
-
-            self.portfolio.cash += trade.turnover - trade.commission;
         }
     }
 
     fn calculate_performance_v2(&self) -> BacktestResultV2 {
-        let total_return = self.portfolio.total_pnl_percent();
+        let total_return = self.portfolio.total_pnl_percent.to_f64().unwrap_or(0.0);
 
         BacktestResultV2 {
             total_return,
@@ -374,68 +383,24 @@ impl BacktestEngineV2 {
             max_drawdown: self.calculate_max_drawdown(),
             total_trades: self.trades.len() as i32,
             initial_capital: self.config.initial_capital,
-            final_capital: self.portfolio.total_asset(),
+            final_capital: self.portfolio.total_asset.to_f64().unwrap_or(0.0),
         }
     }
 
     fn calculate_annual_return(&self) -> f64 {
-        if self.daily_values.len() < 2 {
-            return 0.0;
-        }
-
-        let total_return = (self.daily_values[self.daily_values.len()-1] - self.config.initial_capital) / self.config.initial_capital;
-        let days = self.daily_values.len() as f64;
-
-        (1.0 + total_return).powf(365.0 / days) - 1.0
+        calculate_annual_return(&self.daily_values, self.config.initial_capital)
     }
 
     fn calculate_volatility(&self) -> f64 {
-        if self.daily_values.len() < 2 {
-            return 0.0;
-        }
-
-        let returns: Vec<f64> = self.daily_values.windows(2)
-            .map(|w| (w[1] - w[0]) / w[0])
-            .collect();
-
-        let mean = returns.iter().sum::<f64>() / returns.len() as f64;
-        let variance = returns.iter()
-            .map(|r| (r - mean).powi(2))
-            .sum::<f64>() / returns.len() as f64;
-
-        (variance.sqrt()) * (252.0_f64).sqrt()
+        calculate_volatility(&self.daily_values)
     }
 
     fn calculate_sharpe_ratio(&self) -> f64 {
-        let vol = self.calculate_volatility();
-        let ann_return = self.calculate_annual_return();
-
-        if vol == 0.0 {
-            return 0.0;
-        }
-
-        (ann_return - 0.03) / vol
+        calculate_sharpe_ratio(&self.daily_values, self.config.initial_capital, 0.03)
     }
 
     fn calculate_max_drawdown(&self) -> f64 {
-        if self.daily_values.is_empty() {
-            return 0.0;
-        }
-
-        let mut peak = self.daily_values[0];
-        let mut max_dd = 0.0;
-
-        for &value in &self.daily_values {
-            if value > peak {
-                peak = value;
-            }
-            let dd = (peak - value) / peak;
-            if dd > max_dd {
-                max_dd = dd;
-            }
-        }
-
-        max_dd
+        calculate_max_drawdown(&self.daily_values)
     }
 }
 
@@ -580,6 +545,7 @@ impl MatchingEngineV2 {
         let trade = Trade::new(
             trade_id,
             order.order_id.clone(),
+            "default".to_string(),
             order.symbol.clone(),
             match order.side {
                 OrderSide::Buy => "buy".to_string(),
@@ -588,6 +554,7 @@ impl MatchingEngineV2 {
             exec_price,
             order.quantity,
             total_cost,
+            tax,
         );
 
         order.filled_quantity = order.quantity;

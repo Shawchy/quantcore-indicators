@@ -3,13 +3,17 @@
 use crate::core::Bar;
 use std::collections::HashMap;
 
-/// 数据缓存
-pub struct DataCache {
-    /// 内存缓存
-    cache: HashMap<String, Vec<Bar>>,
+/// 缓存条目（带访问顺序）
+struct CacheEntry {
+    data: Vec<Bar>,
+    access_count: u64,
+}
 
-    /// 缓存大小限制
+/// 数据缓存（近似 LRU）
+pub struct DataCache {
+    cache: HashMap<String, CacheEntry>,
     max_size: usize,
+    access_counter: u64,
 }
 
 impl DataCache {
@@ -17,28 +21,42 @@ impl DataCache {
         Self {
             cache: HashMap::new(),
             max_size,
+            access_counter: 0,
         }
     }
 
-    /// 获取缓存
-    pub fn get(&self, key: &str) -> Option<&Vec<Bar>> {
-        self.cache.get(key)
+    pub fn get(&mut self, key: &str) -> Option<&Vec<Bar>> {
+        if let Some(entry) = self.cache.get_mut(key) {
+            self.access_counter += 1;
+            entry.access_count = self.access_counter;
+            Some(&entry.data)
+        } else {
+            None
+        }
     }
 
-    /// 设置缓存
     pub fn set(&mut self, key: String, bars: Vec<Bar>) {
         if self.cache.len() >= self.max_size {
-            // 简单的 LRU：清除第一个
-            if let Some(first_key) = self.cache.keys().next().cloned() {
-                self.cache.remove(&first_key);
+            if let Some(evict_key) = self.find_lru_key() {
+                self.cache.remove(&evict_key);
             }
         }
-        self.cache.insert(key, bars);
+        self.access_counter += 1;
+        self.cache.insert(key, CacheEntry {
+            data: bars,
+            access_count: self.access_counter,
+        });
     }
 
-    /// 清除缓存
     pub fn clear(&mut self) {
         self.cache.clear();
+    }
+
+    fn find_lru_key(&self) -> Option<String> {
+        self.cache
+            .iter()
+            .min_by_key(|(_, entry)| entry.access_count)
+            .map(|(k, _)| k.clone())
     }
 }
 

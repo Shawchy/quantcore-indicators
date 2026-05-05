@@ -185,7 +185,7 @@ def get_talib_version() -> str:
     try:
         import talib
         return talib.__version__
-    except:
+    except ImportError:
         return "unknown"
 
 
@@ -194,7 +194,7 @@ def get_pandas_ta_version() -> str:
     try:
         import pandas_ta as ta
         return ta.__version__
-    except:
+    except ImportError:
         return "unknown"
 
 

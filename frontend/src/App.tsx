@@ -1,9 +1,10 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Box, ColorModeScript, Spinner, Flex } from '@chakra-ui/react'
 import { Suspense, lazy } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import ProtectedRoute from './components/ProtectedRoute'
+import { PageErrorBoundary } from './components/PageErrorBoundary'
 // 基金数据管理
 import { FundDataManager } from './hooks/useFundDataManagement'
 import fundStorage from './services/fundStorage'
@@ -88,17 +89,23 @@ function App() {
           >
             <Route index element={
               <Suspense fallback={<PageLoading />}>
-                <Dashboard />
+                <PageErrorBoundary name="仪表盘">
+                  <Dashboard />
+                </PageErrorBoundary>
               </Suspense>
             } />
             <Route path="stock/:code" element={
               <Suspense fallback={<PageLoading />}>
-                <StockDetail />
+                <PageErrorBoundary name="股票详情">
+                  <StockDetail />
+                </PageErrorBoundary>
               </Suspense>
             } />
             <Route path="watchlist" element={
               <Suspense fallback={<PageLoading />}>
-                <Watchlist />
+                <PageErrorBoundary name="自选股">
+                  <Watchlist />
+                </PageErrorBoundary>
               </Suspense>
             } />
             <Route path="sector" element={
@@ -123,7 +130,9 @@ function App() {
             } />
             <Route path="backtest" element={
               <Suspense fallback={<PageLoading />}>
-                <Backtest />
+                <PageErrorBoundary name="回测">
+                  <Backtest />
+                </PageErrorBoundary>
               </Suspense>
             } />
             <Route path="market" element={
@@ -245,7 +254,9 @@ function App() {
             } />
             <Route path="fund/detail/:code" element={
               <Suspense fallback={<PageLoading />}>
-                <FundDetail />
+                <PageErrorBoundary name="基金详情">
+                  <FundDetail />
+                </PageErrorBoundary>
               </Suspense>
             } />
           </Route>

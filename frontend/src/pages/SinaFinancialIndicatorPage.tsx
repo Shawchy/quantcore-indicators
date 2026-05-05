@@ -170,7 +170,7 @@ const SinaFinancialIndicatorPage: React.FC = () => {
           </Thead>
           <Tbody>
             {data.map((item, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || item.date || index}>
                 <Td fontWeight="bold">{item.date || '-'}</Td>
                 <Td isNumeric>{formatValue(item.diluted_eps)}</Td>
                 <Td isNumeric>{formatValue(item.weighted_eps)}</Td>
@@ -214,7 +214,7 @@ const SinaFinancialIndicatorPage: React.FC = () => {
           </Thead>
           <Tbody>
             {data.map((item, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || item.date || index}>
                 <Td fontWeight="bold">{item.date || '-'}</Td>
                 <Td isNumeric>{formatValue(item.return_on_total_assets, '%')}</Td>
                 <Td isNumeric>{formatValue(item.return_on_main_business, '%')}</Td>
@@ -253,7 +253,7 @@ const SinaFinancialIndicatorPage: React.FC = () => {
           </Thead>
           <Tbody>
             {data.map((item, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || item.date || index}>
                 <Td fontWeight="bold">{item.date || '-'}</Td>
                 <Td isNumeric>{formatValue(item.revenue_growth_rate, '%')}</Td>
                 <Td isNumeric>{formatValue(item.net_profit_growth_rate, '%')}</Td>
@@ -290,7 +290,7 @@ const SinaFinancialIndicatorPage: React.FC = () => {
           </Thead>
           <Tbody>
             {data.map((item, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || item.date || index}>
                 <Td fontWeight="bold">{item.date || '-'}</Td>
                 <Td isNumeric>{formatValue(item.accounts_receivable_turnover, '次')}</Td>
                 <Td isNumeric>{formatValue(item.accounts_receivable_turnover_days, '天')}</Td>
@@ -330,7 +330,7 @@ const SinaFinancialIndicatorPage: React.FC = () => {
           </Thead>
           <Tbody>
             {data.map((item, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || item.date || index}>
                 <Td fontWeight="bold">{item.date || '-'}</Td>
                 <Td isNumeric>{formatValue(item.current_ratio)}</Td>
                 <Td isNumeric>{formatValue(item.quick_ratio)}</Td>
@@ -364,7 +364,7 @@ const SinaFinancialIndicatorPage: React.FC = () => {
           </Thead>
           <Tbody>
             {data.map((item, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || item.date || index}>
                 <Td fontWeight="bold">{item.date || '-'}</Td>
                 {Object.keys(item).filter(key => key !== 'date' && key !== 'extra_fields').map((field) => (
                   <Td key={field} isNumeric>

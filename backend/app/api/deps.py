@@ -12,7 +12,7 @@ from app.core.security import (
     TokenData,
     User
 )
-from app.adapters.factory import DataSourceManager
+from app.adapters.factory import data_source_manager
 from app.adapters.akshare_adapter import AkShareAdapter
 
 
@@ -21,9 +21,8 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_akshare_adapter() -> AkShareAdapter:
-    """获取 AkShare 数据源适配器"""
-    manager = DataSourceManager()
-    return manager.get_adapter("akshare")
+    """获取 AkShare 数据源适配器（使用全局单例）"""
+    return data_source_manager.get_adapter("akshare")
 
 
 async def get_current_user(
@@ -46,7 +45,7 @@ async def get_current_user(
     
     token = credentials.credentials
     
-    from app.api.v1.endpoints.auth import token_blacklist
+    from app.core.token_blacklist import token_blacklist
     try:
         if await token_blacklist.is_revoked(token):
             raise HTTPException(

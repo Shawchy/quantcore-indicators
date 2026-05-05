@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// 订单方向
@@ -116,16 +117,32 @@ impl Order {
         limit_price: Option<f64>,
     ) -> Self {
         let now = Utc::now();
+        let price_dec = if price.is_nan() || price.is_infinite() {
+            log::error!("订单价格无效: {}", price);
+            Decimal::ZERO
+        } else {
+            Decimal::from_f64_retain(price).unwrap_or_else(|| {
+                log::error!("订单价格转换失败: {}", price);
+                Decimal::ZERO
+            })
+        };
         let limit_price_val = limit_price
-            .and_then(|p| Decimal::from_f64_retain(p))
-            .unwrap_or_else(|| Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO));
+            .and_then(|p| {
+                if p.is_nan() || p.is_infinite() {
+                    log::error!("限价无效: {}", p);
+                    None
+                } else {
+                    Decimal::from_f64_retain(p)
+                }
+            })
+            .unwrap_or(price_dec);
         Self {
             order_id,
             strategy_id,
             symbol,
             side,
             order_type,
-            price: Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO),
+            price: price_dec,
             limit_price: limit_price_val,
             quantity,
             filled_quantity: 0,

@@ -10,7 +10,7 @@ authors = [
     {name = "QuantCore Team", email = "quantcore@example.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 license = {text = "MIT"}
 keywords = [
     "quant",
@@ -54,7 +54,7 @@ dev = [
 ]
 
 data = [
-    "baostock>=1.8",
+    "baostock>=0.8",
     "xtquant>=0.0.1",
 ]
 

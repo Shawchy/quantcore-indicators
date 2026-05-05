@@ -78,6 +78,7 @@ mod tests {
     use core::Bar;
     use core::Portfolio;
     use core::Position;
+    use chrono::Utc;
 
     #[test]
     fn test_version() {
@@ -86,20 +87,22 @@ mod tests {
 
     #[test]
     fn test_bar() {
+        let ts = "2024-01-01T10:00:00Z".parse::<chrono::DateTime<Utc>>().unwrap();
         let bar = Bar::new(
-            "2024-01-01 10:00:00".to_string(),
-            "SH.600000".to_string(),
+            ts,
             10.0,
             10.5,
             9.8,
             10.2,
             1000000,
-            10200000.0,
+            Some(10200000.0),
+            None,
         );
 
-        assert_eq!(bar.symbol, "SH.600000");
-        assert_eq!(bar.close, 10.2);
-        assert!((bar.average_price() - 10.166666) < 0.001);
+        let close_f64 = bar.close.to_f64().unwrap_or(0.0);
+        assert!((close_f64 - 10.2).abs() < 0.001);
+        let avg = bar.average_price().to_f64().unwrap_or(0.0);
+        assert!((avg - 10.166666).abs() < 0.001);
     }
 
     #[test]
@@ -117,7 +120,8 @@ mod tests {
         portfolio.add_position(position);
 
         assert!(portfolio.has_position("SH.600000"));
-        assert!((portfolio.market_value() - 10200.0) < 0.01);
+        let mv = portfolio.market_value.to_f64().unwrap_or(0.0);
+        assert!((mv - 10200.0).abs() < 0.01);
     }
 }
 

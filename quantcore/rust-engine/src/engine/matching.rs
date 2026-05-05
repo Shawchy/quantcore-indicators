@@ -2,6 +2,8 @@
 
 use crate::core::{Bar, Order, OrderSide, OrderStatus, OrderType, Trade};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
+use std::str::FromStr;
 
 /// 订单匹配引擎
 pub struct MatchingEngine {

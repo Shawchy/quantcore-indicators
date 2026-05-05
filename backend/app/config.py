@@ -94,7 +94,19 @@ class Settings(BaseSettings):
         """日志文件路径（基于 LOG_DIR）"""
         return os.path.join(self.LOG_DIR, "quant.log")
     
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"]
+    CORS_ORIGINS: list[str] = Field(
+        default=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
+        description="CORS 允许的来源列表，可通过 CORS_ORIGINS 环境变量设置（逗号分隔）"
+    )
+    
+    @computed_field
+    @property
+    def CORS_ORIGINS_PARSED(self) -> list[str]:
+        """解析 CORS_ORIGINS 环境变量（逗号分隔）"""
+        env_origins = os.getenv("CORS_ORIGINS")
+        if env_origins:
+            return [origin.strip() for origin in env_origins.split(",") if origin.strip()]
+        return self.CORS_ORIGINS
     
     TICKFLOW_API_KEY: Optional[str] = None  # TickFlow API Key（可选，不填则使用免费服务）
     
@@ -148,9 +160,9 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY 长度必须至少 32 个字符！请使用 openssl rand -hex 32 生成安全密钥。")
         return v
     
-    # 默认用户密码（开发环境，生产环境应通过环境变量覆盖）
-    DEFAULT_ADMIN_PASSWORD: str = os.getenv("QUANT_DEFAULT_ADMIN_PASSWORD", "admin123")
-    DEFAULT_USER_PASSWORD: str = os.getenv("QUANT_DEFAULT_USER_PASSWORD", "user123")
+    # 默认用户密码（必须通过环境变量设置，无默认值）
+    DEFAULT_ADMIN_PASSWORD: str = os.getenv("QUANT_DEFAULT_ADMIN_PASSWORD", "")
+    DEFAULT_USER_PASSWORD: str = os.getenv("QUANT_DEFAULT_USER_PASSWORD", "")
 
 
 @lru_cache()

@@ -319,7 +319,7 @@ const MarginTradingPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {ratioData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td>{item.stock_code}</Td>
                       <Td>{item.stock_name}</Td>
                       <Td isNumeric>
@@ -443,7 +443,7 @@ const MarginTradingPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {accountInfoData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td>{formatDate(item.date)}</Td>
                       <Td isNumeric>{item.margin_balance?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>{item.short_balance?.toFixed(2) || '-'}</Td>
@@ -541,7 +541,7 @@ const MarginTradingPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {marginSseData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td>{item.credit_trade_date}</Td>
                       <Td isNumeric>{item.margin_balance?.toLocaleString() || '-'}</Td>
                       <Td isNumeric>{item.margin_buy?.toLocaleString() || '-'}</Td>
@@ -620,7 +620,7 @@ const MarginTradingPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {marginDetailSseData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td>{item.credit_trade_date}</Td>
                       <Td>{item.stock_code}</Td>
                       <Td>{item.stock_name}</Td>
@@ -706,7 +706,7 @@ const MarginTradingPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {marginSzseData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td isNumeric>{item.margin_buy?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>{item.margin_balance?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>{item.short_sell?.toFixed(2) || '-'}</Td>
@@ -777,7 +777,7 @@ const MarginTradingPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {marginDetailSzseData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td>{item.stock_code}</Td>
                       <Td>{item.stock_name}</Td>
                       <Td isNumeric>{item.margin_buy?.toLocaleString() || '-'}</Td>

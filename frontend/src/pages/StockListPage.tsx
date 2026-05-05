@@ -194,7 +194,7 @@ const StockListPage: React.FC = () => {
           </Thead>
           <Tbody>
             {filteredData.slice(0, 100).map((stock, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || index}>
                 <Td fontWeight="bold">{stock.code}</Td>
                 <Td>{stock.name}</Td>
               </Tr>
@@ -227,7 +227,7 @@ const StockListPage: React.FC = () => {
           </Thead>
           <Tbody>
             {filteredData.slice(0, 100).map((stock, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || index}>
                 <Td fontWeight="bold">{stock.security_code}</Td>
                 <Td>{stock.security_abbr}</Td>
                 <Td>{stock.company_name}</Td>
@@ -265,7 +265,7 @@ const StockListPage: React.FC = () => {
           </Thead>
           <Tbody>
             {filteredData.slice(0, 100).map((stock, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || index}>
                 <Td>
                   <Badge colorScheme={stock.board === '主板' ? 'blue' : 'green'}>
                     {stock.board}
@@ -311,7 +311,7 @@ const StockListPage: React.FC = () => {
           </Thead>
           <Tbody>
             {filteredData.slice(0, 100).map((stock, index) => (
-              <Tr key={index}>
+              <Tr key={item.code || index}>
                 <Td fontWeight="bold">{stock.security_code}</Td>
                 <Td>{stock.security_abbr}</Td>
                 <Td isNumeric>{stock.total_shares?.toLocaleString() || '-'}</Td>

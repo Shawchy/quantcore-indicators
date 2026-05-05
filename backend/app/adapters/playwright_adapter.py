@@ -135,7 +135,8 @@ class PlaywrightAdapter(BaseDataAdapter):
                 launch_options['proxy'] = {'server': self._config['proxy']}
             
             import os
-            browsers_path = os.environ.get('PLAYWRIGHT_BROWSERS_PATH', 'd:/PROJ/Quant/backend/playwright_browsers')
+            from app.config import settings
+            browsers_path = os.environ.get('PLAYWRIGHT_BROWSERS_PATH', os.path.join(str(settings.BASE_DIR), 'playwright_browsers'))
             chromium_exe = os.path.join(browsers_path, 'chromium-1148', 'chrome-win', 'chrome.exe')
             
             if os.path.exists(chromium_exe):

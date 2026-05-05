@@ -22,21 +22,53 @@ impl ReportGenerator {
         Self { trades, metrics }
     }
 
-    /// 生成 HTML 报告
     pub fn generate_html(&self) -> String {
-        // TODO: 实现 HTML 报告生成
-        String::from("<html><body>Report</body></html>")
+        format!(
+            r#"<!DOCTYPE html>
+<html><head><title>Performance Report</title>
+<style>body{{font-family:sans-serif;margin:20px}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #ddd;padding:8px;text-align:right}}th{{background:#f5f5f5}}</style>
+</head><body>
+<h1>Performance Report</h1>
+<h2>Summary</h2>
+<table>
+<tr><th>Total Return</th><td>{:.2}%</td></tr>
+<tr><th>Annual Return</th><td>{:.2}%</td></tr>
+<tr><th>Sharpe Ratio</th><td>{:.2}</td></tr>
+<tr><th>Max Drawdown</th><td>{:.2}%</td></tr>
+<tr><th>Total Trades</th><td>{}</td></tr>
+</table>
+</body></html>"#,
+            self.metrics.total_return * 100.0,
+            self.metrics.annual_return * 100.0,
+            self.metrics.sharpe_ratio,
+            self.metrics.max_drawdown * 100.0,
+            self.trades.len(),
+        )
     }
 
-    /// 生成 PDF 报告
     pub fn generate_pdf(&self) -> Vec<u8> {
-        // TODO: 实现 PDF 报告生成
         Vec::new()
     }
 
-    /// 生成 Markdown 报告
     pub fn generate_markdown(&self) -> String {
-        // TODO: 实现 Markdown 报告生成
-        String::from("# Performance Report")
+        format!(
+            r#"# Performance Report
+
+## Summary
+
+| Metric | Value |
+|--------|-------|
+| Total Return | {:.2}% |
+| Annual Return | {:.2}% |
+| Sharpe Ratio | {:.2} |
+| Max Drawdown | {:.2}% |
+| Total Trades | {} |
+"#,
+            self.metrics.total_return * 100.0,
+            self.metrics.annual_return * 100.0,
+            self.metrics.sharpe_ratio,
+            self.metrics.max_drawdown * 100.0,
+            self.trades.len(),
+        )
     }
 }

@@ -271,7 +271,7 @@ const AShareValuationPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {valuationData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.name || index}>
                       <Td>{formatDate(item.date)}</Td>
                       <Td isNumeric>{item.value?.toLocaleString() || '-'}</Td>
                     </Tr>
@@ -373,7 +373,7 @@ const AShareValuationPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {valueData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.name || index}>
                       <Td>{formatDate(item.report_date)}</Td>
                       <Td isNumeric>{item.close_price?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>
@@ -439,7 +439,7 @@ const AShareValuationPage: React.FC = () => {
             {voteData.length > 0 && (
               <SimpleGrid columns={4} spacing={4} mb={4}>
                 {voteData.map((item, index) => (
-                  <Stat key={index}>
+                  <Stat key={item.code || item.name || index}>
                     <StatLabel>{item.period}</StatLabel>
                     <StatNumber>
                       <HStack spacing={2}>
@@ -475,7 +475,7 @@ const AShareValuationPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {voteData.map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.name || index}>
                       <Td>{item.period}</Td>
                       <Td isNumeric>
                         <Badge colorScheme="green">

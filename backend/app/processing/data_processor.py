@@ -40,7 +40,8 @@ class DataCleaner:
                             return pd.to_datetime(date_str, format="%Y-%m-%d")
                         else:
                             return pd.to_datetime(date_str)
-                    except:
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"日期解析失败: {date_str}, 错误: {e}")
                         return pd.NaT
                 df["date"] = df["date"].apply(convert_date)
             

@@ -55,6 +55,7 @@ impl StrategyContext {
             OrderType::Limit,
             price,
             volume,
+            None,
         );
 
         self.pending_orders.push(order.clone());
@@ -81,6 +82,7 @@ impl StrategyContext {
             OrderType::Limit,
             price,
             volume,
+            None,
         );
 
         self.pending_orders.push(order.clone());

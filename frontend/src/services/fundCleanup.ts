@@ -21,7 +21,6 @@ class FundDataCleanup {
       this.stopPeriodicCleanup();
     }
 
-    console.log(`[数据清理] 启动定期清理任务，间隔：${intervalMs / 1000}秒`);
     
     // 立即执行一次
     this.cleanup();
@@ -39,7 +38,6 @@ class FundDataCleanup {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
-      console.log('[数据清理] 停止定期清理任务');
     }
   }
 
@@ -50,7 +48,6 @@ class FundDataCleanup {
    * - 输出统计信息
    */
   async cleanup(): Promise<void> {
-    console.log('[数据清理] 开始清理过期数据...');
     const startTime = Date.now();
 
     try {
@@ -64,8 +61,6 @@ class FundDataCleanup {
       const stats = await fundStorage.getStats();
 
       const duration = Date.now() - startTime;
-      console.log(`[数据清理] 清理完成，耗时：${duration}ms`);
-      console.log('[数据清理] 存储统计:', stats);
 
     } catch (error) {
       console.error('[数据清理] 清理失败:', error);
@@ -123,7 +118,6 @@ class FundDataCleanup {
     }
 
     if (removedCount > 0) {
-      console.log(`[数据清理] 清理了 ${removedCount} 个过期的 localStorage 时间戳`);
     }
   }
 
@@ -132,7 +126,6 @@ class FundDataCleanup {
    * @param fundCode 基金代码
    */
   async refreshFundCache(fundCode: string): Promise<void> {
-    console.log(`[数据清理] 强制刷新基金 ${fundCode} 的缓存`);
     
     const prefixes = [
       'fund:realtime:',
@@ -155,18 +148,15 @@ class FundDataCleanup {
       }
     });
 
-    console.log(`[数据清理] 基金 ${fundCode} 的缓存已刷新`);
   }
 
   /**
    * 清空所有基金缓存数据
    */
   async clearAllCache(): Promise<void> {
-    console.log('[数据清理] 清空所有缓存数据...');
     
     await fundStorage.clearAll();
     
-    console.log('[数据清理] 所有缓存数据已清空');
   }
 }
 
@@ -184,14 +174,12 @@ class FundDataUpdater {
     onUpdate?: (code: string, data: any) => void
   ): Promise<void> {
     if (fundCodes.length === 0) {
-      console.log('[数据更新] 自选列表为空，跳过更新');
       return;
     }
     
     try {
       // 只更新传入的自选基金列表，不获取所有基金代码
       // 这样可以避免一次性更新 2 万多只基金
-      console.log(`[数据更新] 更新 ${fundCodes.length} 只自选基金的实时数据`);
       await this.updateWithValidation(fundCodes, onUpdate);
     } catch (error) {
       console.error('[数据更新] 更新失败:', error);
@@ -219,7 +207,6 @@ class FundDataUpdater {
     });
     
     if (validCodes.length === 0) {
-      console.log('[数据更新] 没有有效的基金代码，跳过更新');
       return;
     }
     
@@ -227,14 +214,12 @@ class FundDataUpdater {
       console.warn(`[数据更新] 过滤了 ${fundCodes.length - validCodes.length} 只无效基金代码`);
     }
 
-    console.log(`[数据更新] 更新 ${validCodes.length} 只自选基金的实时数据`);
 
     try {
       // 分批更新，每批 50 只
       const batchSize = 50;
       for (let i = 0; i < validCodes.length; i += batchSize) {
         const batch = validCodes.slice(i, i + batchSize);
-        console.log(`[数据更新] 更新批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(validCodes.length / batchSize)}`);
         
         // 强制刷新缓存
         const fundModule = await import('./fund');
@@ -248,7 +233,6 @@ class FundDataUpdater {
         }
       }
 
-      console.log('[数据更新] 自选基金实时数据更新完成');
     } catch (error) {
       console.error('[数据更新] 更新失败:', error);
     }
@@ -261,7 +245,6 @@ class FundDataUpdater {
   async backgroundUpdate(fundCodes: string[]): Promise<void> {
     if (fundCodes.length === 0) return;
 
-    console.log('[数据更新] 开始后台静默更新...');
 
     try {
       // 先从后端获取全部有效基金代码
@@ -276,7 +259,6 @@ class FundDataUpdater {
       }
       
       // 使用从后端获取的有效代码列表
-      console.log(`[数据更新] 使用后端获取的 ${allValidCodes.length} 只有效基金代码`);
       
       // 使用 requestIdleCallback 在浏览器空闲时执行
       if ('requestIdleCallback' in window) {
@@ -311,18 +293,16 @@ class FundDataUpdater {
     });
     
     if (validCodes.length === 0) {
-      console.log('[数据更新] 没有有效的基金代码，跳过更新');
       return;
     }
     
-    console.log(`[数据更新] 更新 ${validCodes.length} 只有效基金（过滤了 ${fundCodes.length - validCodes.length} 只无效）`);
     
     const updatePromises = validCodes.map(async (code) => {
       try {
         // 并行更新不同类型的数据
         await Promise.all([
-          fundModule.fundApi.getFundHistory(code).catch(() => {}),
-          fundModule.fundApi.getFundPeriodChange(code).catch(() => {}),
+          fundModule.fundApi.getFundHistory(code).catch((e) => { console.warn(`[fundCleanup] 获取 ${code} 历史净值失败:`, e) }),
+          fundModule.fundApi.getFundPeriodChange(code).catch((e) => { console.warn(`[fundCleanup] 获取 ${code} 阶段涨跌幅失败:`, e) }),
         ]);
       } catch (error) {
         console.warn(`[数据更新] 更新基金 ${code} 失败:`, error);
@@ -330,7 +310,6 @@ class FundDataUpdater {
     });
 
     await Promise.all(updatePromises);
-    console.log('[数据更新] 后台静默更新完成');
   }
 }
 

@@ -48,12 +48,18 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // 获取 store 的函数（延迟导入避免循环依赖）
 const getStore = (): { getState: () => RootState; dispatch: AppDispatch } => {
-  // 使用动态导入避免循环依赖
-  const storeModule = window.__store__ as { getState: () => RootState; dispatch: AppDispatch }
-  if (!storeModule) {
-    throw new Error('Store not initialized')
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const storeModule = require('../store') as { store: { getState: () => RootState; dispatch: AppDispatch } }
+    return storeModule.store
+  } catch {
+    // 开发环境 fallback
+    const storeModule = window.__store__ as { getState: () => RootState; dispatch: AppDispatch } | undefined
+    if (!storeModule) {
+      throw new Error('Store not initialized')
+    }
+    return storeModule
   }
-  return storeModule
 }
 
 // 请求拦截器 - 自动携带 Token

@@ -329,3 +329,36 @@ export interface TickData {
   tick_data: TickDataItem[]
   stats: TickDataStats
 }
+
+export interface BoardInfo {
+  code: string
+  name: string
+  board_type: string
+  close_price?: number
+  change_pct?: number
+}
+
+export interface CapitalFlow {
+  trade_date: string
+  close_price?: number
+  change_pct?: number
+  main_net_amount: number
+  main_net_amount_rate?: number
+  buy_elg_amount: number
+  buy_lg_amount: number
+  buy_md_amount: number
+  buy_sm_amount: number
+}
+
+export interface Shareholder {
+  shareholder_name: string
+  hold_amount?: number
+  hold_ratio?: number
+  change_amount?: number
+  report_date: string
+}
+
+export interface ChartItemStyleParams {
+  dataIndex: number
+  value: number
+}

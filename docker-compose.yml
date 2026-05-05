@@ -12,7 +12,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
-      - DEBUG=true
+      - DEBUG=false
       - LOG_LEVEL=INFO
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]

@@ -41,7 +41,7 @@ import { stockApi, realtimeApi, boardApi } from '../services/api'
 import RealtimeQuotePanel from '../components/RealtimeQuote'
 import TickDataTable from '../components/TickDataTable'
 import { ProKLineChart as KLineChart } from '../components/charts/KLineChart'
-import type { RealtimeQuoteData, TickData, StockBasic, RealtimeQuote } from '../types'
+import type { RealtimeQuoteData, TickData, StockBasic, RealtimeQuote, KLineData, TechnicalIndicator, ApiResponse, BoardInfo, CapitalFlow, Shareholder, ChartItemStyleParams } from '../types'
 import { useEffect } from 'react'
 
 const queryEnabled = (code: string | undefined, valid: boolean) => Boolean(code && valid)
@@ -140,30 +140,26 @@ const StockDetail = () => {
   const klines = (() => {
     if (!klineData) return []
     
-    // 检查是否有 success 字段（ResponseModel 格式）
-    if ((klineData as any).success && (klineData as any).data) {
-      const innerData = (klineData as any).data
+    const resp = klineData as ApiResponse<{ klines?: KLineData[]; data?: KLineData[] } | KLineData[]>
+    if (resp.success && resp.data) {
+      const innerData = resp.data
       
-      // 检查 klines 字段
-      if (innerData.klines && Array.isArray(innerData.klines)) {
+      if ('klines' in innerData && Array.isArray(innerData.klines)) {
         return innerData.klines
       }
       
-      // 检查 data.data 字段
-      if (innerData.data && Array.isArray(innerData.data)) {
+      if ('data' in innerData && Array.isArray(innerData.data)) {
         return innerData.data
       }
       
-      // 检查 data 本身是数组
       if (Array.isArray(innerData)) {
         return innerData
       }
     }
     
-    // 检查是否有 data 字段
-    if ((klineData as any).data) {
-      const innerData = (klineData as any).data
-      if (innerData.klines && Array.isArray(innerData.klines)) {
+    if ('data' in resp && resp.data) {
+      const innerData = resp.data
+      if ('klines' in innerData && Array.isArray(innerData.klines)) {
         return innerData.klines
       }
       if (Array.isArray(innerData)) {
@@ -176,26 +172,24 @@ const StockDetail = () => {
   
   const weeklyKlines = (() => {
     if (!weeklyKlineData) return []
-    const innerData = (weeklyKlineData as any).data
+    const innerData = (weeklyKlineData as ApiResponse<KLineData[] | { data: KLineData[] }>)?.data
     if (Array.isArray(innerData)) return innerData
-    if (innerData?.data && Array.isArray(innerData.data)) return innerData.data
+    if (innerData && 'data' in innerData && Array.isArray(innerData.data)) return innerData.data
     return []
   })()
   
   const monthlyKlines = (() => {
     if (!monthlyKlineData) return []
-    const innerData = (monthlyKlineData as any).data
+    const innerData = (monthlyKlineData as ApiResponse<KLineData[] | { data: KLineData[] }>)?.data
     if (Array.isArray(innerData)) return innerData
-    if (innerData?.data && Array.isArray(innerData.data)) return innerData.data
+    if (innerData && 'data' in innerData && Array.isArray(innerData.data)) return innerData.data
     return []
   })()
   
-  const indicators = ((indicatorData as any)?.data) || []
-  const boards = ((boardData as any)?.data) || []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const capitalFlows: any[] = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const shareholders: any[] = []
+  const indicators = ((indicatorData as ApiResponse<TechnicalIndicator[]> | undefined)?.data) || []
+  const boards = ((boardData as ApiResponse<BoardInfo[]> | undefined)?.data) || []
+  const capitalFlows: CapitalFlow[] = []
+  const shareholders: Shareholder[] = []
 
   // 调试日志
   useEffect(() => {
@@ -217,9 +211,9 @@ const StockDetail = () => {
   //     }
   //   }
 
-    const dates = klines.map((k: any) => k.date)
-    const ohlc = klines.map((k: any) => [k.open, k.close, k.low, k.high])
-    const volumes = klines.map((k: any) => k.volume)
+    const dates = klines.map((k: KLineData) => k.date)
+    const ohlc = klines.map((k: KLineData) => [k.open, k.close, k.low, k.high])
+    const volumes = klines.map((k: KLineData) => k.volume)
 
     return {
       backgroundColor: 'transparent',
@@ -265,7 +259,7 @@ const StockDetail = () => {
           xAxisIndex: 1,
           yAxisIndex: 1,
           data: volumes,
-          itemStyle: (params: any) => {
+          itemStyle: (params: ChartItemStyleParams) => {
             const idx = params.dataIndex
             const open = ohlc[idx][0]
             const close = ohlc[idx][1]
@@ -291,9 +285,9 @@ const StockDetail = () => {
       }
     }
 
-    const dates = weeklyKlines.map((k: any) => k.date)
-    const ohlc = weeklyKlines.map((k: any) => [k.open, k.close, k.low, k.high])
-    const volumes = weeklyKlines.map((k: any) => k.volume)
+    const dates = weeklyKlines.map((k: KLineData) => k.date)
+    const ohlc = weeklyKlines.map((k: KLineData) => [k.open, k.close, k.low, k.high])
+    const volumes = weeklyKlines.map((k: KLineData) => k.volume)
 
     return {
       backgroundColor: 'transparent',
@@ -339,7 +333,7 @@ const StockDetail = () => {
           xAxisIndex: 1,
           yAxisIndex: 1,
           data: volumes,
-          itemStyle: (params: any) => {
+          itemStyle: (params: ChartItemStyleParams) => {
             const idx = params.dataIndex
             const open = ohlc[idx][0]
             const close = ohlc[idx][1]
@@ -365,9 +359,9 @@ const StockDetail = () => {
       }
     }
 
-    const dates = monthlyKlines.map((k: any) => k.date)
-    const ohlc = monthlyKlines.map((k: any) => [k.open, k.close, k.low, k.high])
-    const volumes = monthlyKlines.map((k: any) => k.volume)
+    const dates = monthlyKlines.map((k: KLineData) => k.date)
+    const ohlc = monthlyKlines.map((k: KLineData) => [k.open, k.close, k.low, k.high])
+    const volumes = monthlyKlines.map((k: KLineData) => k.volume)
 
     return {
       backgroundColor: 'transparent',
@@ -413,7 +407,7 @@ const StockDetail = () => {
           xAxisIndex: 1,
           yAxisIndex: 1,
           data: volumes,
-          itemStyle: (params: any) => {
+          itemStyle: (params: ChartItemStyleParams) => {
             const idx = params.dataIndex
             const open = ohlc[idx][0]
             const close = ohlc[idx][1]
@@ -439,10 +433,10 @@ const StockDetail = () => {
       }
     }
 
-    const dates = indicators.map((i: any) => i.date)
-    const macd = indicators.map((i: any) => i.macd)
-    const macdSignal = indicators.map((i: any) => i.macd_signal)
-    const macdHist = indicators.map((i: any) => i.macd_hist)
+    const dates = indicators.map((i: TechnicalIndicator) => i.date)
+    const macd = indicators.map((i: TechnicalIndicator) => i.macd)
+    const macdSignal = indicators.map((i: TechnicalIndicator) => i.macd_signal)
+    const macdHist = indicators.map((i: TechnicalIndicator) => i.macd_hist)
 
     return {
       backgroundColor: 'transparent',
@@ -469,7 +463,7 @@ const StockDetail = () => {
       series: [
         { name: 'MACD', type: 'line', data: macd, lineStyle: { color: 'brand.500' }, itemStyle: { color: 'brand.500' } },
         { name: 'Signal', type: 'line', data: macdSignal, lineStyle: { color: 'brand.600' }, itemStyle: { color: 'brand.600' } },
-        { name: 'Hist', type: 'bar', data: macdHist, itemStyle: (params: any) => ({ color: params.value >= 0 ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.6)' }) },
+        { name: 'Hist', type: 'bar', data: macdHist, itemStyle: (params: ChartItemStyleParams) => ({ color: params.value >= 0 ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.6)' }) },
       ],
     }
   }
@@ -667,8 +661,8 @@ const StockDetail = () => {
           </CardHeader>
           <CardBody>
             <SimpleGrid columns={[1, 2, 3]} gap={4}>
-              {boards.map((board: any, index: number) => (
-                <Card key={index} size="sm">
+              {boards.map((board: BoardInfo) => (
+                <Card key={board.code || board.name} size="sm">
                   <CardBody p={4}>
                     <VStack align="start" spacing={2}>
                       <Text fontSize="xs" color="light.textSecondary">{board.board_type}</Text>
@@ -713,8 +707,8 @@ const StockDetail = () => {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {capitalFlows.slice(-10).reverse().map((item: any, index: number) => (
-                    <Tr key={index} _hover={{ bg: 'light.bgSecondary' }}>
+                  {capitalFlows.slice(-10).reverse().map((item: CapitalFlow) => (
+                    <Tr key={item.trade_date} _hover={{ bg: 'light.bgSecondary' }}>
                       <Td borderColor="light.border" color="light.text">{item.trade_date}</Td>
                       <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
                         {item.close_price?.toFixed(2) || '-'}
@@ -772,8 +766,8 @@ const StockDetail = () => {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {shareholders.map((item: any, index: number) => (
-                    <Tr key={index} _hover={{ bg: 'light.bgSecondary' }}>
+                  {shareholders.map((item: Shareholder) => (
+                    <Tr key={item.shareholder_name} _hover={{ bg: 'light.bgSecondary' }}>
                       <Td borderColor="light.border" color="light.text">{item.shareholder_name}</Td>
                       <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
                         {item.hold_amount?.toLocaleString() || '-'}
@@ -828,8 +822,8 @@ const StockDetail = () => {
                 </Tr>
               </Thead>
               <Tbody>
-                {indicators.slice(-20).reverse().map((item: any, index: number) => (
-                  <Tr key={index} _hover={{ bg: 'light.bgSecondary' }}>
+                {indicators.slice(-20).reverse().map((item: TechnicalIndicator) => (
+                  <Tr key={item.date} _hover={{ bg: 'light.bgSecondary' }}>
                     <Td borderColor="light.border" color="light.text">{item.date}</Td>
                     <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">{item.ma5?.toFixed(2)}</Td>
                     <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">{item.ma20?.toFixed(2)}</Td>

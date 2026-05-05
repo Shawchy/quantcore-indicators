@@ -240,7 +240,7 @@ const BlockTradePage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {sctjData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td>{formatDate(item.date)}</Td>
                       <Td isNumeric>{item.sh_index?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>
@@ -360,7 +360,7 @@ const BlockTradePage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {mrmxData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.trade_date || index}>
                       <Td>{formatDate(item.date)}</Td>
                       <Td>{item.stock_code}</Td>
                       <Td>{item.stock_name}</Td>

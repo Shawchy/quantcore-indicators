@@ -209,4 +209,4 @@ const FundCard: React.FC<FundCardProps> = ({
   );
 };
 
-export default FundCard;
+export default React.memo(FundCard);

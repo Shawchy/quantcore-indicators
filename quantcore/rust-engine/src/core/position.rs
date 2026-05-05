@@ -2,61 +2,48 @@
 
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// 持仓
+fn safe_price(value: f64, field: &str) -> Decimal {
+    if value.is_nan() || value.is_infinite() {
+        log::error!("持仓数据 {} 包含无效值: {}", field, value);
+        Decimal::ZERO
+    } else {
+        Decimal::from_f64_retain(value).unwrap_or_else(|| {
+            log::error!("持仓数据 {} 转换失败: {}", field, value);
+            Decimal::ZERO
+        })
+    }
+}
+
 #[pyclass]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Position {
-    /// 证券代码
     #[pyo3(get)]
     pub symbol: String,
-
-    /// 持仓方向（多头/空头）
     #[pyo3(get)]
     pub side: String,
-
-    /// 持仓数量
     #[pyo3(get)]
     pub quantity: i64,
-
-    /// 可用数量（T+1 限制）
     #[pyo3(get)]
     pub available_quantity: i64,
-
-    /// 持仓成本价
     #[pyo3(get)]
     pub cost_price: Decimal,
-
-    /// 当前市价
     #[pyo3(get)]
     pub current_price: Decimal,
-
-    /// 持仓市值
     #[pyo3(get)]
     pub market_value: Decimal,
-
-    /// 持仓成本
     #[pyo3(get)]
     pub cost_value: Decimal,
-
-    /// 浮动盈亏
     #[pyo3(get)]
     pub unrealized_pnl: Decimal,
-
-    /// 浮动盈亏比例
     #[pyo3(get)]
     pub unrealized_pnl_percent: Decimal,
-
-    /// 昨日持仓
     #[pyo3(get)]
     pub yesterday_quantity: i64,
-
-    /// 今日买入
     #[pyo3(get)]
     pub today_long: i64,
-
-    /// 今日卖出
     #[pyo3(get)]
     pub today_short: i64,
 }
@@ -72,8 +59,8 @@ impl Position {
         cost_price: f64,
         current_price: f64,
     ) -> Self {
-        let cost_price = Decimal::from_f64_retain(cost_price).unwrap_or(Decimal::ZERO);
-        let current_price = Decimal::from_f64_retain(current_price).unwrap_or(Decimal::ZERO);
+        let cost_price = safe_price(cost_price, "cost_price");
+        let current_price = safe_price(current_price, "current_price");
         let cost_value = cost_price * Decimal::from(quantity);
         let market_value = current_price * Decimal::from(quantity);
         let unrealized_pnl = market_value - cost_value;
@@ -111,11 +98,15 @@ impl Position {
         )
     }
 
-    /// 更新当前价格
     fn update_price(&mut self, price: f64) {
-        let price = Decimal::from_f64_retain(price).unwrap_or(self.current_price);
-        self.current_price = price;
-        self.market_value = price * Decimal::from(self.quantity);
+        let new_price = if price.is_nan() || price.is_infinite() {
+            log::error!("持仓 {} 更新价格无效: {}", self.symbol, price);
+            return;
+        } else {
+            Decimal::from_f64_retain(price).unwrap_or(self.current_price)
+        };
+        self.current_price = new_price;
+        self.market_value = new_price * Decimal::from(self.quantity);
         self.unrealized_pnl = self.market_value - self.cost_value;
         self.unrealized_pnl_percent = if self.cost_value == Decimal::ZERO {
             Decimal::ZERO
@@ -124,7 +115,6 @@ impl Position {
         };
     }
 
-    /// 是否可卖出指定数量
     fn can_sell(&self, quantity: i64) -> bool {
         self.available_quantity >= quantity
     }

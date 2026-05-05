@@ -47,6 +47,50 @@ const CACHE_EXPIRY = {
 /**
  * 数据存储服务类
  */
+interface FundRealtimeData {
+  gszzl?: string;
+  gztime?: string;
+  dwjz?: string;
+  [key: string]: unknown;
+}
+
+interface FundHistoryItem {
+  date: string;
+  nav?: number;
+  accNav?: number;
+  [key: string]: unknown;
+}
+
+interface FundBaseInfo {
+  name?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+interface FundPeriodItem {
+  fund_code: string;
+  period: string;
+  return_rate?: number;
+  avg_return?: number;
+  rank?: number;
+  total_count?: number;
+  rank_rate?: number;
+  [key: string]: unknown;
+}
+
+interface FundAssetItem {
+  fund_code: string;
+  report_date?: string;
+  stock_ratio?: number;
+  bond_ratio?: number;
+  cash_ratio?: number;
+  other_ratio?: number;
+  total_scale?: number;
+  asset_name?: string;
+  ratio?: number;
+  [key: string]: unknown;
+}
+
 class FundStorageService {
   private db: IDBDatabase | null = null;
   private dbName = 'FundDataDB';
@@ -55,6 +99,47 @@ class FundStorageService {
 
   constructor() {
     this.initIndexedDB();
+  }
+
+  private async getCached<T>(
+    dataPrefix: string,
+    tsPrefix: string,
+    fundCode: string,
+    expiry: number,
+  ): Promise<T | null> {
+    const key = `${dataPrefix}${fundCode}`;
+    const tsKey = `${tsPrefix}${fundCode}`;
+
+    const timestamp = localStorage.getItem(tsKey);
+    if (!timestamp) {
+      return null;
+    }
+
+    const cacheAge = Date.now() - parseInt(timestamp);
+    if (cacheAge > expiry) {
+      localStorage.removeItem(tsKey);
+      await this.delete(key);
+      return null;
+    }
+
+    return await this.get<T>(key);
+  }
+
+  private async setCached(
+    dataPrefix: string,
+    tsPrefix: string,
+    fundCode: string,
+    data: unknown,
+    type: string,
+    expiryMs: number,
+  ): Promise<void> {
+    const key = `${dataPrefix}${fundCode}`;
+    const tsKey = `${tsPrefix}${fundCode}`;
+
+    await Promise.all([
+      this.set(key, data, type, fundCode, expiryMs / (24 * 60 * 60 * 1000)),
+      localStorage.setItem(tsKey, Date.now().toString()),
+    ]);
   }
 
   /**
@@ -183,195 +268,126 @@ class FundStorageService {
   /**
    * 批量存储实时估算数据
    */
-  async setRealtimeRate(fundCodes: string[], data: any[]): Promise<void> {
-    const timestamp = Date.now();
-    
-    // 存储每个基金的数据
-    const promises = fundCodes.map((code, index) => {
-      const key = `${STORAGE_PREFIXES.REALTIME_RATE}${code}`;
-      const tsKey = `${STORAGE_PREFIXES.RATE_TIMESTAMP}${code}`;
-      
-      return Promise.all([
-        this.set(key, data[index], 'realtime', code, CACHE_EXPIRY.REALTIME_RATE / (24 * 60 * 60 * 1000)),
-        localStorage.setItem(tsKey, timestamp.toString()),
-      ]);
-    });
-
+  async setRealtimeRate(fundCodes: string[], data: FundRealtimeData[]): Promise<void> {
+    const promises = fundCodes.map((code, index) =>
+      this.setCached(
+        STORAGE_PREFIXES.REALTIME_RATE,
+        STORAGE_PREFIXES.RATE_TIMESTAMP,
+        code,
+        data[index],
+        'realtime',
+        CACHE_EXPIRY.REALTIME_RATE,
+      ),
+    );
     await Promise.all(promises);
   }
 
-  /**
-   * 获取实时估算数据
-   */
-  async getRealtimeRate(fundCode: string): Promise<any | null> {
-    const key = `${STORAGE_PREFIXES.REALTIME_RATE}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.RATE_TIMESTAMP}${fundCode}`;
-    
-    const timestamp = localStorage.getItem(tsKey);
-    if (!timestamp) {
-      return null;
-    }
-
-    const cacheAge = Date.now() - parseInt(timestamp);
-    if (cacheAge > CACHE_EXPIRY.REALTIME_RATE) {
-      // 缓存过期
-      localStorage.removeItem(tsKey);
-      await this.delete(key);
-      return null;
-    }
-
-    return await this.get(key);
+  async getRealtimeRate(fundCode: string): Promise<FundRealtimeData | null> {
+    return this.getCached<FundRealtimeData>(
+      STORAGE_PREFIXES.REALTIME_RATE,
+      STORAGE_PREFIXES.RATE_TIMESTAMP,
+      fundCode,
+      CACHE_EXPIRY.REALTIME_RATE,
+    );
   }
 
   /**
    * 批量存储历史净值数据
    */
-  async setHistory(fundCode: string, data: any[]): Promise<void> {
-    const key = `${STORAGE_PREFIXES.HISTORY}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.HISTORY_TIMESTAMP}${fundCode}`;
-    
-    await Promise.all([
-      this.set(key, data, 'history', fundCode, CACHE_EXPIRY.HISTORY / (24 * 60 * 60 * 1000)),
-      localStorage.setItem(tsKey, Date.now().toString()),
-    ]);
+  async setHistory(fundCode: string, data: FundHistoryItem[]): Promise<void> {
+    await this.setCached(
+      STORAGE_PREFIXES.HISTORY,
+      STORAGE_PREFIXES.HISTORY_TIMESTAMP,
+      fundCode,
+      data,
+      'history',
+      CACHE_EXPIRY.HISTORY,
+    );
   }
 
-  /**
-   * 获取历史净值数据
-   */
-  async getHistory(fundCode: string): Promise<any[] | null> {
-    const key = `${STORAGE_PREFIXES.HISTORY}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.HISTORY_TIMESTAMP}${fundCode}`;
-    
-    const timestamp = localStorage.getItem(tsKey);
-    if (!timestamp) {
-      return null;
-    }
-
-    const cacheAge = Date.now() - parseInt(timestamp);
-    if (cacheAge > CACHE_EXPIRY.HISTORY) {
-      // 缓存过期
-      localStorage.removeItem(tsKey);
-      await this.delete(key);
-      return null;
-    }
-
-    return await this.get(key);
+  async getHistory(fundCode: string): Promise<FundHistoryItem[] | null> {
+    return this.getCached<FundHistoryItem[]>(
+      STORAGE_PREFIXES.HISTORY,
+      STORAGE_PREFIXES.HISTORY_TIMESTAMP,
+      fundCode,
+      CACHE_EXPIRY.HISTORY,
+    );
   }
 
   /**
    * 存储基金基本信息
    */
-  async setBaseInfo(fundCode: string, data: any): Promise<void> {
-    const key = `${STORAGE_PREFIXES.BASE_INFO}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.BASE_INFO_TIMESTAMP}${fundCode}`;
-    
-    await Promise.all([
-      this.set(key, data, 'base', fundCode, CACHE_EXPIRY.BASE_INFO / (24 * 60 * 60 * 1000)),
-      localStorage.setItem(tsKey, Date.now().toString()),
-    ]);
+  async setBaseInfo(fundCode: string, data: FundBaseInfo): Promise<void> {
+    await this.setCached(
+      STORAGE_PREFIXES.BASE_INFO,
+      STORAGE_PREFIXES.BASE_INFO_TIMESTAMP,
+      fundCode,
+      data,
+      'base',
+      CACHE_EXPIRY.BASE_INFO,
+    );
   }
 
-  /**
-   * 获取基金基本信息
-   */
-  async getBaseInfo(fundCode: string): Promise<any | null> {
-    const key = `${STORAGE_PREFIXES.BASE_INFO}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.BASE_INFO_TIMESTAMP}${fundCode}`;
-    
-    const timestamp = localStorage.getItem(tsKey);
-    if (!timestamp) {
-      return null;
-    }
-
-    const cacheAge = Date.now() - parseInt(timestamp);
-    if (cacheAge > CACHE_EXPIRY.BASE_INFO) {
-      localStorage.removeItem(tsKey);
-      await this.delete(key);
-      return null;
-    }
-
-    return await this.get(key);
+  async getBaseInfo(fundCode: string): Promise<FundBaseInfo | null> {
+    return this.getCached<FundBaseInfo>(
+      STORAGE_PREFIXES.BASE_INFO,
+      STORAGE_PREFIXES.BASE_INFO_TIMESTAMP,
+      fundCode,
+      CACHE_EXPIRY.BASE_INFO,
+    );
   }
 
   /**
    * 批量存储基金基本信息
    */
-  async setBaseInfoBatch(fundCodes: string[], dataList: any[]): Promise<void> {
-    const promises = fundCodes.map((code, index) => 
+  async setBaseInfoBatch(fundCodes: string[], dataList: FundBaseInfo[]): Promise<void> {
+    const promises = fundCodes.map((code, index) =>
       this.setBaseInfo(code, dataList[index])
     );
     await Promise.all(promises);
   }
 
-  /**
-   * 存储阶段涨跌幅数据
-   */
-  async setPeriodChange(fundCode: string, data: any[]): Promise<void> {
-    const key = `${STORAGE_PREFIXES.PERIOD_CHANGE}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.PERIOD_CHANGE_TIMESTAMP}${fundCode}`;
-    
-    await Promise.all([
-      this.set(key, data, 'period', fundCode, CACHE_EXPIRY.PERIOD_CHANGE / (24 * 60 * 60 * 1000)),
-      localStorage.setItem(tsKey, Date.now().toString()),
-    ]);
+  async setPeriodChange(fundCode: string, data: FundPeriodItem[]): Promise<void> {
+    await this.setCached(
+      STORAGE_PREFIXES.PERIOD_CHANGE,
+      STORAGE_PREFIXES.PERIOD_CHANGE_TIMESTAMP,
+      fundCode,
+      data,
+      'period',
+      CACHE_EXPIRY.PERIOD_CHANGE,
+    );
   }
 
-  /**
-   * 获取阶段涨跌幅数据
-   */
-  async getPeriodChange(fundCode: string): Promise<any[] | null> {
-    const key = `${STORAGE_PREFIXES.PERIOD_CHANGE}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.PERIOD_CHANGE_TIMESTAMP}${fundCode}`;
-    
-    const timestamp = localStorage.getItem(tsKey);
-    if (!timestamp) {
-      return null;
-    }
-
-    const cacheAge = Date.now() - parseInt(timestamp);
-    if (cacheAge > CACHE_EXPIRY.PERIOD_CHANGE) {
-      localStorage.removeItem(tsKey);
-      await this.delete(key);
-      return null;
-    }
-
-    return await this.get(key);
+  async getPeriodChange(fundCode: string): Promise<FundPeriodItem[] | null> {
+    return this.getCached<FundPeriodItem[]>(
+      STORAGE_PREFIXES.PERIOD_CHANGE,
+      STORAGE_PREFIXES.PERIOD_CHANGE_TIMESTAMP,
+      fundCode,
+      CACHE_EXPIRY.PERIOD_CHANGE,
+    );
   }
 
   /**
    * 存储资产配置数据
    */
-  async setAssets(fundCode: string, data: any[]): Promise<void> {
-    const key = `${STORAGE_PREFIXES.ASSETS}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.ASSETS_TIMESTAMP}${fundCode}`;
-    
-    await Promise.all([
-      this.set(key, data, 'assets', fundCode, CACHE_EXPIRY.ASSETS / (24 * 60 * 60 * 1000)),
-      localStorage.setItem(tsKey, Date.now().toString()),
-    ]);
+  async setAssets(fundCode: string, data: FundAssetItem[]): Promise<void> {
+    await this.setCached(
+      STORAGE_PREFIXES.ASSETS,
+      STORAGE_PREFIXES.ASSETS_TIMESTAMP,
+      fundCode,
+      data,
+      'assets',
+      CACHE_EXPIRY.ASSETS,
+    );
   }
 
-  /**
-   * 获取资产配置数据
-   */
-  async getAssets(fundCode: string): Promise<any[] | null> {
-    const key = `${STORAGE_PREFIXES.ASSETS}${fundCode}`;
-    const tsKey = `${STORAGE_PREFIXES.ASSETS_TIMESTAMP}${fundCode}`;
-    
-    const timestamp = localStorage.getItem(tsKey);
-    if (!timestamp) {
-      return null;
-    }
-
-    const cacheAge = Date.now() - parseInt(timestamp);
-    if (cacheAge > CACHE_EXPIRY.ASSETS) {
-      localStorage.removeItem(tsKey);
-      await this.delete(key);
-      return null;
-    }
-
-    return await this.get(key);
+  async getAssets(fundCode: string): Promise<FundAssetItem[] | null> {
+    return this.getCached<FundAssetItem[]>(
+      STORAGE_PREFIXES.ASSETS,
+      STORAGE_PREFIXES.ASSETS_TIMESTAMP,
+      fundCode,
+      CACHE_EXPIRY.ASSETS,
+    );
   }
 
   /**

@@ -154,13 +154,11 @@ export const fundApi = {
     if (!forceRefresh) {
       const cached = await fundStorage.getHistory(fundCode)
       if (cached) {
-        console.log(`[缓存] 获取基金 ${fundCode} 历史净值`)
         return { data: cached }
       }
     }
     
     // 从 API 获取
-    console.log(`[API] 获取基金 ${fundCode} 历史净值`)
     const response = await api.get<FundHistoryInfo[]>(`/fund/${fundCode}/history`, { params: { pz } })
     
     // 保存到缓存
@@ -200,7 +198,6 @@ export const fundApi = {
       
       // 如果全部命中缓存
       if (missingCodes.length === 0) {
-        console.log(`[缓存] 批量获取 ${fundCodes.length} 只基金历史净值`)
         return { data: cachedData }
       }
     } else {
@@ -209,7 +206,6 @@ export const fundApi = {
     
     // 从 API 获取缺失的数据
     if (missingCodes.length > 0) {
-      console.log(`[API] 批量获取 ${missingCodes.length} 只基金历史净值`)
       const response = await api.post<Record<string, FundHistoryInfo[]>>('/fund/history/batch', missingCodes, {
         params: { pz }
       })
@@ -258,7 +254,6 @@ export const fundApi = {
     
     // 如果全部命中缓存
     if (missingCodes.length === 0) {
-      console.log(`[缓存] 获取 ${codeList.length} 只基金基本信息`)
       return {
         data: Array.isArray(fundCodes) ? cachedData : cachedData[0],
       }
@@ -266,7 +261,6 @@ export const fundApi = {
     
     // 从 API 获取缺失的数据
     const codeParam = missingCodes.join(',')
-    console.log(`[API] 获取 ${missingCodes.length} 只基金基本信息`)
     const response = await api.get<FundInfo | FundInfo[]>(`/fund/base-info/${codeParam}`)
     
     // 保存到缓存
@@ -310,7 +304,6 @@ export const fundApi = {
     
     // 如果全部命中缓存
     if (missingCodes.length === 0) {
-      console.log(`[缓存] 获取 ${codeList.length} 只基金实时估算`)
       return {
         data: Array.isArray(fundCodes) ? cachedData : cachedData[0],
       }
@@ -318,7 +311,6 @@ export const fundApi = {
     
     // 从 API 获取缺失的数据
     const codeParam = missingCodes.join(',')
-    console.log(`[API] 获取 ${missingCodes.length} 只基金实时估算`)
     const response = await api.get<FundRealtimeRateInfo | FundRealtimeRateInfo[]>(`/fund/realtime-rate/${codeParam}`, {
       timeout: 90000,  // 90 秒超时（基金数据获取可能较慢）
     })
@@ -350,12 +342,10 @@ export const fundApi = {
     // 优先从缓存获取
     const cached = await fundStorage.getPeriodChange(fundCode)
     if (cached) {
-      console.log(`[缓存] 获取基金 ${fundCode} 阶段涨跌幅`)
       return { data: cached }
     }
     
     // 从 API 获取
-    console.log(`[API] 获取基金 ${fundCode} 阶段涨跌幅`)
     const response = await api.get<FundPeriodChangeInfo[]>(`/fund/${fundCode}/period-change`)
     
     // 保存到缓存
@@ -394,7 +384,6 @@ export const fundApi = {
           return true;
         });
       
-      console.log(`[fundApi] 获取到 ${validCodes.length} 只有效基金（共 ${response.data.length} 只）`);
       return validCodes;
     } catch (error) {
       console.error('[fundApi] 获取基金代码列表失败:', error);
@@ -427,13 +416,11 @@ export const fundApi = {
     if (!dates) {
       const cached = await fundStorage.getAssets(fundCode)
       if (cached) {
-        console.log(`[缓存] 获取基金 ${fundCode} 资产配置`)
         return { data: cached }
       }
     }
     
     // 从 API 获取
-    console.log(`[API] 获取基金 ${fundCode} 资产配置`)
     const response = await api.get<FundAssetsAllocationInfo[]>(`/fund/${fundCode}/assets`, {
       params: { dates: dates || undefined }
     })

@@ -70,7 +70,7 @@ impl Trade {
         tax: f64,
     ) -> Self {
         let turnover =
-            Decimal::from_f64_retain(price as f64 * quantity as f64).unwrap_or(Decimal::ZERO);
+            Decimal::from_f64_retain(price) * Decimal::from(quantity);
         Self {
             trade_id,
             order_id,

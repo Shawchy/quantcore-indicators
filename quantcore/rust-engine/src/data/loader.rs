@@ -1,10 +1,8 @@
 //! 数据加载器
 
-use super::feed::DataFeed;
 use crate::core::Bar;
 use pyo3::prelude::*;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// 数据加载器
 #[pyclass]

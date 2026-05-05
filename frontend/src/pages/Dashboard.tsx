@@ -318,7 +318,7 @@ const Dashboard = () => {
             ) : (
               <VStack spacing={2} align="stretch">
                 {sectorRanking?.data?.slice(0, 10).map((sector: any, index: number) => (
-                  <HStack key={index} justify="space-between" p={2} borderRadius="md" bg={index % 2 === 0 ? 'gray.50' : 'white'} _dark={{ bg: index % 2 === 0 ? 'gray.700' : 'gray.800' }}>
+                  <HStack key={item.code || item.name || index} justify="space-between" p={2} borderRadius="md" bg={index % 2 === 0 ? 'gray.50' : 'white'} _dark={{ bg: index % 2 === 0 ? 'gray.700' : 'gray.800' }}>
                     <HStack spacing={3}>
                       <RankBadge rank={index + 1} />
                       <Text fontWeight="medium" fontSize="sm">{sector.name}</Text>

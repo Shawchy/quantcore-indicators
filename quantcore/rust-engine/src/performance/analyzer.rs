@@ -1,9 +1,11 @@
 //! 绩效分析器
 
+use super::math::{calculate_annual_return, calculate_volatility, calculate_sharpe_ratio, calculate_max_drawdown};
 use super::metrics::PerformanceMetrics;
-use crate::core::{OrderSide, Trade};
+use crate::core::Trade;
 use log::warn;
 use pyo3::prelude::*;
+use rust_decimal::prelude::*;
 
 /// 绩效分析器
 #[pyclass]
@@ -101,75 +103,19 @@ impl PerformanceAnalyzer {
 
     /// 计算年化收益率
     fn calculate_annual_return(&self) -> f64 {
-        let total_return = self.calculate_total_return();
-        let days = self.portfolio_values.len();
-        if days < 2 {
-            return 0.0;
-        }
-        // 假设每个 portfolio_value 代表一天
-        let years = days as f64 / 252.0; // 252 个交易日/年
-        if years <= 0.0 || total_return <= -1.0 {
-            return 0.0;
-        }
-        (1.0 + total_return).powf(1.0 / years) - 1.0
+        calculate_annual_return(&self.portfolio_values, self.initial_capital)
     }
 
-    /// 计算波动率（年化）
     fn calculate_volatility(&self) -> f64 {
-        if self.portfolio_values.len() < 2 {
-            return 0.0;
-        }
-
-        // 计算日收益率
-        let mut returns = Vec::with_capacity(self.portfolio_values.len() - 1);
-        for i in 1..self.portfolio_values.len() {
-            let prev = self.portfolio_values[i - 1];
-            if prev == 0.0 {
-                returns.push(0.0);
-            } else {
-                returns.push((self.portfolio_values[i] - prev) / prev);
-            }
-        }
-
-        // 计算标准差
-        let mean = returns.iter().sum::<f64>() / returns.len() as f64;
-        let variance = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
-        let daily_std = variance.sqrt();
-
-        // 年化波动率
-        daily_std * (252.0_f64).sqrt()
+        calculate_volatility(&self.portfolio_values)
     }
 
-    /// 计算夏普比率
     fn calculate_sharpe_ratio(&self) -> f64 {
-        let annual_return = self.calculate_annual_return();
-        let volatility = self.calculate_volatility();
-        if volatility == 0.0 {
-            return 0.0;
-        }
-        (annual_return - self.risk_free_rate) / volatility
+        calculate_sharpe_ratio(&self.portfolio_values, self.initial_capital, self.risk_free_rate)
     }
 
-    /// 计算最大回撤
     fn calculate_max_drawdown(&self) -> f64 {
-        if self.portfolio_values.is_empty() {
-            return 0.0;
-        }
-
-        let mut peak = self.portfolio_values[0];
-        let mut max_dd = 0.0;
-
-        for &value in &self.portfolio_values {
-            if value > peak {
-                peak = value;
-            }
-            let drawdown = (peak - value) / peak;
-            if drawdown > max_dd {
-                max_dd = drawdown;
-            }
-        }
-
-        max_dd
+        calculate_max_drawdown(&self.portfolio_values)
     }
 
     /// 计算索提诺比率

@@ -41,13 +41,15 @@ if (sentryDsn && sentryDsn !== 'https://your-dsn-key@o0.ingest.sentry.io/0' && s
   console.warn('[Sentry] 未配置有效的 DSN，错误监控已禁用')
 }
 
-// 将 store 挂载到 window 对象，避免循环依赖
+// 开发环境下将 store 挂载到 window 对象用于调试
 declare global {
   interface Window {
-    __store__: typeof store
+    __store__?: typeof store
   }
 }
-window.__store__ = store
+if (import.meta.env.DEV) {
+  window.__store__ = store
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

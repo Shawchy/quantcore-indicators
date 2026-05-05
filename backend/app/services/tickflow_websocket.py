@@ -221,7 +221,9 @@ class TickFlowWebSocketService:
             raise ValueError("未配置TICKFLOW_API_KEY，请在.env文件中设置")
         
         try:
-            url = f"{self.TICKFLOW_WS_URL}?api_key={self.api_key}"
+            # 使用 WebSocket 协议的 header 传递 API Key，避免 URL 泄露
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            url = self.TICKFLOW_WS_URL
             
             logger.info(f"正在连接TickFlow WebSocket...")
             
@@ -230,7 +232,8 @@ class TickFlowWebSocketService:
                 ping_interval=self.PING_INTERVAL,
                 ping_timeout=10,
                 close_timeout=5,
-                compression=None  # 使用默认压缩
+                compression=None,
+                extra_headers=headers
             )
             
             self._is_connected = True
@@ -286,8 +289,8 @@ class TickFlowWebSocketService:
         if self._ws_connection:
             try:
                 await self._ws_connection.close()
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"关闭WebSocket连接时出错（可忽略）: {e}")
             self._ws_connection = None
         
         for callback in self._callbacks["disconnected"]:
@@ -333,8 +336,8 @@ class TickFlowWebSocketService:
                 for cb in self._callbacks["error"]:
                     try:
                         cb(error_msg["message"])
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"错误回调执行失败: {e}")
                     
                 return False
             

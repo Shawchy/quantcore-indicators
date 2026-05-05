@@ -3,7 +3,20 @@
 use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
+
+fn safe_decimal(value: f64, field_name: &str) -> Decimal {
+    if value.is_nan() || value.is_infinite() {
+        log::error!("金融数据 {} 包含无效值: {}，将使用 0", field_name, value);
+        Decimal::ZERO
+    } else {
+        Decimal::from_f64_retain(value).unwrap_or_else(|| {
+            log::error!("金融数据 {} 转换失败: {}", field_name, value);
+            Decimal::ZERO
+        })
+    }
+}
 
 /// K 线数据
 #[pyclass]
@@ -59,12 +72,19 @@ impl Bar {
     ) -> Self {
         Self {
             timestamp,
-            open: Decimal::from_f64_retain(open).unwrap_or(Decimal::ZERO),
-            high: Decimal::from_f64_retain(high).unwrap_or(Decimal::ZERO),
-            low: Decimal::from_f64_retain(low).unwrap_or(Decimal::ZERO),
-            close: Decimal::from_f64_retain(close).unwrap_or(Decimal::ZERO),
+            open: safe_decimal(open, "open"),
+            high: safe_decimal(high, "high"),
+            low: safe_decimal(low, "low"),
+            close: safe_decimal(close, "close"),
             volume,
-            turnover: turnover.and_then(|v| Decimal::from_f64_retain(v)),
+            turnover: turnover.and_then(|v| {
+                if v.is_nan() || v.is_infinite() {
+                    log::error!("金融数据 turnover 包含无效值: {}", v);
+                    None
+                } else {
+                    Decimal::from_f64_retain(v)
+                }
+            }),
             open_interest,
         }
     }

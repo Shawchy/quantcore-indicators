@@ -77,20 +77,13 @@ const Watchlist = () => {
   const { data: fundWatchlistData, isLoading: fundLoading, refetch: refetchFundWatchlist } = useQuery({
     queryKey: ['fundWatchlist'],
     queryFn: async () => {
-      console.log('[Watchlist Query] 开始获取基金自选列表...')
-      // 从本地存储获取基金自选代码（使用 fundStorage 的验证方法）
       const codes = fundStorage.getWatchlist()
-      console.log('[Watchlist Query] 从本地存储获取到基金代码:', codes)
       
       if (codes.length === 0) {
-        console.log('[Watchlist Query] 自选列表为空，返回空数组')
         return []
       }
       
-      // 批量获取基金信息
-      console.log('[Watchlist Query] 开始批量获取基金信息...')
       const infoRes = await fundApi.getFundBaseInfo(codes)
-      console.log('[Watchlist Query] 获取基金信息结果:', infoRes)
       return Array.isArray(infoRes.data) ? infoRes.data : [infoRes.data]
     },
   })
@@ -224,21 +217,11 @@ const Watchlist = () => {
       // 使用 fundStorage 的添加方法（会自动验证）
       fundStorage.addToWatchlist(fundCode)
       
-      // 调试日志
-      console.log('[Watchlist] 添加基金后，当前自选列表:', fundStorage.getWatchlist())
-      
-      // 手动刷新基金列表和行情数据
-      console.log('[Watchlist] 开始刷新基金列表...')
-      refetchFundWatchlist().then((result) => {
-        console.log('[Watchlist] 基金列表刷新完成:', result)
-      }).catch((err) => {
+      refetchFundWatchlist().catch((err) => {
         console.error('[Watchlist] 基金列表刷新失败:', err)
       })
       
-      console.log('[Watchlist] 开始刷新行情数据...')
-      refetchFundQuotes().then((result) => {
-        console.log('[Watchlist] 行情数据刷新完成:', result)
-      }).catch((err) => {
+      refetchFundQuotes().catch((err) => {
         console.error('[Watchlist] 行情数据刷新失败:', err)
       })
       

@@ -118,12 +118,34 @@ def safe_float(value, default=0.0):
     if isinstance(value, (int, float)):
         return float(value)
     try:
-        # 处理字符串中的百分号
         if isinstance(value, str):
             value = value.strip().replace(',', '').replace('%', '')
         return float(value)
     except (ValueError, TypeError):
         return default
+
+
+def safe_int(value, default=0):
+    """安全转换整数"""
+    if value is None:
+        return default
+    if isinstance(value, int):
+        return value
+    try:
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            value = value.strip().replace(',', '')
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_get(data: dict, key: str, default=None):
+    """安全获取字典值"""
+    if data is None:
+        return default
+    return data.get(key, default)
 
 
 class MarketQuote(BaseModel):
@@ -559,10 +581,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     continue
                 
                 # 安全转换浮点数，处理 '-' 等无效值
-                def safe_float(value, default=0.0):
-                    try:
-                        v = float(value) if value not in ('-', '', None) else default
-                        return v
                     except (ValueError, TypeError):
                         return default
                 
@@ -627,10 +645,6 @@ class EFinanceAdapter(BaseDataAdapter):
             # 单只股票返回 Series
             if hasattr(result, 'dtype'):
                 # 安全获取数值，处理 NaN
-                def safe_get(key, default=0.0):
-                    val = result.get(key, default)
-                    if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val)
                     except (ValueError, TypeError):
@@ -689,10 +703,6 @@ class EFinanceAdapter(BaseDataAdapter):
                 if not code:
                     continue
                 
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -769,18 +779,10 @@ class EFinanceAdapter(BaseDataAdapter):
             deals = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_int(value, default=0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return int(value)
                     except (ValueError, TypeError):
                         return default
                 
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -840,10 +842,6 @@ class EFinanceAdapter(BaseDataAdapter):
             bills = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -1098,10 +1096,6 @@ class EFinanceAdapter(BaseDataAdapter):
                         continue
                     
                     # 安全转换浮点数
-                    def safe_float(value, default=0.0):
-                        try:
-                            if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                                return default
                             return float(value)
                         except (ValueError, TypeError):
                             return default
@@ -1232,10 +1226,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     else:
                         continue
                     
-                    def safe_float(value, default=0.0):
-                        try:
-                            if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                                return default
                             return float(value)
                         except (ValueError, TypeError):
                             return default
@@ -1494,19 +1484,11 @@ class EFinanceAdapter(BaseDataAdapter):
                 return {}
             
             # 安全转换浮点数
-            def safe_float(value, default=0.0):
-                try:
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                        return default
                     return float(value)
                 except (ValueError, TypeError):
                     return default
             
             # 安全转换整数
-            def safe_int(value, default=0):
-                try:
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                        return default
                     return int(float(value))
                 except (ValueError, TypeError):
                     return default
@@ -1618,10 +1600,6 @@ class EFinanceAdapter(BaseDataAdapter):
             quotes = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -1807,10 +1785,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     continue
                 
                 # 安全转换浮点数
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -1947,10 +1921,6 @@ class EFinanceAdapter(BaseDataAdapter):
             members = []
             for row in df.itertuples(index=False):
                 # 安全转换浮点数
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -2483,10 +2453,6 @@ class EFinanceAdapter(BaseDataAdapter):
             performances = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -2681,10 +2647,6 @@ class EFinanceAdapter(BaseDataAdapter):
             quotes = []
             for row in df.itertuples(index=False):
                 # 安全转换浮点数
-                def safe_float(value, default=None):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -2785,10 +2747,6 @@ class EFinanceAdapter(BaseDataAdapter):
             performances = []
             for row in stock_df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=None):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -3316,10 +3274,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     return None
                 
                 # 安全获取数值
-                def safe_float(key, default=None):
-                    val = row.get(key, default)
-                    if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val)
                     except (ValueError, TypeError):
@@ -3361,10 +3315,6 @@ class EFinanceAdapter(BaseDataAdapter):
                 rate_list = []
                 for row in df.itertuples(index=False):
                     # 安全获取数值
-                    def safe_get(key, default=None):
-                        val = getattr(row, key, default)
-                        if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                            return default
                         try:
                             return float(val)
                         except (ValueError, TypeError):
@@ -3447,10 +3397,6 @@ class EFinanceAdapter(BaseDataAdapter):
             period_list = []
             for row in df.itertuples(index=False):
                 # 安全获取数值
-                def safe_get(key, default=None):
-                    val = getattr(row, key, default)
-                    if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val) if val != '' else default
                     except (ValueError, TypeError):
@@ -3563,10 +3509,6 @@ class EFinanceAdapter(BaseDataAdapter):
             assets_list = []
             for row in df.itertuples(index=False):
                 # 安全获取数值
-                def safe_get(key, default=None):
-                    val = getattr(row, key, default)
-                    if val is None or val == '--' or val == '' or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val)
                     except (ValueError, TypeError):

@@ -3,6 +3,7 @@
 use crate::core::Portfolio;
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 
 /// 风险警告级别
 #[derive(Debug, Clone)]
@@ -95,7 +96,7 @@ impl RiskMonitor {
         if total_value > 0.0 {
             let mut max_position_value = 0.0;
             for pos in positions {
-                let pos_value = pos.avg_cost * pos.quantity as f64;
+                let pos_value = pos.cost_price.to_f64().unwrap_or(0.0) * pos.quantity as f64;
                 if pos_value > max_position_value {
                     max_position_value = pos_value;
                 }

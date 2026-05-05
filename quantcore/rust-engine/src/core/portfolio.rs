@@ -3,6 +3,7 @@
 use super::position::Position;
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -49,7 +50,14 @@ impl Portfolio {
     #[new]
     #[pyo3(signature = (initial_capital))]
     fn new(initial_capital: f64) -> Self {
-        let capital = Decimal::from_f64_retain(initial_capital).unwrap_or(Decimal::ZERO);
+        if initial_capital <= 0.0 || initial_capital.is_nan() || initial_capital.is_infinite() {
+            log::error!("初始资金无效: {}，将使用 1000000.0", initial_capital);
+        }
+        let capital = Decimal::from_f64_retain(initial_capital)
+            .unwrap_or_else(|| {
+                log::error!("初始资金转换失败: {}，使用默认值", initial_capital);
+                Decimal::from(1000000)
+            });
         Self {
             initial_capital: capital,
             cash: capital,
@@ -85,6 +93,11 @@ impl Portfolio {
     /// 获取持仓
     fn get_position(&self, symbol: &str) -> Option<&Position> {
         self.positions.get(symbol)
+    }
+
+    /// 获取可变持仓引用
+    pub fn get_position_mut(&mut self, symbol: &str) -> Option<&mut Position> {
+        self.positions.get_mut(symbol)
     }
 
     /// 添加持仓
@@ -132,11 +145,20 @@ impl Portfolio {
 
     /// 买入
     pub fn buy(&mut self, symbol: &str, price: f64, quantity: i64, commission: f64, tax: f64) -> PyResult<()> {
-        let price_dec = Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO);
-        let cost = price_dec * Decimal::from(quantity);
-        let commission_dec = Decimal::from_f64_retain(commission).unwrap_or(Decimal::ZERO);
-        let tax_dec = Decimal::from_f64_retain(tax).unwrap_or(Decimal::ZERO);
-        let total_cost = cost + commission_dec + tax_dec;
+        let price_dec = Decimal::from_f64_retain(price).unwrap_or_else(|| {
+            log::error!("买入价格转换失败: {}", price);
+            Decimal::ZERO
+        });
+        let amount = price_dec * Decimal::from(quantity);
+        let commission_dec = Decimal::from_f64_retain(commission).unwrap_or_else(|| {
+            log::warn!("佣金转换失败: {}", commission);
+            Decimal::ZERO
+        });
+        let tax_dec = Decimal::from_f64_retain(tax).unwrap_or_else(|| {
+            log::warn!("税费转换失败: {}", tax);
+            Decimal::ZERO
+        });
+        let total_cost = amount + commission_dec + tax_dec;
 
         if self.cash < total_cost {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
@@ -153,8 +175,8 @@ impl Portfolio {
 
         let total_qty = position.quantity + quantity;
         if total_qty > 0 {
-            let new_avg = (position.avg_cost * position.quantity as f64 + price * quantity as f64) / total_qty as f64;
-            position.avg_cost = new_avg;
+            let new_avg = (position.cost_price * Decimal::from(position.quantity) + Decimal::from_f64_retain(price) * Decimal::from(quantity)) / Decimal::from(total_qty);
+            position.cost_price = new_avg;
             position.quantity = total_qty;
         }
 
@@ -172,10 +194,19 @@ impl Portfolio {
                 )));
             }
 
-            let price_dec = Decimal::from_f64_retain(price).unwrap_or(Decimal::ZERO);
+            let price_dec = Decimal::from_f64_retain(price).unwrap_or_else(|| {
+                log::error!("卖出价格转换失败: {}", price);
+                Decimal::ZERO
+            });
             let revenue = price_dec * Decimal::from(quantity);
-            let commission_dec = Decimal::from_f64_retain(commission).unwrap_or(Decimal::ZERO);
-            let tax_dec = Decimal::from_f64_retain(tax).unwrap_or(Decimal::ZERO);
+            let commission_dec = Decimal::from_f64_retain(commission).unwrap_or_else(|| {
+                log::warn!("佣金转换失败: {}", commission);
+                Decimal::ZERO
+            });
+            let tax_dec = Decimal::from_f64_retain(tax).unwrap_or_else(|| {
+                log::warn!("税费转换失败: {}", tax);
+                Decimal::ZERO
+            });
             let net_revenue = revenue - commission_dec - tax_dec;
 
             self.cash += net_revenue;

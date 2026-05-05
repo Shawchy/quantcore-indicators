@@ -38,7 +38,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
     const bgColor = type === 'bid' ? 'red.50' : 'green.50'
     
     return (
-      <Tr key={index} bg={bgColor}>
+      <Tr key={item.code || index} bg={bgColor}>
         <Td 
           color={color} 
           fontWeight="bold" 
@@ -137,7 +137,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
           { label: '成交额', value: quote?.amount != null ? (quote.amount >= 100000000 ? `${(quote.amount / 100000000).toFixed(2)}亿` : `${(quote.amount / 10000).toFixed(0)}万`) : '-' },
         ].map((item, index) => (
           <Box 
-            key={index} 
+            key={item.code || index} 
             flex="1" 
             minW="80px"
             bg="gray.50" 
@@ -204,4 +204,4 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
   )
 }
 
-export default RealtimeQuote
+export default React.memo(RealtimeQuote)

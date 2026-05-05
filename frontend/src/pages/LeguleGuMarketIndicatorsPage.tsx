@@ -251,7 +251,7 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {congestionData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.name || index}>
                       <Td>{formatDate(item.date)}</Td>
                       <Td isNumeric>{item.close?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>
@@ -330,7 +330,7 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {ebsData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.name || index}>
                       <Td>{formatDate(item.date)}</Td>
                       <Td isNumeric>{item.hs300_index?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>
@@ -433,7 +433,7 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
                 </Thead>
                 <Tbody>
                   {buffettData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
+                    <Tr key={item.code || item.name || index}>
                       <Td>{formatDate(item.date)}</Td>
                       <Td isNumeric>{item.close?.toFixed(2) || '-'}</Td>
                       <Td isNumeric>{item.total_market_cap?.toFixed(2) || '-'}</Td>

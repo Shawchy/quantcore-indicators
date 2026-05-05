@@ -129,15 +129,28 @@ class BatchScreener:
         
         target_fields = fields or default_fields
         
+        # 白名单校验：防止 SQL 注入
+        allowed_fields = {
+            'code', 'name', 'price', 'open', 'high', 'low',
+            'pre_close', 'change', 'change_pct',
+            'volume', 'amount', 'turnover_rate',
+            'pe_ratio', 'pb_ratio', 'market_cap',
+            'total_market_cap'
+        }
+        target_fields = [f for f in target_fields if f in allowed_fields]
+        if not target_fields:
+            target_fields = list(allowed_fields)
+        
         logger.info(f"📊 批量获取全市场数据，字段: {len(target_fields)} 个")
         
         start_time = datetime.now()
         
         try:
             async with get_session() as session:
-                # 构建批量查询SQL
+                # 构建批量查询SQL（字段已通过白名单校验，安全拼接）
+                fields_str = ', '.join(target_fields)
                 query = f"""
-                    SELECT {', '.join(target_fields)}
+                    SELECT {fields_str}
                     FROM realtime_quotes
                     WHERE update_time >= datetime('now', '-5 minutes')
                        OR update_time IS NULL

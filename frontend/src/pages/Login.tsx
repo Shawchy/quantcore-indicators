@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { login, clearError, getCurrentUser } from '../store/slices/authSlice'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { useAuthStore } from '../store/authStore'
 import {
   Box,
   Button,
   Container,
   FormControl,
   FormLabel,
+  FormErrorMessage,
   Input,
   Heading,
   Text,
@@ -22,48 +25,65 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { FiEye, FiEyeOff } from 'react-icons/fi'
+import { useState } from 'react'
+
+const loginSchema = z.object({
+  username: z
+    .string()
+    .min(2, '用户名至少2个字符')
+    .max(50, '用户名最多50个字符'),
+  password: z
+    .string()
+    .min(4, '密码至少4个字符')
+    .max(100, '密码最多100个字符'),
+})
+
+type LoginFormData = z.infer<typeof loginSchema>
 
 const Login = () => {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const dispatch = useAppDispatch()
+  const login = useAuthStore((s) => s.login)
+  const getCurrentUser = useAuthStore((s) => s.getCurrentUser)
+  const isLoading = useAuthStore((s) => s.isLoading)
+  const error = useAuthStore((s) => s.error)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
-  const { isLoading, error, isAuthenticated } = useAppSelector((state) => state.auth)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      username: '',
+      password: '',
+    },
+  })
 
   const from = location.state?.from?.pathname || '/'
 
   useEffect(() => {
-    // 如果已经登录，直接跳转到首页
     if (isAuthenticated) {
       navigate(from, { replace: true })
     }
   }, [isAuthenticated, navigate, from])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!username.trim() || !password.trim()) {
-      dispatch(clearError())
+  const onSubmit = async (data: LoginFormData) => {
+    try {
+      await login(data.username, data.password)
+      await getCurrentUser()
+      navigate(from, { replace: true })
+    } catch {
       toast({
-        title: '请填写完整',
-        description: '用户名和密码不能为空',
-        status: 'warning',
+        title: '登录失败',
+        description: error || '请检查用户名和密码',
+        status: 'error',
         duration: 3000,
         isClosable: true,
       })
-      return
-    }
-
-    try {
-      await dispatch(login({ username, password })).unwrap()
-      // 登录成功后获取用户信息
-      await dispatch(getCurrentUser()).unwrap()
-      navigate(from, { replace: true })
-    } catch {
-      // 错误已在 authSlice 中处理，无需处理异常
     }
   }
 
@@ -102,26 +122,25 @@ const Login = () => {
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <FormControl mb={5} isRequired>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <FormControl mb={5} isInvalid={!!errors.username}>
             <FormLabel fontWeight="medium">用户名</FormLabel>
             <Input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              {...register('username')}
               placeholder="请输入用户名（admin 或 user）"
               size="lg"
               borderRadius="lg"
               autoComplete="username"
             />
+            <FormErrorMessage>{errors.username?.message}</FormErrorMessage>
           </FormControl>
 
-          <FormControl mb={6} isRequired>
+          <FormControl mb={6} isInvalid={!!errors.password}>
             <FormLabel fontWeight="medium">密码</FormLabel>
             <InputGroup size="lg">
               <Input
+                {...register('password')}
                 type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码（admin123 或 user123）"
                 borderRadius="lg"
                 autoComplete="current-password"
@@ -137,6 +156,7 @@ const Login = () => {
                 />
               </InputRightElement>
             </InputGroup>
+            <FormErrorMessage>{errors.password?.message}</FormErrorMessage>
           </FormControl>
 
           <Button

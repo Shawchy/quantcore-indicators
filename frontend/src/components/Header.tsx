@@ -17,8 +17,7 @@ import {
 import { FiMenu, FiSearch, FiBell, FiUser, FiSettings, FiLogOut } from 'react-icons/fi'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { logout } from '../store/slices/authSlice'
+import { useAuthStore } from '../store/authStore'
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -27,8 +26,8 @@ interface HeaderProps {
 const Header = ({ onMenuClick }: HeaderProps) => {
   const [searchValue, setSearchValue] = useState('')
   const navigate = useNavigate()
-  const dispatch = useAppDispatch()
-  const { user } = useAppSelector((state) => state.auth)
+  const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,15 +37,9 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      await dispatch(logout()).unwrap()
-      navigate('/login')
-    } catch (error) {
-      // 登出失败，静默处理
-      // eslint-disable-next-line no-console
-      console.error('登出失败:', error)
-    }
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
   }
 
   return (

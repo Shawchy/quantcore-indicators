@@ -48,23 +48,39 @@ const CACHE_EXPIRY = {
  * 数据存储服务类
  */
 interface FundRealtimeData {
+  code: string;
+  name: string;
+  net_value?: number;
+  nav_date?: string;
+  estimate_time?: string;
+  estimate_change_pct?: number;
   gszzl?: string;
   gztime?: string;
   dwjz?: string;
-  [key: string]: unknown;
 }
 
 interface FundHistoryItem {
-  date: string;
+  fund_code: string;
+  date?: string;
+  unit_nav?: number;
+  accumulated_nav?: number;
+  change_pct?: number;
   nav?: number;
   accNav?: number;
-  [key: string]: unknown;
 }
 
 interface FundBaseInfo {
-  name?: string;
+  code: string;
+  name: string;
+  establish_date?: string;
+  change_pct?: number;
+  net_asset_value?: number;
+  fund_company?: string;
+  nav_update_date?: string;
+  description?: string;
   type?: string;
-  [key: string]: unknown;
+  fund_scale?: number;
+  rank?: number;
 }
 
 interface FundPeriodItem {
@@ -75,7 +91,6 @@ interface FundPeriodItem {
   rank?: number;
   total_count?: number;
   rank_rate?: number;
-  [key: string]: unknown;
 }
 
 interface FundAssetItem {
@@ -88,7 +103,6 @@ interface FundAssetItem {
   total_scale?: number;
   asset_name?: string;
   ratio?: number;
-  [key: string]: unknown;
 }
 
 class FundStorageService {

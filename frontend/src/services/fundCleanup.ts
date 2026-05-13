@@ -48,8 +48,6 @@ class FundDataCleanup {
    * - 输出统计信息
    */
   async cleanup(): Promise<void> {
-    const startTime = Date.now();
-
     try {
       // 1. 清理 IndexedDB 中的过期数据
       await fundStorage.cleanupExpiredData();
@@ -60,7 +58,7 @@ class FundDataCleanup {
       // 3. 获取统计信息
       const stats = await fundStorage.getStats();
 
-      const duration = Date.now() - startTime;
+      console.log('[数据清理] 清理完成，统计:', stats);
 
     } catch (error) {
       console.error('[数据清理] 清理失败:', error);

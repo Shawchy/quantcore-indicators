@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { RootState, AppDispatch } from '../store'
+import { useAuthStore } from '../store/authStore'
 
 const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? '/api/v1'
 
@@ -46,39 +46,13 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = []
 }
 
-// 获取 store 的函数（延迟导入避免循环依赖）
-const getStore = (): { getState: () => RootState; dispatch: AppDispatch } => {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const storeModule = require('../store') as { store: { getState: () => RootState; dispatch: AppDispatch } }
-    return storeModule.store
-  } catch {
-    // 开发环境 fallback
-    const storeModule = window.__store__ as { getState: () => RootState; dispatch: AppDispatch } | undefined
-    if (!storeModule) {
-      throw new Error('Store not initialized')
-    }
-    return storeModule
-  }
-}
-
 // 请求拦截器 - 自动携带 Token
 api.interceptors.request.use(
   (config) => {
-    try {
-      const store = getStore()
-      const state = store.getState()
-      const token = state.auth.token
-      
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`
-      }
-    } catch (error) {
-      // Store 未初始化时不阻塞请求
-      // eslint-disable-next-line no-console
-      console.warn('Failed to get auth token:', error)
+    const token = useAuthStore.getState().token
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
     }
-    
     return config
   },
   (error) => Promise.reject(error)
@@ -110,9 +84,7 @@ api.interceptors.response.use(
       isRefreshing = true
       
       try {
-        const store = getStore()
-        const state = store.getState()
-        const refreshToken = state.auth.refreshToken
+        const refreshToken = useAuthStore.getState().refreshToken
         
         if (refreshToken) {
           try {
@@ -123,12 +95,9 @@ api.interceptors.response.use(
             )
             const data = response.data
             const newToken = data.access_token
-            store.dispatch({
-              type: 'auth/setToken',
-              payload: {
-                access_token: newToken,
-                refresh_token: data.refresh_token
-              }
+            useAuthStore.setState({
+              token: newToken,
+              refreshToken: data.refresh_token,
             })
             
             processQueue(null, newToken)
@@ -136,25 +105,13 @@ api.interceptors.response.use(
             return api(originalRequest)
           } catch (refreshError) {
             processQueue(refreshError, null)
-            // 刷新失败，显示提示并跳转到登录页
-            // eslint-disable-next-line no-console
             console.error('Token 刷新失败:', refreshError)
-            store.dispatch({ type: 'auth/localLogout' })
-            // 使用 toast 提示用户（如果已导入）
-            try {
-              const chakra = window.__chakraToast__
-              if (chakra?.toast) {
-                chakra.toast({
-                  title: '登录已过期',
-                  description: '请重新登录',
-                  status: 'warning',
-                  duration: 3000,
-                  isClosable: true,
-                })
-              }
-            } catch {
-              // toast 不可用时不处理
-            }
+            useAuthStore.setState({
+              token: null,
+              refreshToken: null,
+              user: null,
+              isAuthenticated: false,
+            })
             window.location.href = '/login'
             return Promise.reject(refreshError)
           }

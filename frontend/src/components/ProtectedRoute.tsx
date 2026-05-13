@@ -1,16 +1,16 @@
 import { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { useAppSelector } from '../store/hooks'
+import { useAuthStore } from '../store/authStore'
 
 interface ProtectedRouteProps {
   children: ReactNode
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { isAuthenticated, isLoading } = useAppSelector((state) => state.auth)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const isLoading = useAuthStore((s) => s.isLoading)
   const location = useLocation()
 
-  // 加载期间显示 loading 状态
   if (isLoading) {
     return (
       <div style={{
@@ -25,7 +25,6 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     )
   }
 
-  // 未认证则重定向到登录页
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }

@@ -45,7 +45,7 @@ import {
   type StockCommentDetailInstitution,
   type StockCommentDetailScore,
 } from '@/services/akshare/index';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import ReactECharts from 'echarts-for-react'
 
 const EastMoneyStockCommentPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -268,44 +268,48 @@ const EastMoneyStockCommentPage: React.FC = () => {
                   {/* 机构参与度 */}
                   <TabPanel>
                     <Box h="400px">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={institutionData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="trading_day" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Line 
-                            type="monotone" 
-                            dataKey="institution_participation" 
-                            name="机构参与度" 
-                            stroke="#8884d8" 
-                            activeDot={{ r: 8 }} 
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <ReactECharts
+                        option={{
+                          grid: { left: 60, right: 20, top: 30, bottom: 40 },
+                          xAxis: { type: 'category', data: institutionData.map(d => d.trading_day), axisLabel: { color: '#64748b' } },
+                          yAxis: { type: 'value', axisLabel: { color: '#64748b' } },
+                          tooltip: { trigger: 'axis' },
+                          series: [{
+                            name: '机构参与度',
+                            type: 'line',
+                            data: institutionData.map(d => d.institution_participation),
+                            lineStyle: { color: '#8884d8', width: 2 },
+                            itemStyle: { color: '#8884d8' },
+                            symbol: 'circle',
+                            symbolSize: 6,
+                          }]
+                        }}
+                        style={{ height: '100%', width: '100%' }}
+                      />
                     </Box>
                   </TabPanel>
 
                   {/* 历史评分 */}
                   <TabPanel>
                     <Box h="400px">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={scoreData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="trading_day" />
-                          <YAxis domain={[0, 100]} />
-                          <Tooltip />
-                          <Legend />
-                          <Line 
-                            type="monotone" 
-                            dataKey="score" 
-                            name="综合评分" 
-                            stroke="#82ca9d" 
-                            activeDot={{ r: 8 }} 
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <ReactECharts
+                        option={{
+                          grid: { left: 60, right: 20, top: 30, bottom: 40 },
+                          xAxis: { type: 'category', data: scoreData.map(d => d.trading_day), axisLabel: { color: '#64748b' } },
+                          yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: '#64748b' } },
+                          tooltip: { trigger: 'axis' },
+                          series: [{
+                            name: '综合评分',
+                            type: 'line',
+                            data: scoreData.map(d => d.score),
+                            lineStyle: { color: '#82ca9d', width: 2 },
+                            itemStyle: { color: '#82ca9d' },
+                            symbol: 'circle',
+                            symbolSize: 6,
+                          }]
+                        }}
+                        style={{ height: '100%', width: '100%' }}
+                      />
                     </Box>
                   </TabPanel>
                 </TabPanels>

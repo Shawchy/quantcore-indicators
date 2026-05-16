@@ -1,24 +1,5 @@
-import {
-  Card,
-  CardBody,
-  CardHeader,
-  Heading,
-  VStack,
-  HStack,
-  Text,
-  Button,
-  Badge,
-  SimpleGrid,
-  Switch,
-  Spinner,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
-  useToast,
-  Box,
-  Flex,
-} from '@chakra-ui/react'
+import { Alert, Badge, Box, Button, Card, Flex, HStack, Heading, SimpleGrid, Spinner, Switch, Text, VStack } from '@chakra-ui/react'
+import { toaster } from './ui/toaster'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dataSourceApi } from '../services/api'
 import { FiWifi, FiWifiOff, FiRefreshCw } from 'react-icons/fi'
@@ -30,7 +11,7 @@ interface DataSourceStatus {
 }
 
 const DataSourceControl: React.FC = () => {
-  const toast = useToast()
+  
   const queryClient = useQueryClient()
 
   const { data: status, isLoading, refetch, error } = useQuery<DataSourceStatus>({
@@ -47,17 +28,17 @@ const DataSourceControl: React.FC = () => {
       dataSourceApi.setMode(mode),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataSourceStatus'] })
-      toast({
+      toaster.create({
         title: '数据源模式已切换',
-        status: 'success',
+        type: 'success',
         duration: 2000,
       })
     },
     onError: (error: Error) => {
-      toast({
+      toaster.create({
         title: '切换失败',
         description: error.message || '请稍后重试',
-        status: 'error',
+        type: 'error',
         duration: 3000,
       })
     },
@@ -68,17 +49,17 @@ const DataSourceControl: React.FC = () => {
       dataSourceApi.toggleSource(source, enabled),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataSourceStatus'] })
-      toast({
+      toaster.create({
         title: '数据源状态已更新',
-        status: 'success',
+        type: 'success',
         duration: 2000,
       })
     },
     onError: (error: Error) => {
-      toast({
+      toaster.create({
         title: '更新失败',
         description: error.message || '请稍后重试',
-        status: 'error',
+        type: 'error',
         duration: 3000,
       })
     },
@@ -88,17 +69,17 @@ const DataSourceControl: React.FC = () => {
     mutationFn: () => dataSourceApi.reset(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dataSourceStatus'] })
-      toast({
+      toaster.create({
         title: '数据源已重置',
-        status: 'success',
+        type: 'success',
         duration: 2000,
       })
     },
     onError: (error: Error) => {
-      toast({
+      toaster.create({
         title: '重置失败',
         description: error.message || '请稍后重试',
-        status: 'error',
+        type: 'error',
         duration: 3000,
       })
     },
@@ -107,9 +88,9 @@ const DataSourceControl: React.FC = () => {
   const getModeBadge = (mode: string) => {
     switch (mode) {
       case 'online':
-        return <Badge colorScheme="green">在线模式</Badge>
+        return <Badge colorPalette="green">在线模式</Badge>
       case 'offline':
-        return <Badge colorScheme="orange">离线模式</Badge>
+        return <Badge colorPalette="orange">离线模式</Badge>
       default:
         return <Badge>未知</Badge>
     }
@@ -135,60 +116,59 @@ const DataSourceControl: React.FC = () => {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardBody>
+      <Card.Root>
+        <Card.Body>
           <Flex justify="center" align="center" h="200px">
             <Spinner size="lg" color="brand.500" />
           </Flex>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     )
   }
 
   if (error) {
     return (
-      <Card>
-        <CardBody>
-          <Alert status="error" borderRadius="md">
-            <AlertIcon />
+      <Card.Root>
+        <Card.Body>
+          <Alert.Root status="error" borderRadius="md">
+            <Alert.Indicator />
             <Box>
-              <AlertTitle>加载失败</AlertTitle>
-              <AlertDescription>
+              <Alert.Title>加载失败</Alert.Title>
+              <Alert.Description>
                 无法获取数据源状态，请检查网络连接或刷新页面重试。
-              </AlertDescription>
+              </Alert.Description>
             </Box>
-          </Alert>
+          </Alert.Root>
           <Button
             mt={4}
             width="full"
             onClick={() => refetch()}
-            leftIcon={<FiRefreshCw />}
           >
             重试
+          <FiRefreshCw /> 
           </Button>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     )
   }
 
   return (
-    <VStack spacing={4} align="stretch">
-      <Card>
-        <CardHeader>
+    <VStack gap={4} align="stretch">
+      <Card.Root>
+        <Card.Header>
           <HStack justify="space-between">
             <Heading size="sm">数据源状态</Heading>
             <Button
               size="sm"
-              leftIcon={<FiRefreshCw />}
               onClick={() => refetch()}
-              isLoading={isLoading}
+              loading={isLoading}
             >
               刷新
             </Button>
           </HStack>
-        </CardHeader>
-        <CardBody>
-          <VStack spacing={4} align="stretch">
+        </Card.Header>
+        <Card.Body>
+          <VStack gap={4} align="stretch">
             <HStack justify="space-between" align="center">
               <Text fontWeight="medium">当前模式</Text>
               {status && getModeBadge(status.mode)}
@@ -199,55 +179,55 @@ const DataSourceControl: React.FC = () => {
             </Text>
 
             {status?.mode === 'offline' && (
-              <Alert status="warning" borderRadius="md">
-                <AlertIcon />
+              <Alert.Root status="warning" borderRadius="md">
+                <Alert.Indicator />
                 <Box>
-                  <AlertTitle fontSize="sm">离线模式</AlertTitle>
-                  <AlertDescription fontSize="xs">
+                  <Alert.Title fontSize="sm">离线模式</Alert.Title>
+                  <Alert.Description fontSize="xs">
                     当前已禁用所有外部数据源，仅使用本地数据库中的数据。
                     如需获取最新数据，请切换到在线模式。
-                  </AlertDescription>
+                  </Alert.Description>
                 </Box>
-              </Alert>
+              </Alert.Root>
             )}
           </VStack>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
-      <Card>
-        <CardHeader>
+      <Card.Root>
+        <Card.Header>
           <Heading size="sm">切换模式</Heading>
-        </CardHeader>
-        <CardBody>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+        </Card.Header>
+        <Card.Body>
+          <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
             <Button
-              colorScheme="green"
+              colorPalette="green"
               variant={status?.mode === 'online' ? 'solid' : 'outline'}
               onClick={() => setModeMutation.mutate('online')}
-              isLoading={setModeMutation.isPending}
-              leftIcon={<FiWifi />}
+              loading={setModeMutation.isPending}
             >
               在线模式
+            <FiWifi /> 
             </Button>
             <Button
-              colorScheme="orange"
+              colorPalette="orange"
               variant={status?.mode === 'offline' ? 'solid' : 'outline'}
               onClick={() => setModeMutation.mutate('offline')}
-              isLoading={setModeMutation.isPending}
-              leftIcon={<FiWifiOff />}
+              loading={setModeMutation.isPending}
             >
               离线模式
+            <FiWifiOff /> 
             </Button>
           </SimpleGrid>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
-      <Card>
-        <CardHeader>
+      <Card.Root>
+        <Card.Header>
           <Heading size="sm">数据源开关</Heading>
-        </CardHeader>
-        <CardBody>
-          <VStack spacing={3} align="stretch">
+        </Card.Header>
+        <Card.Body>
+          <VStack gap={3} align="stretch">
             {dataSources.map((source) => {
               const isDisabled = status?.disabled_sources?.includes(source.id)
               return (
@@ -259,41 +239,45 @@ const DataSourceControl: React.FC = () => {
                   bg="light.bgSecondary"
                   borderRadius="md"
                 >
-                  <VStack align="start" spacing={1}>
+                  <VStack align="start" gap={1}>
                     <Text fontWeight="medium">{source.name}</Text>
                     <Text fontSize="xs" color="light.textSecondary">
                       {source.description}
                     </Text>
                   </VStack>
-                  <Switch
-                    isChecked={!isDisabled}
-                    onChange={(e) =>
+                  <Switch.Root
+                    checked={!isDisabled}
+                    onCheckedChange={(e) =>
                       toggleSourceMutation.mutate({
                         source: source.id,
-                        enabled: e.target.checked,
+                        enabled: e.checked,
                       })
                     }
-                    isDisabled={toggleSourceMutation.isPending}
-                  />
+                    disabled={toggleSourceMutation.isPending}
+                  >
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch.Root>
                 </HStack>
               )
             })}
           </VStack>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
-      <Card>
-        <CardBody>
+      <Card.Root>
+        <Card.Body>
           <Button
             width="full"
             variant="outline"
             onClick={() => resetMutation.mutate()}
-            isLoading={resetMutation.isPending}
+            loading={resetMutation.isPending}
           >
             重置为默认设置
           </Button>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     </VStack>
   )
 }

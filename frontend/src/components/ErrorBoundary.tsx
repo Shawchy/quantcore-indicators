@@ -46,14 +46,14 @@ class ErrorBoundary extends Component<Props, State> {
           minH="100vh"
           p={4}
         >
-          <VStack spacing={4} textAlign="center">
+          <VStack gap={4} textAlign="center">
             <Heading size="lg" color="red.500">
               出错了
             </Heading>
             <Text color="gray.500">
               {this.state.error?.message || '发生了未知错误'}
             </Text>
-            <Button colorScheme="brand" onClick={this.handleReset}>
+            <Button colorPalette="brand" onClick={this.handleReset}>
               返回首页
             </Button>
           </VStack>

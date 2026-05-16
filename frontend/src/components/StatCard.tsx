@@ -1,4 +1,4 @@
-import { Card, CardBody, Stat, StatLabel, StatNumber, StatHelpText, Flex, Icon, BoxProps } from '@chakra-ui/react'
+import { BoxProps, Card, Flex, Icon, Stat } from '@chakra-ui/react'
 import type { ReactNode } from 'react'
 
 interface StatCardProps extends BoxProps {
@@ -76,14 +76,14 @@ export const StatCard: React.FC<StatCardProps> = ({
   const iconBg = accentColor ? `${accentColor}.50` : 'brand.50'
 
   return (
-    <Card {...props}>
-      <CardBody p={config.padding}>
+    <Card.Root {...props}>
+      <Card.Body p={config.padding}>
         <Flex justify="space-between" align="flex-start">
-          <Stat>
-            <StatLabel color={colors.labelColor} fontSize={config.labelFontSize} textTransform="uppercase">
+          <Stat.Root>
+            <Stat.Label color={colors.labelColor} fontSize={config.labelFontSize} textTransform="uppercase">
               {label}
-            </StatLabel>
-            <StatNumber
+            </Stat.Label>
+            <Stat.ValueText
               color={colors.numberColor}
               fontSize={config.numberFontSize}
               fontWeight="bold"
@@ -91,13 +91,13 @@ export const StatCard: React.FC<StatCardProps> = ({
               mt={1}
             >
               {value}
-            </StatNumber>
+            </Stat.ValueText>
             {helpText && (
-              <StatHelpText color={colors.helpTextColor} fontSize={config.helpTextFontSize} mb={0}>
+              <Stat.HelpText color={colors.helpTextColor} fontSize={config.helpTextFontSize} mb={0}>
                 {helpText}
-              </StatHelpText>
+              </Stat.HelpText>
             )}
-          </Stat>
+          </Stat.Root>
           {icon && (
             <Flex
               p={3}
@@ -110,8 +110,8 @@ export const StatCard: React.FC<StatCardProps> = ({
             </Flex>
           )}
         </Flex>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   )
 }
 

@@ -2,29 +2,7 @@
  * 东方财富盘口异动页面
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Select,
-  Flex,
-  Text,
-  Badge,
-  Spinner,
-  Center,
-
-  Button,
-  Grid,
-  Stat,
-  StatLabel,
-  StatNumber,
-
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Grid, Heading, NativeSelect, Spinner, Stat, Table, Text } from '@chakra-ui/react'
 import { eastMoneyApi, type StockChange, type ChangeType, type MarketChangesSummary } from '@/services/akshare/index';
 
 const EastMoneyChangesPage: React.FC = () => {
@@ -87,7 +65,7 @@ const EastMoneyChangesPage: React.FC = () => {
     <Box p={6}>
       <Flex justify="space-between" align="center" mb={6}>
         <Heading size="lg">东方财富盘口异动</Heading>
-        <Button onClick={handleRefresh} colorScheme="blue">
+        <Button onClick={handleRefresh} colorPalette="blue">
           刷新
         </Button>
       </Flex>
@@ -95,45 +73,45 @@ const EastMoneyChangesPage: React.FC = () => {
       {/* 市场异动汇总 */}
       {summary && (
         <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
-          <Stat>
-            <StatLabel>总异动次数</StatLabel>
-            <StatNumber>{summary.total_changes}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>火箭发射</StatLabel>
-            <StatNumber color="red.500">{summary.rocket_launch}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>大笔买入</StatLabel>
-            <StatNumber color="green.500">{summary.big_buy}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>大笔卖出</StatLabel>
-            <StatNumber color="red.500">{summary.big_sell}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>封涨停板</StatLabel>
-            <StatNumber color="red.500">{summary.limit_up}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>封跌停板</StatLabel>
-            <StatNumber color="green.500">{summary.limit_down}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>高台跳水</StatLabel>
-            <StatNumber color="green.500">{summary.high_dive}</StatNumber>
-          </Stat>
-          <Stat>
-            <StatLabel>快速反弹</StatLabel>
-            <StatNumber color="orange.500">{summary.fast_rebound}</StatNumber>
-          </Stat>
+          <Stat.Root>
+            <Stat.Label>总异动次数</Stat.Label>
+            <Stat.ValueText>{summary.total_changes}</Stat.ValueText>
+          </Stat.Root>
+          <Stat.Root>
+            <Stat.Label>火箭发射</Stat.Label>
+            <Stat.ValueText color="red.500">{summary.rocket_launch}</Stat.ValueText>
+          </Stat.Root>
+          <Stat.Root>
+            <Stat.Label>大笔买入</Stat.Label>
+            <Stat.ValueText color="green.500">{summary.big_buy}</Stat.ValueText>
+          </Stat.Root>
+          <Stat.Root>
+            <Stat.Label>大笔卖出</Stat.Label>
+            <Stat.ValueText color="red.500">{summary.big_sell}</Stat.ValueText>
+          </Stat.Root>
+          <Stat.Root>
+            <Stat.Label>封涨停板</Stat.Label>
+            <Stat.ValueText color="red.500">{summary.limit_up}</Stat.ValueText>
+          </Stat.Root>
+          <Stat.Root>
+            <Stat.Label>封跌停板</Stat.Label>
+            <Stat.ValueText color="green.500">{summary.limit_down}</Stat.ValueText>
+          </Stat.Root>
+          <Stat.Root>
+            <Stat.Label>高台跳水</Stat.Label>
+            <Stat.ValueText color="green.500">{summary.high_dive}</Stat.ValueText>
+          </Stat.Root>
+          <Stat.Root>
+            <Stat.Label>快速反弹</Stat.Label>
+            <Stat.ValueText color="orange.500">{summary.fast_rebound}</Stat.ValueText>
+          </Stat.Root>
         </Grid>
       )}
 
       {/* 异动类型选择 */}
       <Flex mb={4} align="center">
         <Text mr={4}>异动类型：</Text>
-        <Select
+        <NativeSelect.Root><NativeSelect.Field
           value={selectedType}
           onChange={(e) => setSelectedType(e.target.value)}
           width="200px"
@@ -143,7 +121,7 @@ const EastMoneyChangesPage: React.FC = () => {
               {type.name}
             </option>
           ))}
-        </Select>
+        </NativeSelect.Field></NativeSelect.Root>
       </Flex>
 
       {/* 异动数据表格 */}
@@ -153,38 +131,38 @@ const EastMoneyChangesPage: React.FC = () => {
         </Center>
       ) : (
         <Box overflowX="auto">
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th>时间</Th>
-                <Th>代码</Th>
-                <Th>名称</Th>
-                <Th>板块</Th>
-                <Th>相关信息</Th>
-                <Th>异动类型</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
+          <Table.Root  size="sm">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeader>时间</Table.ColumnHeader>
+                <Table.ColumnHeader>代码</Table.ColumnHeader>
+                <Table.ColumnHeader>名称</Table.ColumnHeader>
+                <Table.ColumnHeader>板块</Table.ColumnHeader>
+                <Table.ColumnHeader>相关信息</Table.ColumnHeader>
+                <Table.ColumnHeader>异动类型</Table.ColumnHeader>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {changes.map((change, index) => (
-                <Tr key={index}>
-                  <Td>{change.time}</Td>
-                  <Td>
+                <Table.Row key={index}>
+                  <Table.Cell>{change.time}</Table.Cell>
+                  <Table.Cell>
                     <Text fontWeight="bold">{change.code}</Text>
-                  </Td>
-                  <Td>{change.name}</Td>
-                  <Td>
-                    <Badge colorScheme="blue">{change.board}</Badge>
-                  </Td>
-                  <Td fontSize="sm">{change.related_info}</Td>
-                  <Td>
-                    <Badge colorScheme={getChangeTypeColorScheme(change.change_type)}>
+                  </Table.Cell>
+                  <Table.Cell>{change.name}</Table.Cell>
+                  <Table.Cell>
+                    <Badge colorPalette="blue">{change.board}</Badge>
+                  </Table.Cell>
+                  <Table.Cell fontSize="sm">{change.related_info}</Table.Cell>
+                  <Table.Cell>
+                    <Badge colorPalette={getChangeTypeColorScheme(change.change_type)}>
                       {change.change_type}
                     </Badge>
-                  </Td>
-                </Tr>
+                  </Table.Cell>
+                </Table.Row>
               ))}
-            </Tbody>
-          </Table>
+            </Table.Body>
+          </Table.Root>
           {changes.length === 0 && (
             <Center h="200px">
               <Text color="gray.500">暂无数据</Text>

@@ -1,4 +1,6 @@
-import { Box, Flex, Text, Button, HStack, Badge, Tooltip, useColorModeValue, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Input, Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverArrow, useToast } from '@chakra-ui/react'
+import { Badge, Box, Button, Flex, HStack, Input, Popover, Slider, Text, Tooltip } from '@chakra-ui/react'
+import { useColorModeValue } from './ui/color-mode'
+import { toaster } from './ui/toaster'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { screenerApi } from '../services/api'
 import { FiCalendar, FiClock, FiCheck, FiRefreshCw, FiChevronLeft, FiChevronRight } from 'react-icons/fi'
@@ -44,11 +46,10 @@ export const SmartDateSelector = ({
   const [sliderValue, setSliderValue] = useState(0)
   const [customDate, setCustomDate] = useState<string>('')
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const bgColor = useColorModeValue('white', 'gray.800')
-  const toast = useToast()
+  
 
   // 从缓存加载数据
   const loadFromCache = useCallback(() => {
@@ -66,7 +67,6 @@ export const SmartDateSelector = ({
           setTradingDays(parsed.tradingDays)
           setEffectiveInfo(parsed.effectiveInfo)
           setSelectedDate(parsed.selectedDate)
-          setLastRefreshTime(new Date(timestamp))
           return true
         }
       }
@@ -162,12 +162,11 @@ export const SmartDateSelector = ({
         }
         
         if (forceRefresh) {
-          toast({
+          toaster.create({
             title: '数据已刷新',
-            status: 'success',
+            type: 'success',
             duration: 2000,
-            position: 'top-right',
-            isClosable: true
+            closable: true
           })
         }
       } catch (apiError: unknown) {
@@ -176,13 +175,12 @@ export const SmartDateSelector = ({
         // eslint-disable-next-line no-console
         console.error('API 加载失败:', errorMessage)
         
-        toast({
+        toaster.create({
           title: '数据加载失败',
           description: `无法获取交易日数据：${errorMessage}`,
-          status: 'error',
+          type: 'error',
           duration: 5000,
-          position: 'top-right',
-          isClosable: true
+          closable: true
         })
         
         // 尝试从缓存加载旧数据
@@ -191,19 +189,18 @@ export const SmartDateSelector = ({
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('加载交易日失败:', error)
-      toast({
+      toaster.create({
         title: '加载失败',
         description: '无法加载交易日数据',
-        status: 'error',
+        type: 'error',
         duration: 3000,
-        position: 'top-right',
-        isClosable: true
+        closable: true
       })
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [loadFromCache, saveToCache, onDateChange, toast, selectedDate])
+  }, [loadFromCache, saveToCache, onDateChange, toaster, selectedDate])
 
   // 初始加载
   useEffect(() => {
@@ -275,7 +272,7 @@ export const SmartDateSelector = ({
 
     if (effectiveInfo.is_market_open) {
       return (
-        <Badge colorScheme="green" variant="subtle" fontSize="xs" px={2} py={1} borderRadius="full">
+        <Badge colorPalette="green" variant="subtle" fontSize="xs" px={2} py={1} borderRadius="full">
           <Flex align="center" gap={1}>
             <Box w={1.5} h={1.5} borderRadius="full" bg="green.500" />
             交易中
@@ -284,7 +281,7 @@ export const SmartDateSelector = ({
       )
     } else if (effectiveInfo.is_today) {
       return (
-        <Badge colorScheme="orange" variant="subtle" fontSize="xs" px={2} py={1} borderRadius="full">
+        <Badge colorPalette="orange" variant="subtle" fontSize="xs" px={2} py={1} borderRadius="full">
           <Flex align="center" gap={1}>
             <FiClock size={10} />
             未开盘
@@ -293,7 +290,7 @@ export const SmartDateSelector = ({
       )
     } else {
       return (
-        <Badge colorScheme="blue" variant="subtle" fontSize="xs" px={2} py={1} borderRadius="full">
+        <Badge colorPalette="blue" variant="subtle" fontSize="xs" px={2} py={1} borderRadius="full">
           历史数据
         </Badge>
       )
@@ -354,19 +351,22 @@ export const SmartDateSelector = ({
         </Flex>
 
         {/* 刷新按钮 */}
-        <Tooltip label={lastRefreshTime ? `上次刷新：${lastRefreshTime.toLocaleTimeString()}` : '刷新数据'}>
-          <Button
-            size="sm"
-            variant="ghost"
-            colorScheme="blue"
-            onClick={handleManualRefresh}
-            isLoading={isRefreshing}
-            minW="auto"
-            p={2}
-          >
-            <FiRefreshCw size={16} />
-          </Button>
-        </Tooltip>
+        <Tooltip.Root>
+          <Tooltip.Trigger>
+            <Button
+              size="sm"
+              variant="ghost"
+              colorPalette="blue"
+              onClick={handleManualRefresh}
+              loading={isRefreshing}
+              minW="auto"
+              p={2}
+            >
+              <FiRefreshCw size={16} />
+            </Button>
+          </Tooltip.Trigger>
+          <Tooltip.Content>刷新数据</Tooltip.Content>
+        </Tooltip.Root>
 
         {/* 日期导航 */}
         <Flex align="center" gap={1}>
@@ -393,51 +393,50 @@ export const SmartDateSelector = ({
         </Flex>
 
         {/* 自定义日期选择 */}
-        <Popover>
-          <PopoverTrigger>
-            <Button size="sm" variant="outline" colorScheme="gray">
+        <Popover.Root>
+          <Popover.Trigger>
+            <Button size="sm" variant="outline" colorPalette="gray">
               <FiCalendar size={14} />
             </Button>
-          </PopoverTrigger>
-          <PopoverContent w="auto">
-            <PopoverArrow />
-            <PopoverBody>
+          </Popover.Trigger>
+          <Popover.Content w="auto">
+            <Popover.Arrow />
+            <Popover.Body>
               <Flex gap={2} align="center">
                 <Input
                   type="date"
-                  value={customDate}
+                  value={[customDate]}
                   onChange={(e) => setCustomDate(e.target.value)}
                   size="sm"
                   max={new Date().toISOString().split('T')[0]}
                 />
-                <Button size="sm" colorScheme="blue" onClick={handleCustomDateSelect}>
+                <Button size="sm" colorPalette="blue" onClick={handleCustomDateSelect}>
                   确定
                 </Button>
               </Flex>
-            </PopoverBody>
-          </PopoverContent>
-        </Popover>
+            </Popover.Body>
+          </Popover.Content>
+        </Popover.Root>
       </Flex>
 
       {/* 日期滑块 */}
       {showSlider && tradingDays.length > 0 && (
         <Box px={2} py={1}>
-          <Slider
-            value={sliderValue}
-            onChange={handleSliderChange}
+          <Slider.Root
+            value={[sliderValue]}
+            onValueChange={(e) => handleSliderChange(e.value[0])}
             min={0}
             max={tradingDays.length - 1}
             step={1}
-            colorScheme="brand"
-            focusThumbOnChange={false}
+            colorPalette="brand"
           >
-            <SliderTrack>
-              <SliderFilledTrack />
-            </SliderTrack>
-            <SliderThumb boxSize={6}>
+            <Slider.Track>
+              <Slider.Range />
+            </Slider.Track>
+            <Slider.Thumb index={0} boxSize={6}>
               <Box color="brand.500" as={FiCalendar} />
-            </SliderThumb>
-          </Slider>
+            </Slider.Thumb>
+          </Slider.Root>
           
           {/* 滑块标签 */}
           <Flex justify="space-between" mt={1} px={1}>
@@ -467,52 +466,52 @@ export const SmartDateSelector = ({
           p={3}
           animation="slideDown 0.2s ease-out"
         >
-          <HStack spacing={2} wrap="wrap">
+          <HStack gap={2} wrap="wrap">
             {displayedDays.map((day) => (
-              <Tooltip
-                key={day.date}
-                label={
+              <Tooltip.Root key={day.date}>
+                <Tooltip.Trigger>
+                  <Button
+                    size="sm"
+                    variant={selectedDate === day.date ? 'solid' : 'outline'}
+                    colorPalette={day.is_latest ? 'brand' : 'gray'}
+                    onClick={() => handleDateSelect(day.date)}
+                    minW="80px"
+                    position="relative"
+                    _hover={{
+                      transform: 'translateY(-1px)',
+                      boxShadow: 'md'
+                    }}
+                    transition="all 0.2s"
+                  >
+                    <Flex direction="column" align="center" gap={0.5}>
+                      <Text fontSize="xs">{day.display.split('月')[0]}月</Text>
+                      <Text fontSize="sm" fontWeight="bold">{day.display.split('月')[1]}</Text>
+                    </Flex>
+                    
+                    {selectedDate === day.date && (
+                      <Box
+                        position="absolute"
+                        top="-2px"
+                        right="-2px"
+                        bg="green.500"
+                        color="white"
+                        borderRadius="full"
+                        p={0.5}
+                      >
+                        <FiCheck size={8} />
+                      </Box>
+                    )}
+                  </Button>
+                </Tooltip.Trigger>
+                <Tooltip.Content>
                   <Flex direction="column" gap={1}>
                     <Text fontWeight="bold">{day.display}</Text>
                     {day.is_latest && <Text fontSize="xs">最新交易日</Text>}
                     {day.is_today && <Text fontSize="xs">今天</Text>}
                     {day.is_selected && <Text fontSize="xs">已选择</Text>}
                   </Flex>
-                }
-              >
-                <Button
-                  size="sm"
-                  variant={selectedDate === day.date ? 'solid' : 'outline'}
-                  colorScheme={day.is_latest ? 'brand' : 'gray'}
-                  onClick={() => handleDateSelect(day.date)}
-                  minW="80px"
-                  position="relative"
-                  _hover={{
-                    transform: 'translateY(-1px)',
-                    boxShadow: 'md'
-                  }}
-                  transition="all 0.2s"
-                >
-                  <Flex direction="column" align="center" gap={0.5}>
-                    <Text fontSize="xs">{day.display.split('月')[0]}月</Text>
-                    <Text fontSize="sm" fontWeight="bold">{day.display.split('月')[1]}</Text>
-                  </Flex>
-                  
-                  {selectedDate === day.date && (
-                    <Box
-                      position="absolute"
-                      top="-2px"
-                      right="-2px"
-                      bg="green.500"
-                      color="white"
-                      borderRadius="full"
-                      p={0.5}
-                    >
-                      <FiCheck size={8} />
-                    </Box>
-                  )}
-                </Button>
-              </Tooltip>
+                </Tooltip.Content>
+              </Tooltip.Root>
             ))}
           </HStack>
           

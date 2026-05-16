@@ -4,21 +4,8 @@
  * 展示按不同维度排序的基金排行榜
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Box,
-  Card,
-  CardBody,
-  Heading,
-  Text,
-  Tabs,
-  TabList,
-  Tab,
-  Select,
-  HStack,
-  VStack,
-  Badge,
-  useToast,
-} from '@chakra-ui/react';
+import { Badge, Box, Card, HStack, Heading, NativeSelect, Tabs, Text, VStack } from '@chakra-ui/react'
+import { toaster } from '../../components/ui/toaster'
 import { fundApi, FundInfo, FundPeriodChangeInfo } from '@/services/fund';
 import FundList from '@/components/fund/FundList';
 
@@ -26,7 +13,7 @@ type RankType = 'return' | 'scale' | 'rank';
 type PeriodType = '1w' | '1m' | '3m' | '6m' | '1y' | '3y' | '5y';
 
 const FundRanking: React.FC = () => {
-  const toast = useToast();
+  ;
   const [loading, setLoading] = useState(false);
   const [fundData, setFundData] = useState<FundInfo[]>([]);
   const [performanceData, setPerformanceData] = useState<Record<string, FundPeriodChangeInfo[]>>({});
@@ -84,24 +71,24 @@ const FundRanking: React.FC = () => {
       setFundData(filtered);
       setPerformanceData(perfDataMap);
 
-      toast({
+      toaster.create({
         title: '加载成功',
         description: `共 ${filtered.length} 只基金`,
-        status: 'success',
+        type: 'success',
         duration: 3000,
       });
     } catch (error: any) {
       console.error('加载基金数据失败:', error);
-      toast({
+      toaster.create({
         title: '加载失败',
         description: '加载基金数据失败',
-        status: 'error',
+        type: 'error',
         duration: 3000,
       });
     } finally {
       setLoading(false);
     }
-  }, [fundType, toast]);
+  }, [fundType, toaster]);
 
   useEffect(() => {
     loadFundData();
@@ -170,10 +157,10 @@ const FundRanking: React.FC = () => {
 
   // 处理添加到自选
   const handleAddToWatchlist = (code: string) => {
-    toast({
+    toaster.create({
       title: '添加成功',
       description: `已将 ${code} 添加到自选`,
-      status: 'success',
+      type: 'success',
       duration: 2000,
     });
   };
@@ -185,7 +172,7 @@ const FundRanking: React.FC = () => {
 
   return (
     <Box p={6}>
-      <VStack spacing={8} align="stretch">
+      <VStack gap={8} align="stretch">
         {/* 标题 */}
         <Box>
           <Heading size="xl" mb={2}>
@@ -197,53 +184,53 @@ const FundRanking: React.FC = () => {
         </Box>
 
         {/* 筛选条件 */}
-        <Card>
-          <CardBody>
-            <VStack spacing={4} align="stretch">
+        <Card.Root>
+          <Card.Body>
+            <VStack gap={4} align="stretch">
               {/* 排行类型 Tabs */}
               <HStack>
                 <Text fontWeight="bold">排行类型:</Text>
-                <Tabs
+                <Tabs.Root
                   variant="enclosed"
-                  index={['return', 'scale', 'rank'].indexOf(rankType)}
-                  onChange={(index) => setRankType(['return', 'scale', 'rank'][index] as RankType)}
+                  value={rankType}
+                  onValueChange={(e) => setRankType(e.value as RankType)}
                   size="sm"
                 >
-                  <TabList>
-                    <Tab>收益排行</Tab>
-                    <Tab>规模排行</Tab>
-                    <Tab>同类排行</Tab>
-                  </TabList>
-                </Tabs>
+                  <Tabs.List>
+                    <Tabs.Trigger value="收益排行">收益排行</Tabs.Trigger>
+                    <Tabs.Trigger value="规模排行">规模排行</Tabs.Trigger>
+                    <Tabs.Trigger value="同类排行">同类排行</Tabs.Trigger>
+                  </Tabs.List>
+                </Tabs.Root>
               </HStack>
 
               {/* 时间段 Tabs（仅收益排行和同类排行显示） */}
               {(rankType === 'return' || rankType === 'rank') && (
                 <HStack>
                   <Text fontWeight="bold">时间段:</Text>
-                  <Tabs
+                  <Tabs.Root
                     variant="enclosed"
-                    index={['1w', '1m', '3m', '6m', '1y', '3y', '5y'].indexOf(period)}
-                    onChange={(index) => setPeriod(['1w', '1m', '3m', '6m', '1y', '3y', '5y'][index] as PeriodType)}
+                    value={period}
+                    onValueChange={(e) => setPeriod(e.value as PeriodType)}
                     size="sm"
                   >
-                    <TabList>
-                      <Tab>近 1 周</Tab>
-                      <Tab>近 1 月</Tab>
-                      <Tab>近 3 月</Tab>
-                      <Tab>近 6 月</Tab>
-                      <Tab>近 1 年</Tab>
-                      <Tab>近 3 年</Tab>
-                      <Tab>近 5 年</Tab>
-                    </TabList>
-                  </Tabs>
+                    <Tabs.List>
+                      <Tabs.Trigger value="近_1_周">近 1 周</Tabs.Trigger>
+                      <Tabs.Trigger value="近_1_月">近 1 月</Tabs.Trigger>
+                      <Tabs.Trigger value="近_3_月">近 3 月</Tabs.Trigger>
+                      <Tabs.Trigger value="近_6_月">近 6 月</Tabs.Trigger>
+                      <Tabs.Trigger value="近_1_年">近 1 年</Tabs.Trigger>
+                      <Tabs.Trigger value="近_3_年">近 3 年</Tabs.Trigger>
+                      <Tabs.Trigger value="近_5_年">近 5 年</Tabs.Trigger>
+                    </Tabs.List>
+                  </Tabs.Root>
                 </HStack>
               )}
 
               {/* 基金类型选择 */}
               <HStack wrap="wrap">
                 <Text fontWeight="bold">基金类型:</Text>
-                <Select
+                <NativeSelect.Root><NativeSelect.Field
                   value={fundType}
                   onChange={(e) => setFundType(e.target.value)}
                   width="150px"
@@ -254,18 +241,18 @@ const FundRanking: React.FC = () => {
                   <option value="bond">债券型</option>
                   <option value="index">指数型</option>
                   <option value="money">货币型</option>
-                </Select>
-                <Badge colorScheme="blue" fontSize="sm">
+                </NativeSelect.Field></NativeSelect.Root>
+                <Badge colorPalette="blue" fontSize="sm">
                   共 {fundData.length} 只基金
                 </Badge>
               </HStack>
             </VStack>
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
 
         {/* 基金列表 */}
-        <Card>
-          <CardBody>
+        <Card.Root>
+          <Card.Body>
             <FundList
               data={getSortedData()}
               loading={loading}
@@ -273,8 +260,8 @@ const FundRanking: React.FC = () => {
               onAddToWatchlist={handleAddToWatchlist}
               onViewDetail={handleViewDetail}
             />
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       </VStack>
     </Box>
   );

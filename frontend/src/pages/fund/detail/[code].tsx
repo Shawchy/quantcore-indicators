@@ -5,46 +5,9 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Card,
-  CardBody,
-  Heading,
-  Text,
-  HStack,
-  VStack,
-  Badge,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  Button,
-  SimpleGrid,
-  Divider,
-  Spinner,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
-  Progress,
-  useToast,
-  Stat,
-  StatLabel,
-  StatNumber,
-  Icon,
-} from '@chakra-ui/react';
-import {
-  ArrowBackIcon,
-  StarIcon,
-} from '@chakra-ui/icons';
+import { Alert, Badge, Box, Button, Card, HStack, Heading, Icon, Progress, Separator, SimpleGrid, Spinner, Stat, Table, Tabs, Text, VStack } from '@chakra-ui/react'
+import { toaster } from '../../../components/ui/toaster'
+import { FiStar } from 'react-icons/fi'
 import {
   fundApi,
   FundInfo,
@@ -56,7 +19,7 @@ import {
 const FundDetail: React.FC = () => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  const toast = useToast();
+  ;
 
   const [loading, setLoading] = useState(false);
   const [fundInfo, setFundInfo] = useState<FundInfo | null>(null);
@@ -101,16 +64,16 @@ const FundDetail: React.FC = () => {
       }
     } catch (error: any) {
       console.error('加载基金数据失败:', error);
-      toast({
+      toaster.create({
         title: '加载失败',
         description: '加载基金数据失败',
-        status: 'error',
+        type: 'error',
         duration: 3000,
       });
     } finally {
       setLoading(false);
     }
-  }, [code, toast]);
+  }, [code, toaster]);
 
   useEffect(() => {
     loadFundData();
@@ -141,16 +104,16 @@ const FundDetail: React.FC = () => {
       'mix': { color: 'purple', text: '混合型' },
     };
     const config = typeMap[fundInfo.type] || { color: 'gray', text: '未知' };
-    return <Badge colorScheme={config.color as any}>{config.text}</Badge>;
+    return <Badge colorPalette={config.color as any}>{config.text}</Badge>;
   };
 
   // 渲染基本信息
   const renderBasicInfo = () => (
-    <Card>
-      <CardBody>
-        <VStack spacing={4} align="stretch">
+    <Card.Root>
+      <Card.Body>
+        <VStack gap={4} align="stretch">
           <HStack justify="space-between">
-            <VStack align="start" spacing={1}>
+            <VStack align="start" gap={1}>
               <HStack>
                 <Heading size="lg">{fundInfo?.name}</Heading>
                 {getFundTypeTag()}
@@ -158,53 +121,53 @@ const FundDetail: React.FC = () => {
               <Text color="gray.500">基金代码：{code}</Text>
             </VStack>
             <Button
-              leftIcon={<Icon as={StarIcon} fill={isFavorite ? 'yellow.500' : 'none'} color={isFavorite ? 'yellow.500' : 'inherit'} />}
               onClick={() => {
                 setIsFavorite(!isFavorite);
-                toast({
+                toaster.create({
                   title: isFavorite ? '已取消收藏' : '已加入收藏',
-                  status: 'success',
+                  type: 'success',
                   duration: 2000,
                 });
               }}
             >
+              <Icon as={FiStar} fill={isFavorite ? 'yellow.500' : 'none'} color={isFavorite ? 'yellow.500' : 'inherit'} />
               {isFavorite ? '已收藏' : '收藏'}
             </Button>
           </HStack>
 
-          <Divider />
+          <Separator />
 
-          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
-            <Stat>
-              <StatLabel>最新净值</StatLabel>
-              <StatNumber>{fundInfo?.net_asset_value?.toFixed(4) || '--'}</StatNumber>
-            </Stat>
-            <Stat>
-              <StatLabel>日涨跌幅</StatLabel>
-              <StatNumber color={getReturnColor(fundInfo?.change_pct)}>
+          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} gap={4}>
+            <Stat.Root>
+              <Stat.Label>最新净值</Stat.Label>
+              <Stat.ValueText>{fundInfo?.net_asset_value?.toFixed(4) || '--'}</Stat.ValueText>
+            </Stat.Root>
+            <Stat.Root>
+              <Stat.Label>日涨跌幅</Stat.Label>
+              <Stat.ValueText color={getReturnColor(fundInfo?.change_pct)}>
                 {getReturnText(fundInfo?.change_pct)}
-              </StatNumber>
-            </Stat>
-            <Stat>
-              <StatLabel>基金规模</StatLabel>
-              <StatNumber>{fundInfo?.fund_scale ? `${fundInfo.fund_scale.toFixed(2)}亿` : '--'}</StatNumber>
-            </Stat>
-            <Stat>
-              <StatLabel>基金公司</StatLabel>
-              <StatNumber fontSize="md">{fundInfo?.fund_company || '--'}</StatNumber>
-            </Stat>
+              </Stat.ValueText>
+            </Stat.Root>
+            <Stat.Root>
+              <Stat.Label>基金规模</Stat.Label>
+              <Stat.ValueText>{fundInfo?.fund_scale ? `${fundInfo.fund_scale.toFixed(2)}亿` : '--'}</Stat.ValueText>
+            </Stat.Root>
+            <Stat.Root>
+              <Stat.Label>基金公司</Stat.Label>
+              <Stat.ValueText fontSize="md">{fundInfo?.fund_company || '--'}</Stat.ValueText>
+            </Stat.Root>
           </SimpleGrid>
         </VStack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 
   // 渲染阶段涨跌幅
   const renderPeriodChange = () => (
-    <Card>
-      <CardBody>
+    <Card.Root>
+      <Card.Body>
         <Heading size="md" mb={4}>阶段涨跌幅</Heading>
-        <SimpleGrid columns={{ base: 2, sm: 3, md: 5 }} spacing={4}>
+        <SimpleGrid columns={{ base: 2, sm: 3, md: 5 }} gap={4}>
           {periodChange.map((item, idx) => (
             <VStack key={idx} p={3} borderWidth="1px" borderRadius="md">
               <Text fontSize="sm" color="gray.500">{item.period}</Text>
@@ -215,70 +178,70 @@ const FundDetail: React.FC = () => {
             </VStack>
           ))}
         </SimpleGrid>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 
   // 渲染资产配置
   const renderAssetsAllocation = () => (
-    <Card>
-      <CardBody>
+    <Card.Root>
+      <Card.Body>
         <Heading size="md" mb={4}>资产配置</Heading>
-        <VStack spacing={3} align="stretch">
+        <VStack gap={3} align="stretch">
           {assetsAllocation.slice(0, 5).map((item, idx) => (
             <VStack key={idx} align="stretch">
               <HStack justify="space-between">
                 <Text>{item.asset_name}</Text>
                 <Text fontWeight="bold">{item.ratio?.toFixed(2)}%</Text>
               </HStack>
-              <Progress
+              <Progress.Root
                 value={item.ratio || 0}
-                colorScheme={idx === 0 ? 'blue' : 'green'}
+                colorPalette={idx === 0 ? 'blue' : 'green'}
                 size="sm"
                 borderRadius="full"
               />
             </VStack>
           ))}
         </VStack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 
   // 渲染持仓占比
   const renderPosition = () => (
-    <Card>
-      <CardBody>
+    <Card.Root>
+      <Card.Body>
         <Heading size="md" mb={4}>持仓占比</Heading>
-        <TableContainer>
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th>股票代码</Th>
-                <Th>股票名称</Th>
-                <Th isNumeric>持仓占比</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
+        <Box>
+          <Table.Root  size="sm">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeader>股票代码</Table.ColumnHeader>
+                <Table.ColumnHeader>股票名称</Table.ColumnHeader>
+                <Table.ColumnHeader >持仓占比</Table.ColumnHeader>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {position.slice(0, 10).map((item, idx) => (
-                <Tr key={idx}>
-                  <Td fontWeight="bold">{item.stock_code}</Td>
-                  <Td>{item.stock_name}</Td>
-                  <Td isNumeric fontWeight="bold" color={getReturnColor(item.ratio)}>
+                <Table.Row key={idx}>
+                  <Table.Cell fontWeight="bold">{item.stock_code}</Table.Cell>
+                  <Table.Cell>{item.stock_name}</Table.Cell>
+                  <Table.Cell fontWeight="bold" color={getReturnColor(item.ratio)}>
                     {item.ratio?.toFixed(2)}%
-                  </Td>
-                </Tr>
+                  </Table.Cell>
+                </Table.Row>
               ))}
-            </Tbody>
-          </Table>
-        </TableContainer>
-      </CardBody>
-    </Card>
+            </Table.Body>
+          </Table.Root>
+        </Box>
+      </Card.Body>
+    </Card.Root>
   );
 
   if (loading) {
     return (
       <Box p={6} textAlign="center">
-        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
+        <Spinner size="xl" borderWidth="4px"  color="blue.500" />
         <Text mt={4}>加载中...</Text>
       </Box>
     );
@@ -287,22 +250,21 @@ const FundDetail: React.FC = () => {
   if (!fundInfo) {
     return (
       <Box p={6}>
-        <Alert status="error" borderRadius="md">
-          <AlertIcon />
-          <AlertTitle mr={2}>基金不存在</AlertTitle>
-          <AlertDescription>未找到该基金的信息</AlertDescription>
-        </Alert>
+        <Alert.Root status="error" borderRadius="md">
+          <Alert.Indicator />
+          <Alert.Title mr={2}>基金不存在</Alert.Title>
+          <Alert.Description>未找到该基金的信息</Alert.Description>
+        </Alert.Root>
       </Box>
     );
   }
 
   return (
     <Box p={6}>
-      <VStack spacing={6} align="stretch">
+      <VStack gap={6} align="stretch">
         {/* 返回按钮 */}
         <HStack>
           <Button
-            leftIcon={<ArrowBackIcon />}
             variant="ghost"
             onClick={() => navigate('/fund')}
           >
@@ -315,18 +277,18 @@ const FundDetail: React.FC = () => {
         {renderBasicInfo()}
 
         {/* Tab 切换 */}
-        <Tabs variant="enclosed">
-          <TabList>
-            <Tab>阶段涨跌幅</Tab>
-            <Tab>资产配置</Tab>
-            <Tab>持仓占比</Tab>
-          </TabList>
-          <TabPanels>
-            <TabPanel>{renderPeriodChange()}</TabPanel>
-            <TabPanel>{renderAssetsAllocation()}</TabPanel>
-            <TabPanel>{renderPosition()}</TabPanel>
-          </TabPanels>
-        </Tabs>
+        <Tabs.Root variant="enclosed">
+          <Tabs.List>
+            <Tabs.Trigger value="阶段涨跌幅">阶段涨跌幅</Tabs.Trigger>
+            <Tabs.Trigger value="资产配置">资产配置</Tabs.Trigger>
+            <Tabs.Trigger value="持仓占比">持仓占比</Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.ContentGroup>
+            <Tabs.Content value="资产配置">{renderPeriodChange()}</Tabs.Content>
+            <Tabs.Content value="持仓占比">{renderAssetsAllocation()}</Tabs.Content>
+            <Tabs.Content value="阶段涨跌幅">{renderPosition()}</Tabs.Content>
+          </Tabs.ContentGroup>
+        </Tabs.Root>
       </VStack>
     </Box>
   );

@@ -3,31 +3,8 @@
  * 包含：资产负债表、利润表
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Spinner,
-  Center,
-  Button,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  useToast,
-  Badge,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Heading, Input, InputGroup, Spinner, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockBalanceSheet,
@@ -35,7 +12,7 @@ import {
 } from '@/services/akshare/index';
 
 const EastMoneyFinancialPage: React.FC = () => {
-  const [activeSubTab, setActiveSubTab] = useState(0) // 0=报告期，1=年度
+  const [activeSubTab, setActiveSubTab] = useState("概览") // 0=报告期，1=年度
   const [loading, setLoading] = useState(false)
   const [stockCode, setStockCode] = useState('SH600519')
 
@@ -51,22 +28,22 @@ const EastMoneyFinancialPage: React.FC = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_profitQuarterlyData] = useState<StockProfitSheet[]>([])
 
-  const toast = useToast()
+  
 
   // 获取资产负债表 - 按报告期
   const fetchBalanceReport = async (code: string) => {
     if (!code) {
-      toast({ title: '请输入股票代码', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请输入股票代码', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getBalanceSheetReport(code);
       setBalanceReportData(result.data || []);
-      toast({ title: `获取成功，共${result.data?.length || 0}条报告期数据`, status: 'success', duration: 2000, isClosable: true });
+      toaster.create({ title: `获取成功，共${result.data?.length || 0}条报告期数据`, type: 'success', duration: 2000, closable: true });
     } catch (error) {
       console.error('获取资产负债表（报告期）失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -75,17 +52,17 @@ const EastMoneyFinancialPage: React.FC = () => {
   // 获取资产负债表 - 按年度
   const fetchBalanceYearly = async (code: string) => {
     if (!code) {
-      toast({ title: '请输入股票代码', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请输入股票代码', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getBalanceSheetYearly(code);
       setBalanceYearlyData(result.data || []);
-      toast({ title: `获取成功，共${result.data?.length || 0}条年度数据`, status: 'success', duration: 2000, isClosable: true });
+      toaster.create({ title: `获取成功，共${result.data?.length || 0}条年度数据`, type: 'success', duration: 2000, closable: true });
     } catch (error) {
       console.error('获取资产负债表（年度）失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -94,17 +71,17 @@ const EastMoneyFinancialPage: React.FC = () => {
   // 获取利润表 - 按报告期
   const fetchProfitReport = async (code: string) => {
     if (!code) {
-      toast({ title: '请输入股票代码', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请输入股票代码', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getProfitSheetReport(code);
       setProfitReportData(result.data || []);
-      toast({ title: `获取成功，共${result.data?.length || 0}条报告期数据`, status: 'success', duration: 2000, isClosable: true });
+      toaster.create({ title: `获取成功，共${result.data?.length || 0}条报告期数据`, type: 'success', duration: 2000, closable: true });
     } catch (error) {
       console.error('获取利润表（报告期）失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -113,17 +90,17 @@ const EastMoneyFinancialPage: React.FC = () => {
   // 获取利润表 - 按年度
   const fetchProfitYearly = async (code: string) => {
     if (!code) {
-      toast({ title: '请输入股票代码', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请输入股票代码', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getProfitSheetYearly(code);
       setProfitYearlyData(result.data || []);
-      toast({ title: `获取成功，共${result.data?.length || 0}条年度数据`, status: 'success', duration: 2000, isClosable: true });
+      toaster.create({ title: `获取成功，共${result.data?.length || 0}条年度数据`, type: 'success', duration: 2000, closable: true });
     } catch (error) {
       console.error('获取利润表（年度）失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -132,17 +109,17 @@ const EastMoneyFinancialPage: React.FC = () => {
   // 获取利润表 - 按单季度
   // const fetchProfitQuarterly = async (code: string) => {
   //   if (!code) {
-  //     toast({ title: '请输入股票代码', status: 'warning', duration: 2000, isClosable: true });
+  //     toaster.create({ title: '请输入股票代码', type: 'warning', duration: 2000, closable: true });
   //     return;
   //   }
   //   setLoading(true);
   //   try {
   //     const result = await eastMoneyApi.getProfitSheetQuarterly(code);
   //     setProfitQuarterlyData(result.data || []);
-  //     toast({ title: `获取成功，共${result.data?.length || 0}条单季度数据`, status: 'success', duration: 2000, isClosable: true });
+  //     toaster.create({ title: `获取成功，共${result.data?.length || 0}条单季度数据`, type: 'success', duration: 2000, closable: true });
   //   } catch (error) {
   //     console.error('获取利润表（单季度）失败:', error);
-  //     toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+  //     toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
   //   } finally {
   //     setLoading(false);
   //   }
@@ -156,7 +133,7 @@ const EastMoneyFinancialPage: React.FC = () => {
 
   // 处理查询
   const handleSearch = () => {
-    if (activeSubTab === 0) {
+    if (activeSubTab === "概览") {
       fetchBalanceReport(stockCode);
       fetchProfitReport(stockCode);
     } else {
@@ -166,10 +143,10 @@ const EastMoneyFinancialPage: React.FC = () => {
   };
 
   // Tab 切换时自动查询
-  const handleTabChange = (index: number) => {
-    setActiveSubTab(index);
+  const handleTabChange = (value: string) => {
+    setActiveSubTab(value);
     if (stockCode) {
-      if (index === 0) {
+      if (value === "概览") {
         fetchBalanceReport(stockCode);
         fetchProfitReport(stockCode);
       } else {
@@ -191,40 +168,40 @@ const EastMoneyFinancialPage: React.FC = () => {
 
     return (
       <Box overflowX="auto" mb={6}>
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>报告期</Th>
-              <Th isNumeric>资产总计</Th>
-              <Th isNumeric>负债合计</Th>
-              <Th isNumeric>所有者权益</Th>
-              <Th isNumeric>货币资金</Th>
-              <Th isNumeric>应收账款</Th>
-              <Th isNumeric>存货</Th>
-              <Th isNumeric>固定资产</Th>
-              <Th isNumeric>短期借款</Th>
-              <Th isNumeric>应付账款</Th>
-              <Th isNumeric>长期借款</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>报告期</Table.ColumnHeader>
+              <Table.ColumnHeader >资产总计</Table.ColumnHeader>
+              <Table.ColumnHeader >负债合计</Table.ColumnHeader>
+              <Table.ColumnHeader >所有者权益</Table.ColumnHeader>
+              <Table.ColumnHeader >货币资金</Table.ColumnHeader>
+              <Table.ColumnHeader >应收账款</Table.ColumnHeader>
+              <Table.ColumnHeader >存货</Table.ColumnHeader>
+              <Table.ColumnHeader >固定资产</Table.ColumnHeader>
+              <Table.ColumnHeader >短期借款</Table.ColumnHeader>
+              <Table.ColumnHeader >应付账款</Table.ColumnHeader>
+              <Table.ColumnHeader >长期借款</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.slice(0, 20).map((sheet, index) => (
-              <Tr key={index}>
-                <Td fontWeight="bold">{sheet.end_date || '-'}</Td>
-                <Td isNumeric>{formatAmount(sheet.total_assets)}</Td>
-                <Td isNumeric>{formatAmount(sheet.total_liabilities)}</Td>
-                <Td isNumeric>{formatAmount(sheet.total_equity)}</Td>
-                <Td isNumeric>{formatAmount(sheet.cash_equivalents)}</Td>
-                <Td isNumeric>{formatAmount(sheet.accounts_receivable)}</Td>
-                <Td isNumeric>{formatAmount(sheet.inventory)}</Td>
-                <Td isNumeric>{formatAmount(sheet.fixed_assets)}</Td>
-                <Td isNumeric>{formatAmount(sheet.short_term_borrowings)}</Td>
-                <Td isNumeric>{formatAmount(sheet.accounts_payable)}</Td>
-                <Td isNumeric>{formatAmount(sheet.long_term_borrowings)}</Td>
-              </Tr>
+              <Table.Row key={index}>
+                <Table.Cell fontWeight="bold">{sheet.end_date || '-'}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.total_assets)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.total_liabilities)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.total_equity)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.cash_equivalents)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.accounts_receivable)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.inventory)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.fixed_assets)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.short_term_borrowings)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.accounts_payable)}</Table.Cell>
+                <Table.Cell >{formatAmount(sheet.long_term_borrowings)}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
@@ -235,30 +212,30 @@ const EastMoneyFinancialPage: React.FC = () => {
 
   //   return (
   //     <Box overflowX="auto" mb={6}>
-  //       <Table variant="simple" size="sm">
-  //         <Thead>
-  //           <Tr>
-  //             <Th>报告期</Th>
-  //             <Th isNumeric>营业收入</Th>
-  //             <Th isNumeric>营业成本</Th>
-  //             <Th isNumeric>营业利润</Th>
-  //             <Th isNumeric>利润总额</Th>
-  //             <Th isNumeric>净利润</Th>
-  //           </Tr>
-  //         </Thead>
-  //         <Tbody>
+  //       <Table.Root  size="sm">
+  //         <Table.Header>
+  //           <Table.Row>
+  //             <Table.ColumnHeader>报告期</Table.ColumnHeader>
+  //             <Table.ColumnHeader >营业收入</Table.ColumnHeader>
+  //             <Table.ColumnHeader >营业成本</Table.ColumnHeader>
+  //             <Table.ColumnHeader >营业利润</Table.ColumnHeader>
+  //             <Table.ColumnHeader >利润总额</Table.ColumnHeader>
+  //             <Table.ColumnHeader >净利润</Table.ColumnHeader>
+  //           </Table.Row>
+  //         </Table.Header>
+  //         <Table.Body>
   //           {data.slice(0, 20).map((sheet, index) => (
-  //             <Tr key={index}>
-  //               <Td fontWeight="bold">{sheet.end_date || '-'}</Td>
-  //               <Td isNumeric>{formatAmount(sheet.total_revenue)}</Td>
-  //               <Td isNumeric>{formatAmount(sheet.operating_cost)}</Td>
-  //               <Td isNumeric>{formatAmount(sheet.operating_profit)}</Td>
-  //               <Td isNumeric>{formatAmount(sheet.total_profit)}</Td>
-  //               <Td isNumeric>{formatAmount(sheet.net_profit)}</Td>
-  //             </Tr>
+  //             <Table.Row key={index}>
+  //               <Table.Cell fontWeight="bold">{sheet.end_date || '-'}</Table.Cell>
+  //               <Table.Cell >{formatAmount(sheet.total_revenue)}</Table.Cell>
+  //               <Table.Cell >{formatAmount(sheet.operating_cost)}</Table.Cell>
+  //               <Table.Cell >{formatAmount(sheet.operating_profit)}</Table.Cell>
+  //               <Table.Cell >{formatAmount(sheet.total_profit)}</Table.Cell>
+  //               <Table.Cell >{formatAmount(sheet.net_profit)}</Table.Cell>
+  //             </Table.Row>
   //           ))}
-  //         </Tbody>
-  //       </Table>
+  //         </Table.Body>
+  //       </Table.Root>
   //     </Box>
   //   );
   // };
@@ -269,35 +246,35 @@ const EastMoneyFinancialPage: React.FC = () => {
 
     return (
       <Box overflowX="auto">
-        <Table variant="simple" size="xs">
-          <Thead>
-            <Tr>
-              <Th>报告期</Th>
-              <Th>公告日期</Th>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>报告期</Table.ColumnHeader>
+              <Table.ColumnHeader>公告日期</Table.ColumnHeader>
               {Object.keys(data[0].extra_fields || {}).slice(0, 50).map((field) => (
-                <Th key={field} isNumeric>{field}</Th>
+                <Table.ColumnHeader key={field} >{field}</Table.ColumnHeader>
               ))}
-            </Tr>
-          </Thead>
-          <Tbody>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.slice(0, 10).map((sheet, index) => (
-              <Tr key={index}>
-                <Td fontWeight="bold">{sheet.end_date || '-'}</Td>
-                <Td>{sheet.report_date || '-'}</Td>
+              <Table.Row key={index}>
+                <Table.Cell fontWeight="bold">{sheet.end_date || '-'}</Table.Cell>
+                <Table.Cell>{sheet.report_date || '-'}</Table.Cell>
                 {Object.keys(sheet.extra_fields || {}).slice(0, 50).map((field) => (
-                  <Td key={field} isNumeric>
+                  <Table.Cell key={field} >
                     {formatAmount((sheet.extra_fields || {})[field] as number)}
-                  </Td>
+                  </Table.Cell>
                 ))}
-              </Tr>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
 
-  // const currentBalanceData = activeSubTab === 0 ? balanceReportData : balanceYearlyData;
+  // const currentBalanceData = activeSubTab === "概览" ? balanceReportData : balanceYearlyData;
 
   return (
     <Box p={6}>
@@ -305,32 +282,31 @@ const EastMoneyFinancialPage: React.FC = () => {
 
       {/* 搜索栏 */}
       <Flex gap={4} mb={6} align="center">
-        <InputGroup width="300px">
-          <InputLeftAddon>股票代码</InputLeftAddon>
-          <Input
+        <InputGroup width="300px" startAddon="股票代码">
+  <Input
             value={stockCode}
             onChange={(e) => setStockCode(e.target.value.toUpperCase())}
             placeholder="输入股票代码，如：SH600519"
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           />
-        </InputGroup>
-        <Button onClick={handleSearch} colorScheme="blue" isLoading={loading}>
+</InputGroup>
+        <Button onClick={handleSearch} colorPalette="blue" loading={loading}>
           查询
         </Button>
-        <Badge colorScheme="blue" fontSize="0.8em" ml={2}>
+        <Badge colorPalette="blue" fontSize="0.8em" ml={2}>
           示例：SH600519（贵州茅台）
         </Badge>
       </Flex>
 
-      <Tabs onChange={handleTabChange} colorScheme="blue">
-        <TabList>
-          <Tab>按报告期</Tab>
-          <Tab>按年度</Tab>
-        </TabList>
+      <Tabs.Root onValueChange={(e) => handleTabChange(e.value)} colorPalette="blue">
+        <Tabs.List>
+          <Tabs.Trigger value="按报告期">按报告期</Tabs.Trigger>
+          <Tabs.Trigger value="按年度">按年度</Tabs.Trigger>
+        </Tabs.List>
 
-        <TabPanels>
+        <Tabs.ContentGroup>
           {/* 按报告期 */}
-          <TabPanel>
+          <Tabs.Content value="按年度">
             {loading && balanceReportData.length === 0 ? (
               <Center h="400px">
                 <Spinner size="xl" />
@@ -349,10 +325,10 @@ const EastMoneyFinancialPage: React.FC = () => {
                 {renderBalanceFullTable(balanceReportData)}
               </>
             )}
-          </TabPanel>
+          </Tabs.Content>
 
           {/* 按年度 */}
-          <TabPanel>
+          <Tabs.Content value="按报告期">
             {loading && balanceYearlyData.length === 0 ? (
               <Center h="400px">
                 <Spinner size="xl" />
@@ -371,9 +347,9 @@ const EastMoneyFinancialPage: React.FC = () => {
                 {renderBalanceFullTable(balanceYearlyData)}
               </>
             )}
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
+          </Tabs.Content>
+        </Tabs.ContentGroup>
+      </Tabs.Root>
 
       {/* 数据说明 */}
       <Box mt={8} p={4} bg="gray.50" borderRadius="md">

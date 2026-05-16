@@ -6,13 +6,12 @@ import pytest
 import asyncio
 from datetime import datetime, timedelta
 
-from app.utils.tushare_cache_stats import (
-    TushareAPICache,
-    TushareAPIStats,
-    APICallStats,
-    CacheEntry,
-    api_call_cache
-)
+tushare_cache = pytest.importorskip("app.utils.tushare_cache_stats", reason="tushare_cache_stats module not available")
+TushareAPICache = tushare_cache.TushareAPICache
+TushareAPIStats = tushare_cache.TushareAPIStats
+APICallStats = tushare_cache.APICallStats
+CacheEntry = tushare_cache.CacheEntry
+api_call_cache = tushare_cache.api_call_cache
 
 
 class TestAPICallStats:

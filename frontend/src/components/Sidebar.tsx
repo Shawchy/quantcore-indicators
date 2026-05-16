@@ -1,15 +1,4 @@
-import {
-  Box,
-  Flex,
-  Text,
-  VStack,
-  Drawer,
-  DrawerOverlay,
-  DrawerContent,
-  DrawerCloseButton,
-  DrawerBody,
-  Icon,
-} from '@chakra-ui/react'
+import { Box, Drawer, Flex, Icon, Text, VStack } from '@chakra-ui/react'
 import { Link, useLocation } from 'react-router-dom'
 import { 
   FiHome, 
@@ -56,21 +45,21 @@ const menuItems = [
 ]
 
 interface SidebarProps {
-  isOpen: boolean
-  onClose: () => void
+  open: boolean
+  onOpenChange: (details: { open: boolean }) => void
 }
 
-const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
+const Sidebar = ({ open, onOpenChange }: SidebarProps) => {
   const location = useLocation()
 
   const SidebarContent = () => (
-    <VStack align="stretch" spacing={1} p={3} pt={4}>
+    <VStack align="stretch" gap={1} p={3} pt={4}>
       {menuItems.map((item) => {
         const isActive = location.pathname === item.path
         const IconComponent = item.icon
         
         return (
-          <Link key={item.path} to={item.path} onClick={onClose}>
+          <Link key={item.path} to={item.path} onClick={() => onOpenChange({ open: false })}>
             <Flex
               align="center"
               p={3}
@@ -129,11 +118,11 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         <SidebarContent />
       </Box>
 
-      <Drawer isOpen={isOpen} placement="left" onClose={onClose}>
-        <DrawerOverlay />
-        <DrawerContent bg="light.card">
-          <DrawerCloseButton color="light.textSecondary" />
-          <DrawerBody p={0}>
+      <Drawer.Root open={open} placement="start" onOpenChange={onOpenChange}>
+        <Drawer.Backdrop />
+        <Drawer.Content bg="light.card">
+          <Drawer.CloseTrigger color="light.textSecondary" />
+          <Drawer.Body p={0}>
             <Flex h="14" align="center" px={5} borderBottom="1px solid" borderColor="light.border">
               <Flex align="center" gap={2}>
                 <Box p={1.5} borderRadius="md" bg="brand.500">
@@ -145,9 +134,9 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               </Flex>
             </Flex>
             <SidebarContent />
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
+          </Drawer.Body>
+        </Drawer.Content>
+      </Drawer.Root>
     </>
   )
 }

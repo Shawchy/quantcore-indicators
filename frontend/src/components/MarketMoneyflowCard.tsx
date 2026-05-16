@@ -1,4 +1,4 @@
-import { Card, CardBody, CardHeader, Heading, VStack, HStack, Text, Flex, Badge, Spinner, SimpleGrid } from '@chakra-ui/react'
+import { Badge, Card, Flex, HStack, Heading, SimpleGrid, Spinner, Text, VStack } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { moneyflowApi } from '../services/api'
 import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi'
@@ -40,13 +40,13 @@ const MarketMoneyflowCard: React.FC<MarketMoneyflowCardProps> = ({ showTrend = f
 
   if (summaryLoading) {
     return (
-      <Card>
-        <CardBody>
+      <Card.Root>
+        <Card.Body>
           <Flex justify="center" align="center" h="200px">
             <Spinner size="lg" color="brand.400" />
           </Flex>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     )
   }
 
@@ -54,11 +54,11 @@ const MarketMoneyflowCard: React.FC<MarketMoneyflowCardProps> = ({ showTrend = f
 
   if (!summary) {
     return (
-      <Card>
-        <CardBody>
-          <Text color="light.textMuted" textAlign="center">暂无资金流向数据</Text>
-        </CardBody>
-      </Card>
+      <Card.Root>
+        <Card.Body>
+          <Text color="fg.subtle" textAlign="center">暂无资金流向数据</Text>
+        </Card.Body>
+      </Card.Root>
     )
   }
 
@@ -69,22 +69,22 @@ const MarketMoneyflowCard: React.FC<MarketMoneyflowCardProps> = ({ showTrend = f
   const small = summary.small?.amount
 
   return (
-    <Card>
-      <CardHeader pb={2}>
+    <Card.Root>
+      <Card.Header pb={2}>
         <Flex justify="space-between" align="center">
-          <Heading size="sm" color="light.text">大盘资金流向</Heading>
+          <Heading size="sm" color="fg">大盘资金流向</Heading>
           {summary.trade_date && (
-            <Badge fontSize="xs" colorScheme="blue">
+            <Badge fontSize="xs" colorPalette="blue">
               {summary.trade_date}
             </Badge>
           )}
         </Flex>
-      </CardHeader>
-      <CardBody pt={2}>
-        <VStack spacing={4} align="stretch">
+      </Card.Header>
+      <Card.Body pt={2}>
+        <VStack gap={4} align="stretch">
           <Flex justify="center" align="center" direction="column" py={2}>
-            <Text fontSize="xs" color="light.textSecondary" mb={1}>主力净流入</Text>
-            <HStack spacing={2}>
+            <Text fontSize="xs" color="fg.muted" mb={1}>主力净流入</Text>
+            <HStack gap={2}>
               {mainNetIn !== null && mainNetIn !== undefined && (
                 mainNetIn >= 0 ? (
                   <FiTrendingUp color="var(--chakra-colors-up-500)" size={24} />
@@ -108,38 +108,38 @@ const MarketMoneyflowCard: React.FC<MarketMoneyflowCardProps> = ({ showTrend = f
             )}
           </Flex>
 
-          <SimpleGrid columns={2} spacing={3}>
-            <VStack spacing={1} p={2} bg="light.bgSecondary" borderRadius="md">
-              <Text fontSize="xs" color="light.textSecondary">超大单</Text>
+          <SimpleGrid columns={2} gap={3}>
+            <VStack gap={1} p={2} bg="bg.subtle" borderRadius="md">
+              <Text fontSize="xs" color="fg.muted">超大单</Text>
               <Text fontSize="md" fontWeight="bold" color={getAmountColor(superLarge)} fontFamily="mono">
                 {formatAmount(superLarge)}
               </Text>
             </VStack>
-            <VStack spacing={1} p={2} bg="light.bgSecondary" borderRadius="md">
-              <Text fontSize="xs" color="light.textSecondary">大单</Text>
+            <VStack gap={1} p={2} bg="bg.subtle" borderRadius="md">
+              <Text fontSize="xs" color="fg.muted">大单</Text>
               <Text fontSize="md" fontWeight="bold" color={getAmountColor(large)} fontFamily="mono">
                 {formatAmount(large)}
               </Text>
             </VStack>
-            <VStack spacing={1} p={2} bg="light.bgSecondary" borderRadius="md">
-              <Text fontSize="xs" color="light.textSecondary">中单</Text>
+            <VStack gap={1} p={2} bg="bg.subtle" borderRadius="md">
+              <Text fontSize="xs" color="fg.muted">中单</Text>
               <Text fontSize="md" fontWeight="bold" color={getAmountColor(medium)} fontFamily="mono">
                 {formatAmount(medium)}
               </Text>
             </VStack>
-            <VStack spacing={1} p={2} bg="light.bgSecondary" borderRadius="md">
-              <Text fontSize="xs" color="light.textSecondary">小单</Text>
+            <VStack gap={1} p={2} bg="bg.subtle" borderRadius="md">
+              <Text fontSize="xs" color="fg.muted">小单</Text>
               <Text fontSize="md" fontWeight="bold" color={getAmountColor(small)} fontFamily="mono">
                 {formatAmount(small)}
               </Text>
             </VStack>
           </SimpleGrid>
 
-          <HStack justify="center" spacing={4} pt={2}>
+          <HStack justify="center" gap={4} pt={2}>
             {summary.close_sh && (
-              <VStack spacing={0}>
-                <Text fontSize="xs" color="light.textSecondary">上证</Text>
-                <Text fontSize="sm" fontWeight="bold" color="light.text" fontFamily="mono">
+              <VStack gap={0}>
+                <Text fontSize="xs" color="fg.muted">上证</Text>
+                <Text fontSize="sm" fontWeight="bold" color="fg" fontFamily="mono">
                   {summary.close_sh.toFixed(2)}
                 </Text>
                 <Text
@@ -152,9 +152,9 @@ const MarketMoneyflowCard: React.FC<MarketMoneyflowCardProps> = ({ showTrend = f
               </VStack>
             )}
             {summary.close_sz && (
-              <VStack spacing={0}>
-                <Text fontSize="xs" color="light.textSecondary">深证</Text>
-                <Text fontSize="sm" fontWeight="bold" color="light.text" fontFamily="mono">
+              <VStack gap={0}>
+                <Text fontSize="xs" color="fg.muted">深证</Text>
+                <Text fontSize="sm" fontWeight="bold" color="fg" fontFamily="mono">
                   {summary.close_sz.toFixed(2)}
                 </Text>
                 <Text
@@ -168,8 +168,8 @@ const MarketMoneyflowCard: React.FC<MarketMoneyflowCardProps> = ({ showTrend = f
             )}
           </HStack>
         </VStack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   )
 }
 

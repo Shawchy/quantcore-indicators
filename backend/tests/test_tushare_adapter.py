@@ -13,8 +13,11 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock
 import pandas as pd
 
-from app.adapters.tushare_adapter import TushareAdapter
-from app.utils.tushare_api_registry import get_api_registry, APIGroup
+tushare_adapter = pytest.importorskip("app.adapters.tushare_adapter", reason="tushare_adapter module not available")
+TushareAdapter = tushare_adapter.TushareAdapter
+tushare_registry = pytest.importorskip("app.utils.tushare_api_registry", reason="tushare_api_registry module not available")
+get_api_registry = tushare_registry.get_api_registry
+APIGroup = tushare_registry.APIGroup
 
 
 class TestTushareAdapterInitialization:

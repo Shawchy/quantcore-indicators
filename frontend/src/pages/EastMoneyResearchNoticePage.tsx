@@ -2,40 +2,14 @@
  * 东方财富个股研报和公告页面
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Badge,
-  Spinner,
-  Center,
-  Button,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  Select,
-
-  Link,
-  useToast,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Heading, Input, InputGroup, Link, NativeSelect, Spinner, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockResearchReport,
   type StockNotice,
 } from '@/services/akshare/index';
-import { ExternalLinkIcon } from '@chakra-ui/icons';
+import { FiExternalLink } from 'react-icons/fi'
 
 const noticeTypes = [
   '全部',
@@ -49,7 +23,7 @@ const noticeTypes = [
 ];
 
 const EastMoneyResearchNoticePage: React.FC = () => {
-  const [, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState("个股研报");
   const [loading, setLoading] = useState(false);
   
   // 研报相关状态
@@ -61,16 +35,16 @@ const EastMoneyResearchNoticePage: React.FC = () => {
   const [noticeDate, setNoticeDate] = useState(new Date().toISOString().split('T')[0].replace(/-/g, ''));
   const [notices, setNotices] = useState<StockNotice[]>([]);
   
-  const toast = useToast();
+  ;
 
   // 获取个股研报
   const fetchResearchReports = async (code: string) => {
     if (!code) {
-      toast({
+      toaster.create({
         title: '请输入股票代码',
-        status: 'warning',
+        type: 'warning',
         duration: 2000,
-        isClosable: true,
+        closable: true,
       });
       return;
     }
@@ -79,19 +53,19 @@ const EastMoneyResearchNoticePage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockResearchReport(code);
       setResearchReports(result.data || []);
-      toast({
+      toaster.create({
         title: `获取成功，共${result.data?.length || 0}条研报`,
-        status: 'success',
+        type: 'success',
         duration: 2000,
-        isClosable: true,
+        closable: true,
       });
     } catch (error) {
       console.error('获取个股研报失败:', error);
-      toast({
+      toaster.create({
         title: '获取研报失败',
-        status: 'error',
+        type: 'error',
         duration: 2000,
-        isClosable: true,
+        closable: true,
       });
     } finally {
       setLoading(false);
@@ -104,19 +78,19 @@ const EastMoneyResearchNoticePage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockNoticeReport(noticeType, noticeDate);
       setNotices(result.data || []);
-      toast({
+      toaster.create({
         title: `获取成功，共${result.data?.length || 0}条公告`,
-        status: 'success',
+        type: 'success',
         duration: 2000,
-        isClosable: true,
+        closable: true,
       });
     } catch (error) {
       console.error('获取公告失败:', error);
-      toast({
+      toaster.create({
         title: '获取公告失败',
-        status: 'error',
+        type: 'error',
         duration: 2000,
-        isClosable: true,
+        closable: true,
       });
     } finally {
       setLoading(false);
@@ -141,26 +115,25 @@ const EastMoneyResearchNoticePage: React.FC = () => {
     <Box p={6}>
       <Heading size="lg" mb={6}>东方财富研究报告与公告</Heading>
 
-      <Tabs onChange={(index) => setActiveTab(index)} colorScheme="blue">
-        <TabList>
-          <Tab>个股研报</Tab>
-          <Tab>沪深京公告</Tab>
-        </TabList>
+      <Tabs.Root onValueChange={(e) => setActiveTab(e.value)} colorPalette="blue">
+        <Tabs.List>
+          <Tabs.Trigger value="个股研报">个股研报</Tabs.Trigger>
+          <Tabs.Trigger value="沪深京公告">沪深京公告</Tabs.Trigger>
+        </Tabs.List>
 
-        <TabPanels>
+        <Tabs.ContentGroup>
           {/* 个股研报 */}
-          <TabPanel>
+          <Tabs.Content value="沪深京公告">
             <Flex gap={4} mb={6} align="center">
-              <InputGroup width="400px">
-                <InputLeftAddon>股票代码</InputLeftAddon>
-                <Input
+              <InputGroup width="400px" startAddon="股票代码">
+  <Input
                   value={researchCode}
                   onChange={(e) => setResearchCode(e.target.value)}
                   placeholder="输入股票代码，如：000001"
                   onKeyPress={(e) => e.key === 'Enter' && handleResearchSearch()}
                 />
-              </InputGroup>
-              <Button onClick={handleResearchSearch} colorScheme="blue" isLoading={loading}>
+</InputGroup>
+              <Button onClick={handleResearchSearch} colorPalette="blue" loading={loading}>
                 查询
               </Button>
             </Flex>
@@ -171,60 +144,58 @@ const EastMoneyResearchNoticePage: React.FC = () => {
               </Center>
             ) : (
               <Box overflowX="auto">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>序号</Th>
-                      <Th>代码</Th>
-                      <Th>名称</Th>
-                      <Th>报告名称</Th>
-                      <Th>评级</Th>
-                      <Th>机构</Th>
-                      <Th>近一月研报数</Th>
-                      <Th>行业</Th>
-                      <Th>日期</Th>
-                      <Th>操作</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
+                <Table.Root  size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader>序号</Table.ColumnHeader>
+                      <Table.ColumnHeader>代码</Table.ColumnHeader>
+                      <Table.ColumnHeader>名称</Table.ColumnHeader>
+                      <Table.ColumnHeader>报告名称</Table.ColumnHeader>
+                      <Table.ColumnHeader>评级</Table.ColumnHeader>
+                      <Table.ColumnHeader>机构</Table.ColumnHeader>
+                      <Table.ColumnHeader>近一月研报数</Table.ColumnHeader>
+                      <Table.ColumnHeader>行业</Table.ColumnHeader>
+                      <Table.ColumnHeader>日期</Table.ColumnHeader>
+                      <Table.ColumnHeader>操作</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {researchReports.map((report) => (
-                      <Tr key={report.serial_no}>
-                        <Td>{report.serial_no}</Td>
-                        <Td>
+                      <Table.Row key={report.serial_no}>
+                        <Table.Cell>{report.serial_no}</Table.Cell>
+                        <Table.Cell>
                           <Text fontWeight="bold">{report.stock_code}</Text>
-                        </Td>
-                        <Td>{report.stock_name}</Td>
-                        <Td maxWidth="300px" isTruncated title={report.report_name}>
+                        </Table.Cell>
+                        <Table.Cell>{report.stock_name}</Table.Cell>
+                        <Table.Cell maxWidth="300px" truncate title={report.report_name}>
                           {report.report_name}
-                        </Td>
-                        <Td>
-                          <Badge colorScheme={
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette={
                             report.rating.includes('买入') ? 'green' :
                             report.rating.includes('增持') ? 'blue' :
                             'gray'
                           }>
                             {report.rating}
                           </Badge>
-                        </Td>
-                        <Td>{report.institution}</Td>
-                        <Td>{report.recent_report_count}</Td>
-                        <Td>
-                          <Badge colorScheme="green">{report.industry}</Badge>
-                        </Td>
-                        <Td>{report.report_date}</Td>
-                        <Td>
+                        </Table.Cell>
+                        <Table.Cell>{report.institution}</Table.Cell>
+                        <Table.Cell>{report.recent_report_count}</Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette="green">{report.industry}</Badge>
+                        </Table.Cell>
+                        <Table.Cell>{report.report_date}</Table.Cell>
+                        <Table.Cell>
                           <Link
-                            href={report.report_pdf_url}
-                            isExternal
-                            color="blue.500"
+                            href={report.report_pdf_url} target="_blank" rel="noopener noreferrer" color="blue.500"
                           >
-                            查看 <ExternalLinkIcon mx="2px" />
+                            查看 <FiExternalLink />
                           </Link>
-                        </Td>
-                      </Tr>
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </Tbody>
-                </Table>
+                  </Table.Body>
+                </Table.Root>
                 {researchReports.length === 0 && !loading && (
                   <Center h="200px">
                     <Text color="gray.500">请输入股票代码查询研报</Text>
@@ -232,25 +203,23 @@ const EastMoneyResearchNoticePage: React.FC = () => {
                 )}
               </Box>
             )}
-          </TabPanel>
+          </Tabs.Content>
 
           {/* 沪深京公告 */}
-          <TabPanel>
+          <Tabs.Content value="个股研报">
             <Flex gap={4} mb={6} align="center">
-              <InputGroup width="200px">
-                <InputLeftAddon>公告类型</InputLeftAddon>
-                <Select
+              <InputGroup width="200px" startAddon="公告类型">
+                <NativeSelect.Root><NativeSelect.Field
                   value={noticeType}
                   onChange={(e) => setNoticeType(e.target.value)}
                 >
                   {noticeTypes.map((type) => (
                     <option key={type} value={type}>{type}</option>
                   ))}
-                </Select>
+                </NativeSelect.Field></NativeSelect.Root>
               </InputGroup>
               
-              <InputGroup width="200px">
-                <InputLeftAddon>公告日期</InputLeftAddon>
+              <InputGroup width="200px" startAddon="公告日期">
                 <Input
                   type="date"
                   value={noticeDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')}
@@ -258,7 +227,7 @@ const EastMoneyResearchNoticePage: React.FC = () => {
                 />
               </InputGroup>
               
-              <Button onClick={handleNoticeSearch} colorScheme="green" isLoading={loading}>
+              <Button onClick={handleNoticeSearch} colorPalette="green" loading={loading}>
                 查询
               </Button>
             </Flex>
@@ -269,44 +238,42 @@ const EastMoneyResearchNoticePage: React.FC = () => {
               </Center>
             ) : (
               <Box overflowX="auto">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>代码</Th>
-                      <Th>名称</Th>
-                      <Th>公告标题</Th>
-                      <Th>公告类型</Th>
-                      <Th>公告日期</Th>
-                      <Th>操作</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
+                <Table.Root  size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader>代码</Table.ColumnHeader>
+                      <Table.ColumnHeader>名称</Table.ColumnHeader>
+                      <Table.ColumnHeader>公告标题</Table.ColumnHeader>
+                      <Table.ColumnHeader>公告类型</Table.ColumnHeader>
+                      <Table.ColumnHeader>公告日期</Table.ColumnHeader>
+                      <Table.ColumnHeader>操作</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {notices.map((notice, index) => (
-                      <Tr key={`${notice.code}-${index}`}>
-                        <Td>
+                      <Table.Row key={`${notice.code}-${index}`}>
+                        <Table.Cell>
                           <Text fontWeight="bold">{notice.code}</Text>
-                        </Td>
-                        <Td>{notice.name}</Td>
-                        <Td maxWidth="500px" isTruncated title={notice.notice_title}>
+                        </Table.Cell>
+                        <Table.Cell>{notice.name}</Table.Cell>
+                        <Table.Cell maxWidth="500px" truncate title={notice.notice_title}>
                           {notice.notice_title}
-                        </Td>
-                        <Td>
-                          <Badge colorScheme="blue">{notice.notice_type}</Badge>
-                        </Td>
-                        <Td>{notice.notice_date}</Td>
-                        <Td>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette="blue">{notice.notice_type}</Badge>
+                        </Table.Cell>
+                        <Table.Cell>{notice.notice_date}</Table.Cell>
+                        <Table.Cell>
                           <Link
-                            href={notice.url}
-                            isExternal
-                            color="blue.500"
+                            href={notice.url} target="_blank" rel="noopener noreferrer" color="blue.500"
                           >
-                            查看 <ExternalLinkIcon mx="2px" />
+                            查看 <FiExternalLink />
                           </Link>
-                        </Td>
-                      </Tr>
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </Tbody>
-                </Table>
+                  </Table.Body>
+                </Table.Root>
                 {notices.length === 0 && !loading && (
                   <Center h="200px">
                     <Text color="gray.500">暂无公告数据</Text>
@@ -314,9 +281,9 @@ const EastMoneyResearchNoticePage: React.FC = () => {
                 )}
               </Box>
             )}
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
+          </Tabs.Content>
+        </Tabs.ContentGroup>
+      </Tabs.Root>
     </Box>
   );
 };

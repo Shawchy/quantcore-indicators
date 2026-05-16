@@ -3,8 +3,9 @@
  * 配色与 Chakra UI 主题完美协调
  */
 import React, { useMemo } from 'react'
-import ReactECharts from 'echarts-for-react'
-import { Box, Spinner, Flex } from '@chakra-ui/react'
+import EChartsReactCore from 'echarts-for-react/lib/core'
+import echarts from '../lib/echarts'
+import { Box, Flex, Spinner } from '@chakra-ui/react'
 
 export interface KLineData {
   date: string
@@ -77,7 +78,8 @@ export const KLineChart: React.FC<KLineChartProps> = ({
 
   return (
     <Box w="100%" h={height}>
-      <ReactECharts
+      <EChartsReactCore
+        echarts={echarts}
         option={option}
         style={{ height: '100%', width: '100%' }}
         notMerge={true}
@@ -113,7 +115,8 @@ export const IndicatorChart: React.FC<IndicatorChartProps> = ({
 
   return (
     <Box w="100%" h={height}>
-      <ReactECharts
+      <EChartsReactCore
+        echarts={echarts}
         option={option}
         style={{ height: '100%', width: '100%' }}
         notMerge={true}

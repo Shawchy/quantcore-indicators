@@ -1,9 +1,5 @@
-/**
- * KLineChart 主组件
- * 现代化的 K 线图表组件（替代 ECharts）
- */
-
 import React, { useMemo } from 'react'
+import { Box, Flex, Text, Button, Spinner, VStack } from '@chakra-ui/react'
 import { useKLine } from '@/hooks/useKLine'
 import { CanvasChart } from './CanvasChart'
 import { VolumeChart } from './VolumeChart'
@@ -32,7 +28,6 @@ export const KLineChart: React.FC<KLineChartProps> = ({
   onZoom,
   onPan
 }) => {
-  // 使用智能 Hook
   const {
     data,
     indicators: indicatorData,
@@ -48,7 +43,6 @@ export const KLineChart: React.FC<KLineChartProps> = ({
     useWorker
   })
 
-  // 生成渲染数据
   const renderData = useMemo(() => {
     if (!data) return null
 
@@ -81,156 +75,97 @@ export const KLineChart: React.FC<KLineChartProps> = ({
     }
   }, [data, indicatorData])
 
-  // 错误处理
   if (error) {
     return (
-      <div
-        style={{
-          height,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px solid #e0e0e0',
-          borderRadius: '4px'
-        }}
+      <Flex
+        h={height}
+        align="center"
+        justify="center"
+        border="1px solid"
+        borderColor="border"
+        borderRadius="md"
       >
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ color: '#f44336', marginBottom: '8px' }}>
-            图表加载失败
-          </div>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
-            {error.message}
-          </div>
-          <button
-            onClick={refresh}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#2196f3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            重试
-          </button>
-        </div>
-      </div>
+        <VStack gap={2} textAlign="center">
+          <Text color="red.500" fontWeight="600">图表加载失败</Text>
+          <Text fontSize="xs" color="fg.muted">{error.message}</Text>
+          <Button size="sm" colorPalette="blue" onClick={() => refresh()}>重试</Button>
+        </VStack>
+      </Flex>
     )
   }
 
-  // 加载状态
   if (loading || !renderData) {
     return (
-      <div
-        style={{
-          height,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px solid #e0e0e0',
-          borderRadius: '4px'
-        }}
+      <Flex
+        h={height}
+        align="center"
+        justify="center"
+        border="1px solid"
+        borderColor="border"
+        borderRadius="md"
       >
-        <div style={{ textAlign: 'center' }}>
-          <div
-            style={{
-              width: '40px',
-              height: '40px',
-              border: '4px solid #e0e0e0',
-              borderTop: '4px solid #2196f3',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 16px'
-            }}
-          />
-          <div style={{ color: '#666' }}>
+        <VStack gap={3}>
+          <Spinner size="lg" color="brand.500" />
+          <Text fontSize="sm" color="fg.muted">
             {calculating ? '计算指标中...' : rendering ? '渲染图表中...' : '加载数据中...'}
-          </div>
-        </div>
-      </div>
+          </Text>
+        </VStack>
+      </Flex>
     )
   }
 
   return (
-    <div
-      style={{
-        height,
-        border: '1px solid #e0e0e0',
-        borderRadius: '4px',
-        overflow: 'hidden',
-        backgroundColor: '#fff'
-      }}
+    <Box
+      h={height}
+      border="1px solid"
+      borderColor="border"
+      borderRadius="md"
+      overflow="hidden"
+      bg="bg.panel"
     >
-      {/* 工具栏 */}
-      <div
-        style={{
-          padding: '8px 12px',
-          borderBottom: '1px solid #e0e0e0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          backgroundColor: '#f5f5f5'
-        }}
+      <Flex
+        px={3}
+        py={2}
+        borderBottom="1px solid"
+        borderColor="border"
+        justify="space-between"
+        align="center"
+        bg="bg.subtle"
       >
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <span style={{ fontSize: '12px', color: '#666' }}>
-            {code}
-          </span>
-          <span style={{ fontSize: '12px', color: '#999' }}>
+        <Flex gap={2}>
+          <Text fontSize="xs" color="fg.muted">{code}</Text>
+          <Text fontSize="xs" color="fg.subtle">
             {kType === 'daily' ? '日线' : kType === 'weekly' ? '周线' : '月线'}
-          </span>
-        </div>
+          </Text>
+        </Flex>
+        <Button size="2xs" variant="outline" onClick={() => refresh()}>刷新</Button>
+      </Flex>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={refresh}
-            style={{
-              padding: '4px 8px',
-              fontSize: '12px',
-              backgroundColor: '#fff',
-              border: '1px solid #ddd',
-              borderRadius: '2px',
-              cursor: 'pointer'
-            }}
-          >
-            刷新
-          </button>
-        </div>
-      </div>
+      <Box h="300px">
+        <CanvasChart data={renderData} onZoom={onZoom} onPan={onPan} />
+      </Box>
 
-      {/* K 线主图 */}
-      <div style={{ height: '300px' }}>
-        <CanvasChart
-          data={renderData}
-          onZoom={onZoom}
-          onPan={onPan}
-        />
-      </div>
-
-      {/* 成交量图 */}
       {showVolume && (
-        <div style={{ height: '100px', borderTop: '1px solid #e0e0e0' }}>
+        <Box h="100px" borderTop="1px solid" borderColor="border">
           <VolumeChart data={data} />
-        </div>
+        </Box>
       )}
 
-      {/* 指标图 */}
       {showIndicators && indicatorData && (
         <>
           {indicatorData.MACD && (
-            <div style={{ height: '150px', borderTop: '1px solid #e0e0e0' }}>
+            <Box h="150px" borderTop="1px solid" borderColor="border">
               MACD Chart Placeholder
-            </div>
+            </Box>
           )}
           {indicatorData.RSI && (
-            <div style={{ height: '120px', borderTop: '1px solid #e0e0e0' }}>
+            <Box h="120px" borderTop="1px solid" borderColor="border">
               RSI Chart Placeholder
-            </div>
+            </Box>
           )}
         </>
       )}
-    </div>
+    </Box>
   )
 }
 

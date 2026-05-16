@@ -3,27 +3,8 @@
  * 展示美股和港股的机构目标价评级
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Spinner,
-  Center,
-  Badge,
-  useToast,
-  Tab,
-  Tabs,
-  TabList,
-  TabPanels,
-  TabPanel,
-} from '@chakra-ui/react';
+import { Badge, Box, Center, Flex, Heading, Spinner, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockPriceJS,
@@ -31,11 +12,11 @@ import {
 
 const StockPriceTargetPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState("目标价");
   const [usData, setUsData] = useState<StockPriceJS[]>([]);
   const [hkData, setHkData] = useState<StockPriceJS[]>([]);
   
-  const toast = useToast();
+  ;
 
   // 获取美股目标价
   const fetchUsData = async () => {
@@ -43,15 +24,15 @@ const StockPriceTargetPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockPriceJS('us');
       setUsData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条美股数据`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取美股目标价失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -63,15 +44,15 @@ const StockPriceTargetPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockPriceJS('hk');
       setHkData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条港股数据`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取港股目标价失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -83,9 +64,9 @@ const StockPriceTargetPage: React.FC = () => {
   }, []);
 
   // Tab 切换
-  const handleTabChange = (index: number) => {
-    setActiveTab(index);
-    if (index === 1 && hkData.length === 0) {
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === "机构评级" && hkData.length === 0) {
       fetchHkData();
     }
   };
@@ -108,7 +89,7 @@ const StockPriceTargetPage: React.FC = () => {
       colorScheme = 'yellow';
     }
     
-    return <Badge colorScheme={colorScheme}>{rating}</Badge>;
+    return <Badge colorPalette={colorScheme}>{rating}</Badge>;
   };
 
   // 格式化目标价
@@ -130,43 +111,43 @@ const StockPriceTargetPage: React.FC = () => {
   const renderTable = (data: StockPriceJS[]) => {
     return (
       <Box overflowX="auto">
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>日期</Th>
-              <Th>个股名称</Th>
-              <Th>评级</Th>
-              <Th isNumeric>先前目标价</Th>
-              <Th isNumeric>最新目标价</Th>
-              <Th isNumeric>变动幅度</Th>
-              <Th>机构名称</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>日期</Table.ColumnHeader>
+              <Table.ColumnHeader>个股名称</Table.ColumnHeader>
+              <Table.ColumnHeader>评级</Table.ColumnHeader>
+              <Table.ColumnHeader >先前目标价</Table.ColumnHeader>
+              <Table.ColumnHeader >最新目标价</Table.ColumnHeader>
+              <Table.ColumnHeader >变动幅度</Table.ColumnHeader>
+              <Table.ColumnHeader>机构名称</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.slice(0, 100).map((item, index) => {
               const change = calculateChange(item.previous_target, item.latest_target);
               return (
-                <Tr key={index}>
-                  <Td>{item.date}</Td>
-                  <Td fontWeight="bold">{item.stock_name}</Td>
-                  <Td>{formatRating(item.rating)}</Td>
-                  <Td isNumeric>{formatTarget(item.previous_target)}</Td>
-                  <Td isNumeric>{formatTarget(item.latest_target)}</Td>
-                  <Td isNumeric>
+                <Table.Row key={index}>
+                  <Table.Cell>{item.date}</Table.Cell>
+                  <Table.Cell fontWeight="bold">{item.stock_name}</Table.Cell>
+                  <Table.Cell>{formatRating(item.rating)}</Table.Cell>
+                  <Table.Cell >{formatTarget(item.previous_target)}</Table.Cell>
+                  <Table.Cell >{formatTarget(item.latest_target)}</Table.Cell>
+                  <Table.Cell >
                     {change !== null ? (
-                      <Badge colorScheme={change > 0 ? 'red' : 'green'}>
+                      <Badge colorPalette={change > 0 ? 'red' : 'green'}>
                         {change > 0 ? '+' : ''}{change.toFixed(2)}%
                       </Badge>
                     ) : (
                       '-'
                     )}
-                  </Td>
-                  <Td>{item.institution}</Td>
-                </Tr>
+                  </Table.Cell>
+                  <Table.Cell>{item.institution}</Table.Cell>
+                </Table.Row>
               );
             })}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
         {data.length > 100 && (
           <Text mt={4} fontSize="sm" color="gray.500">
             仅显示前 100 条，共 {data.length} 条数据
@@ -186,15 +167,15 @@ const StockPriceTargetPage: React.FC = () => {
         </Center>
       ) : (
         <>
-          <Tabs onChange={handleTabChange} colorScheme="blue" isFitted>
-            <TabList mb={4}>
-              <Tab>美股目标价</Tab>
-              <Tab>港股目标价</Tab>
-            </TabList>
+          <Tabs.Root onValueChange={(e) => handleTabChange(e.value)} colorPalette="blue" >
+            <Tabs.List mb={4}>
+              <Tabs.Trigger value="美股目标价">美股目标价</Tabs.Trigger>
+              <Tabs.Trigger value="港股目标价">港股目标价</Tabs.Trigger>
+            </Tabs.List>
 
-            <TabPanels>
+            <Tabs.ContentGroup>
               {/* 美股 */}
-              <TabPanel p={0}>
+              <Tabs.Content value="港股目标价" p={0}>
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md">美股机构目标价</Heading>
                   <Text fontSize="sm" color="gray.500">
@@ -202,20 +183,20 @@ const StockPriceTargetPage: React.FC = () => {
                   </Text>
                 </Flex>
                 {renderTable(usData)}
-              </TabPanel>
+              </Tabs.Content>
               
               {/* 港股 */}
-              <TabPanel p={0}>
+              <Tabs.Content value="港股" p={0}>
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md">港股机构目标价</Heading>
-                  <Text fontSize="sm" color="gray.500">
+                    <Text fontSize="sm" color="gray.500">
                     共 {hkData.length} 条数据
                   </Text>
                 </Flex>
                 {renderTable(hkData)}
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
+              </Tabs.Content>
+            </Tabs.ContentGroup>
+          </Tabs.Root>
         </>
       )}
 

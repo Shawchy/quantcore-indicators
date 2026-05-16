@@ -2,29 +2,7 @@
  * 东方财富涨停板行情页面
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Badge,
-  Spinner,
-  Center,
-  Button,
-  Grid,
-  Stat,
-  StatLabel,
-  StatNumber,
-  Input,
-  InputGroup,
-  InputRightAddon,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Grid, Heading, Input, InputGroup, Spinner, Stat, Table, Text } from '@chakra-ui/react'
 import { eastMoneyApi, type StockZtPool } from '@/services/akshare/index';
 
 const EastMoneyZtPoolPage: React.FC = () => {
@@ -73,15 +51,14 @@ const EastMoneyZtPoolPage: React.FC = () => {
       <Flex justify="space-between" align="center" mb={6}>
         <Heading size="lg">东方财富涨停板行情</Heading>
         <Flex gap={4} align="center">
-          <InputGroup width="200px">
+          <InputGroup width="200px" endAddon="日期">
             <Input
               type="date"
               value={date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')}
               onChange={handleDateChange}
             />
-            <InputRightAddon>日期</InputRightAddon>
           </InputGroup>
-          <Button onClick={handleRefresh} colorScheme="blue">
+          <Button onClick={handleRefresh} colorPalette="blue">
             刷新
           </Button>
         </Flex>
@@ -89,22 +66,22 @@ const EastMoneyZtPoolPage: React.FC = () => {
 
       {/* 统计信息 */}
       <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
-        <Stat>
-          <StatLabel>涨停总数</StatLabel>
-          <StatNumber color="red.500">{stats.total}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>首板</StatLabel>
-          <StatNumber>{stats.firstBoard}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>连板</StatLabel>
-          <StatNumber color="orange.500">{stats.continuous}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>最高连板</StatLabel>
-          <StatNumber color="purple.500">{stats.maxContinuous}</StatNumber>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>涨停总数</Stat.Label>
+          <Stat.ValueText color="red.500">{stats.total}</Stat.ValueText>
+        </Stat.Root>
+        <Stat.Root>
+          <Stat.Label>首板</Stat.Label>
+          <Stat.ValueText>{stats.firstBoard}</Stat.ValueText>
+        </Stat.Root>
+        <Stat.Root>
+          <Stat.Label>连板</Stat.Label>
+          <Stat.ValueText color="orange.500">{stats.continuous}</Stat.ValueText>
+        </Stat.Root>
+        <Stat.Root>
+          <Stat.Label>最高连板</Stat.Label>
+          <Stat.ValueText color="purple.500">{stats.maxContinuous}</Stat.ValueText>
+        </Stat.Root>
       </Grid>
 
       {/* 涨停股池表格 */}
@@ -114,62 +91,62 @@ const EastMoneyZtPoolPage: React.FC = () => {
         </Center>
       ) : (
         <Box overflowX="auto">
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th>序号</Th>
-                <Th>代码</Th>
-                <Th>名称</Th>
-                <Th>涨跌幅</Th>
-                <Th>最新价</Th>
-                <Th>换手率</Th>
-                <Th>流通市值</Th>
-                <Th>总市值</Th>
-                <Th>封板资金</Th>
-                <Th>首次封板</Th>
-                <Th>最后封板</Th>
-                <Th>炸板次数</Th>
-                <Th>连板数</Th>
-                <Th>涨停统计</Th>
-                <Th>所属行业</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
+          <Table.Root  size="sm">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeader>序号</Table.ColumnHeader>
+                <Table.ColumnHeader>代码</Table.ColumnHeader>
+                <Table.ColumnHeader>名称</Table.ColumnHeader>
+                <Table.ColumnHeader>涨跌幅</Table.ColumnHeader>
+                <Table.ColumnHeader>最新价</Table.ColumnHeader>
+                <Table.ColumnHeader>换手率</Table.ColumnHeader>
+                <Table.ColumnHeader>流通市值</Table.ColumnHeader>
+                <Table.ColumnHeader>总市值</Table.ColumnHeader>
+                <Table.ColumnHeader>封板资金</Table.ColumnHeader>
+                <Table.ColumnHeader>首次封板</Table.ColumnHeader>
+                <Table.ColumnHeader>最后封板</Table.ColumnHeader>
+                <Table.ColumnHeader>炸板次数</Table.ColumnHeader>
+                <Table.ColumnHeader>连板数</Table.ColumnHeader>
+                <Table.ColumnHeader>涨停统计</Table.ColumnHeader>
+                <Table.ColumnHeader>所属行业</Table.ColumnHeader>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {ztStocks.map((stock) => (
-                <Tr key={stock.serial_no}>
-                  <Td>{stock.serial_no}</Td>
-                  <Td>
+                <Table.Row key={stock.serial_no}>
+                  <Table.Cell>{stock.serial_no}</Table.Cell>
+                  <Table.Cell>
                     <Text fontWeight="bold">{stock.code}</Text>
-                  </Td>
-                  <Td>{stock.name}</Td>
-                  <Td color="red.500">{stock.change_pct.toFixed(2)}%</Td>
-                  <Td>{stock.latest_price.toFixed(2)}</Td>
-                  <Td>{stock.turnover_rate.toFixed(2)}%</Td>
-                  <Td>{(stock.float_mv / 10000).toFixed(2)}亿</Td>
-                  <Td>{(stock.total_mv / 10000).toFixed(2)}亿</Td>
-                  <Td color="red.500">{(stock.seal_fund / 10000).toFixed(0)}万</Td>
-                  <Td>{stock.first_seal_time}</Td>
-                  <Td>{stock.last_seal_time}</Td>
-                  <Td>
+                  </Table.Cell>
+                  <Table.Cell>{stock.name}</Table.Cell>
+                  <Table.Cell color="red.500">{stock.change_pct.toFixed(2)}%</Table.Cell>
+                  <Table.Cell>{stock.latest_price.toFixed(2)}</Table.Cell>
+                  <Table.Cell>{stock.turnover_rate.toFixed(2)}%</Table.Cell>
+                  <Table.Cell>{(stock.float_mv / 10000).toFixed(2)}亿</Table.Cell>
+                  <Table.Cell>{(stock.total_mv / 10000).toFixed(2)}亿</Table.Cell>
+                  <Table.Cell color="red.500">{(stock.seal_fund / 10000).toFixed(0)}万</Table.Cell>
+                  <Table.Cell>{stock.first_seal_time}</Table.Cell>
+                  <Table.Cell>{stock.last_seal_time}</Table.Cell>
+                  <Table.Cell>
                     {stock.open_count > 0 ? (
-                      <Badge colorScheme="orange">{stock.open_count}次</Badge>
+                      <Badge colorPalette="orange">{stock.open_count}次</Badge>
                     ) : (
                       <Text>-</Text>
                     )}
-                  </Td>
-                  <Td>
-                    <Badge colorScheme={stock.continuous_count > 1 ? 'purple' : 'blue'}>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge colorPalette={stock.continuous_count > 1 ? 'purple' : 'blue'}>
                       {stock.continuous_count}连板
                     </Badge>
-                  </Td>
-                  <Td>{stock.zt_stats}</Td>
-                  <Td>
-                    <Badge colorScheme="green">{stock.industry}</Badge>
-                  </Td>
-                </Tr>
+                  </Table.Cell>
+                  <Table.Cell>{stock.zt_stats}</Table.Cell>
+                  <Table.Cell>
+                    <Badge colorPalette="green">{stock.industry}</Badge>
+                  </Table.Cell>
+                </Table.Row>
               ))}
-            </Tbody>
-          </Table>
+            </Table.Body>
+          </Table.Root>
           {ztStocks.length === 0 && (
             <Center h="200px">
               <Text color="gray.500">暂无数据</Text>

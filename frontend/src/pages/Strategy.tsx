@@ -1,32 +1,8 @@
-import {
-  Card,
-  CardBody,
-  Heading,
-  VStack,
-  HStack,
-  Text,
-  Badge,
-  Button,
-  Spinner,
-  Modal,
-  ModalBody,
-  ModalCloseButton,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalOverlay,
-  FormControl,
-  FormLabel,
-  Input,
-  Select,
-  useDisclosure,
-  useToast,
-  SimpleGrid,
-  Flex,
-} from '@chakra-ui/react'
+import { Badge, Button, Card, Dialog, Field, Flex, HStack, Heading, Input, NativeSelect, SimpleGrid, Spinner, Text, VStack, useDisclosure } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { FiPlus, FiEdit, FiTrash2, FiSettings } from 'react-icons/fi'
+import { FiPlus, FiSettings } from 'react-icons/fi'
 import { strategyApi } from '../services/api'
 import { Strategy as StrategyType } from '../types'
 
@@ -38,8 +14,8 @@ interface StrategyFormData {
 
 const Strategy = () => {
   const queryClient = useQueryClient()
-  const toast = useToast()
-  const { isOpen, onOpen, onClose } = useDisclosure()
+  
+  const { open, onOpen, setOpen } = useDisclosure()
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyType | null>(null)
   const [formData, setFormData] = useState<StrategyFormData>({
     name: '',
@@ -58,7 +34,7 @@ const Strategy = () => {
     mutationFn: (data: any) => strategyApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['strategies'] })
-      onClose()
+      setOpen(false)
       resetForm()
     },
   })
@@ -101,10 +77,10 @@ const Strategy = () => {
         config,
       })
     } catch {
-      toast({
+      toaster.create({
         title: '配置格式错误',
         description: '请输入有效的 JSON 格式',
-        status: 'error',
+        type: 'error',
       })
     }
   }
@@ -126,13 +102,13 @@ const Strategy = () => {
   ]
 
   return (
-    <VStack spacing={6} align="stretch">
+    <VStack gap={6} align="stretch">
       <HStack justify="space-between">
         <Heading size="lg" color="light.text">
           策略管理
         </Heading>
-        <Button leftIcon={<FiPlus />} variant="primary" onClick={handleCreate}>
-          新建策略
+        <Button variant="solid" onClick={handleCreate}>
+          <FiPlus /> 新建策略
         </Button>
       </HStack>
 
@@ -141,11 +117,11 @@ const Strategy = () => {
           <Spinner color="brand.400" />
         </Flex>
       ) : strategies.length > 0 ? (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
           {strategies.map((strategy: StrategyType) => {
             const typeInfo = strategyTypes.find(t => t.value === strategy.strategy_type) || strategyTypes[4]
             return (
-              <Card 
+              <Card.Root 
                 key={strategy.strategy_id}
                 position="relative"
                 overflow="hidden"
@@ -159,8 +135,8 @@ const Strategy = () => {
                   bg: typeInfo.color 
                 }}
               >
-                <CardBody>
-                  <VStack align="stretch" spacing={3}>
+                <Card.Body>
+                  <VStack align="stretch" gap={3}>
                     <HStack justify="space-between">
                       <Heading size="sm" color="light.text">{strategy.name}</Heading>
                       <Badge 
@@ -185,11 +161,10 @@ const Strategy = () => {
                     <Text fontSize="xs" color="light.textMuted">
                       创建时间：{strategy.created_at}
                     </Text>
-                    <HStack spacing={2}>
+                    <HStack gap={2}>
                       <Button 
                         size="sm" 
                         variant="ghost" 
-                        leftIcon={<FiEdit />}
                         _hover={{ color: 'brand.400', bg: 'light.bgSecondary' }}
                         onClick={() => handleEdit(strategy)}
                       >
@@ -200,44 +175,43 @@ const Strategy = () => {
                         variant="ghost" 
                         color="light.textSecondary"
                         _hover={{ color: 'down.500', bg: 'light.bgSecondary' }}
-                        leftIcon={<FiTrash2 />} 
                         onClick={() => handleDelete(strategy.strategy_id)}
                       >
                         删除
                       </Button>
                     </HStack>
                   </VStack>
-                </CardBody>
-              </Card>
+                </Card.Body>
+              </Card.Root>
             )
           })}
         </SimpleGrid>
       ) : (
-        <Card>
-          <CardBody>
+        <Card.Root>
+          <Card.Body>
             <VStack py={10}>
               <Flex
                 p={4}
                 borderRadius="full"
                 bg="light.bgSecondary"
               >
-                <FiSettings size={40} color="var(--chakra-colors-light-textMuted)" />
+                <FiSettings size={40} color="var(--chakra-colors-fg-subtle)" />
               </Flex>
               <Text color="light.textMuted" textAlign="center">暂无策略，点击上方按钮创建</Text>
             </VStack>
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       )}
 
-      <Modal isOpen={isOpen} onClose={onClose} size="lg">
-        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(4px)" />
-        <ModalContent bg="light.bg" border="1px solid" borderColor="light.border">
-          <ModalHeader color="light.text">{selectedStrategy ? '编辑策略' : '新建策略'}</ModalHeader>
-          <ModalCloseButton color="light.textSecondary" />
-          <ModalBody>
-            <VStack spacing={4}>
-              <FormControl isRequired>
-                <FormLabel color="light.textSecondary" fontSize="sm">策略名称</FormLabel>
+      <Dialog.Root open={open} onOpenChange={(details) => setOpen(details.open)} size="lg">
+        <Dialog.Backdrop bg="blackAlpha.700" backdropFilter="blur(4px)" />
+        <Dialog.Content bg="light.bg" border="1px solid" borderColor="light.border">
+          <Dialog.Header color="light.text">{selectedStrategy ? '编辑策略' : '新建策略'}</Dialog.Header>
+          <Dialog.CloseTrigger color="light.textSecondary" />
+          <Dialog.Body>
+            <VStack gap={4}>
+              <Field.Root required>
+                <Field.Label color="light.textSecondary" fontSize="sm">策略名称</Field.Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -247,10 +221,10 @@ const Strategy = () => {
                   _hover={{ borderColor: 'brand.500' }}
                   _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
                 />
-              </FormControl>
-              <FormControl>
-                <FormLabel color="light.textSecondary" fontSize="sm">策略类型</FormLabel>
-                <Select
+              </Field.Root>
+              <Field.Root>
+                <Field.Label color="light.textSecondary" fontSize="sm">策略类型</Field.Label>
+                <NativeSelect.Root><NativeSelect.Field
                   value={formData.type}
                   onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                   bg="light.bgSecondary"
@@ -263,10 +237,10 @@ const Strategy = () => {
                       {type.label}
                     </option>
                   ))}
-                </Select>
-              </FormControl>
-              <FormControl>
-                <FormLabel color="light.textSecondary" fontSize="sm">策略配置 (JSON)</FormLabel>
+                </NativeSelect.Field></NativeSelect.Root>
+              </Field.Root>
+              <Field.Root>
+                <Field.Label color="light.textSecondary" fontSize="sm">策略配置 (JSON)</Field.Label>
                 <Input
                   as="textarea"
                   value={formData.config}
@@ -278,19 +252,19 @@ const Strategy = () => {
                   _hover={{ borderColor: 'brand.500' }}
                   _focus={{ borderColor: 'brand.400', bg: 'light.bgSecondary' }}
                 />
-              </FormControl>
+              </Field.Root>
             </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="primary" onClick={submitStrategy} isLoading={createMutation.isPending}>
+          </Dialog.Body>
+          <Dialog.Footer>
+            <Button variant="solid" onClick={submitStrategy} loading={createMutation.isPending}>
               {selectedStrategy ? '保存' : '创建'}
             </Button>
-            <Button variant="ghost" onClick={onClose} color="light.textSecondary" ml={3}>
+            <Button variant="ghost" onClick={() => setOpen(false)} color="light.textSecondary" ml={3}>
               取消
             </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Root>
     </VStack>
   )
 }

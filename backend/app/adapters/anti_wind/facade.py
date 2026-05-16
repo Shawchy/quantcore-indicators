@@ -12,6 +12,7 @@
 """
 
 import asyncio
+import inspect
 from typing import Any, Dict, List, Optional, Callable
 from loguru import logger
 
@@ -256,11 +257,13 @@ class AntiWindFacade:
                 if 'headers' in params:
                     call_kwargs['headers'] = current_headers
                 
-                # 添加其他 kwargs
-                call_kwargs.update(kwargs)
+                # 添加其他 kwargs（仅传递函数接受的参数）
+                for k, v in kwargs.items():
+                    if k in params:
+                        call_kwargs[k] = v
                 
                 # 执行请求
-                if asyncio.iscoroutinefunction(request_func):
+                if inspect.iscoroutinefunction(request_func):
                     response = await request_func(**call_kwargs)
                 else:
                     response = request_func(**call_kwargs)
@@ -318,7 +321,7 @@ class AntiWindFacade:
             if self._retry_strategy and self._retry_strategy.is_enabled():
                 return await self._retry_strategy.execute_with_retry(
                     func=wrapped_request,
-                    context=f"{method} {url}",
+                    context=kwargs.get('context', f"{method} {url}"),
                     on_switch_mode=lambda: logger.info("🔄 切换到降级模式")
                 )
             else:

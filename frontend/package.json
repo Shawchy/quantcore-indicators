@@ -17,10 +17,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@chakra-ui/icons": "^2.2.4",
-    "@chakra-ui/react": "^2.10.9",
+    "@chakra-ui/react": "^3.35.0",
     "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
     "@hookform/resolvers": "^5.2.2",
     "@sentry/react": "^10.46.0",
     "@tanstack/react-query": "^5.95.2",
@@ -30,8 +28,8 @@
     "date-fns": "^4.1.0",
     "echarts": "^5.5.1",
     "echarts-for-react": "^3.0.2",
-    "framer-motion": "^12.38.0",
     "klinecharts": "^10.0.0-beta1",
+    "next-themes": "^0.4.6",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hook-form": "^7.75.0",
@@ -42,6 +40,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@chakra-ui/cli": "^3.35.0",
     "@eslint/js": "^9.17.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",

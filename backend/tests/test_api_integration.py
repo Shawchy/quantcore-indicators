@@ -32,7 +32,7 @@ async def async_client():
         yield client
     
     # 清理
-    await data_source_manager.close_all()
+    await data_source_manager.close()
 
 
 @pytest.fixture
@@ -58,9 +58,12 @@ class TestHealthCheck:
         assert "version" in data
 
     @pytest.mark.asyncio
-    async def test_performance_metrics(self, async_client):
+    async def test_performance_metrics(self, async_client, auth_token):
         """测试性能指标端点"""
-        response = await async_client.get("/metrics/performance")
+        response = await async_client.get(
+            "/api/v1/performance/query/stats",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["success"] is True

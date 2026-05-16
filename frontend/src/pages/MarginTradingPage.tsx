@@ -3,39 +3,8 @@
  * 包含：保证金比例查询、两融账户统计
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Button,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  useToast,
-  Badge,
-  Flex,
-  Spacer,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-  SimpleGrid,
-  Text,
-  Select,
-  FormControl,
-  FormLabel,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Field, Flex, Heading, Input, InputGroup, NativeSelect, SimpleGrid, Spacer, Stat, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockMarginRatioPa,
@@ -47,7 +16,7 @@ import {
 } from '@/services/akshare/index';
 
 const MarginTradingPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0); // 0=保证金比例，1=账户统计，2=上交所汇总，3=上交所明细，4=深交所汇总，5=深交所明细
+  const [activeTab, setActiveTab] = useState("账户统计"); // 0=保证金比例，1=账户统计，2=上交所汇总，3=上交所明细，4=深交所汇总，5=深交所明细
   const [loading, setLoading] = useState(false);
   
   // 输入参数
@@ -74,7 +43,7 @@ const MarginTradingPage: React.FC = () => {
   // 深交所明细数据
   const [marginDetailSzseData, setMarginDetailSzseData] = useState<StockMarginDetailSzse[]>([]);
   
-  const toast = useToast();
+  ;
 
   const symbols = [
     { value: '深市', label: '深市' },
@@ -88,15 +57,15 @@ const MarginTradingPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockMarginRatioPa(symbol, date);
       setRatioData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取保证金比例数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -108,15 +77,15 @@ const MarginTradingPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockMarginAccountInfo();
       setAccountInfoData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取账户统计数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -125,22 +94,22 @@ const MarginTradingPage: React.FC = () => {
   // 获取上交所汇总数据
   const fetchMarginSseData = async () => {
     if (!startDate || !endDate) {
-      toast({ title: '请选择日期范围', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请选择日期范围', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginSse(startDate, endDate);
       setMarginSseData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取上交所汇总数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -149,22 +118,22 @@ const MarginTradingPage: React.FC = () => {
   // 获取上交所明细数据
   const fetchMarginDetailSseData = async () => {
     if (!date) {
-      toast({ title: '请选择交易日期', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请选择交易日期', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginDetailSse(date);
       setMarginDetailSseData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取上交所明细数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -173,22 +142,22 @@ const MarginTradingPage: React.FC = () => {
   // 获取深交所汇总数据
   const fetchMarginSzseData = async () => {
     if (!date) {
-      toast({ title: '请选择交易日期', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请选择交易日期', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginSzse(date);
       setMarginSzseData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取深交所汇总数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -197,22 +166,22 @@ const MarginTradingPage: React.FC = () => {
   // 获取深交所明细数据
   const fetchMarginDetailSzseData = async () => {
     if (!date) {
-      toast({ title: '请选择交易日期', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请选择交易日期', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockMarginDetailSzse(date);
       setMarginDetailSzseData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取深交所明细数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -225,9 +194,9 @@ const MarginTradingPage: React.FC = () => {
 
   // 切换 Tab 时加载对应数据
   useEffect(() => {
-    if (activeTab === 0 && ratioData.length === 0) {
+    if (activeTab === "账户统计" && ratioData.length === 0) {
       fetchRatioData();
-    } else if (activeTab === 1 && accountInfoData.length === 0) {
+    } else if (activeTab === "上交所" && accountInfoData.length === 0) {
       fetchAccountInfoData();
     }
   }, [activeTab]);
@@ -242,105 +211,104 @@ const MarginTradingPage: React.FC = () => {
     <Box p={8}>
       <Heading mb={6}>融资融券</Heading>
       
-      <Tabs index={activeTab} onChange={setActiveTab} mb={6}>
-        <TabList>
-          <Tab>保证金比例查询</Tab>
-          <Tab>两融账户统计</Tab>
-          <Tab>上交所汇总</Tab>
-          <Tab>上交所明细</Tab>
-          <Tab>深交所汇总</Tab>
-          <Tab>深交所明细</Tab>
-        </TabList>
-      </Tabs>
+      <Tabs.Root value={activeTab} onValueChange={(e) => setActiveTab(e.value)} mb={6}>
+        <Tabs.List>
+          <Tabs.Trigger value="保证金比例查询">保证金比例查询</Tabs.Trigger>
+          <Tabs.Trigger value="两融账户统计">两融账户统计</Tabs.Trigger>
+          <Tabs.Trigger value="上交所汇总">上交所汇总</Tabs.Trigger>
+          <Tabs.Trigger value="上交所明细">上交所明细</Tabs.Trigger>
+          <Tabs.Trigger value="深交所汇总">深交所汇总</Tabs.Trigger>
+          <Tabs.Trigger value="深交所明细">深交所明细</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs.Root>
 
-      <TabPanels>
+      <Tabs.ContentGroup>
         {/* 保证金比例查询 */}
-        <TabPanel>
+        <Tabs.Content value="两融账户统计">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <FormControl w="150px">
-                <FormLabel mb={1} fontSize="sm">交易所</FormLabel>
-                <Select
-                  size="sm"
+              <Field.Root w="150px">
+                <Field.Label mb={1} fontSize="sm">交易所</Field.Label>
+                <NativeSelect.Root><NativeSelect.Field
+                  
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
                 >
                   {symbols.map((sym) => (
                     <option key={sym.value} value={sym.value}>{sym.label}</option>
                   ))}
-                </Select>
-              </FormControl>
+                </NativeSelect.Field></NativeSelect.Root>
+              </Field.Root>
               
-              <InputGroup size="sm" w="200px">
-                <InputLeftAddon fontSize="xs">交易日期</InputLeftAddon>
-                <Input
+              <InputGroup w="200px" startAddon="交易日期">
+  <Input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchRatioData}
-                isLoading={loading && activeTab === 0}
+                loading={loading && activeTab === "账户统计"}
               >
                 查询
               </Button>
             </Flex>
             
             {ratioData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>证券数量</StatLabel>
-                  <StatNumber>{ratioData.length}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>交易所</StatLabel>
-                  <StatNumber>{symbol}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>查询日期</StatLabel>
-                  <StatNumber>{date || '最新'}</StatNumber>
-                </Stat>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>证券数量</Stat.Label>
+                  <Stat.ValueText>{ratioData.length}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>交易所</Stat.Label>
+                  <Stat.ValueText>{symbol}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>查询日期</Stat.Label>
+                  <Stat.ValueText>{date || '最新'}</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>证券代码</Th>
-                    <Th>证券简称</Th>
-                    <Th isNumeric>融资比例</Th>
-                    <Th isNumeric>融券比例</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>证券代码</Table.ColumnHeader>
+                    <Table.ColumnHeader>证券简称</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资比例</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券比例</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {ratioData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td>{item.stock_code}</Td>
-                      <Td>{item.stock_name}</Td>
-                      <Td isNumeric>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell>{item.stock_code}</Table.Cell>
+                      <Table.Cell>{item.stock_name}</Table.Cell>
+                      <Table.Cell >
                         {item.margin_ratio !== null ? (
-                          <Badge colorScheme={item.margin_ratio < 1 ? 'green' : 'red'}>
+                          <Badge colorPalette={item.margin_ratio < 1 ? 'green' : 'red'}>
                             {item.margin_ratio.toFixed(1)}
                           </Badge>
                         ) : '-'}
-                      </Td>
-                      <Td isNumeric>
+                      </Table.Cell>
+                      <Table.Cell >
                         {item.short_ratio !== null ? (
-                          <Badge colorScheme={item.short_ratio < 1 ? 'green' : 'red'}>
+                          <Badge colorPalette={item.short_ratio < 1 ? 'green' : 'red'}>
                             {item.short_ratio.toFixed(1)}
                           </Badge>
                         ) : '-'}
-                      </Td>
-                    </Tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {ratioData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -348,122 +316,122 @@ const MarginTradingPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 两融账户统计 */}
-        <TabPanel>
+        <Tabs.Content value="上交所汇总">
           <Box>
             <Flex mb={4} align="center" gap={4}>
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchAccountInfoData}
-                isLoading={loading && activeTab === 1}
+                loading={loading && activeTab === "上交所"}
               >
                 刷新数据
               </Button>
             </Flex>
             
             {accountInfoData.length > 0 && (
-              <SimpleGrid columns={4} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(accountInfoData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融资余额</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.margin_balance?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融券余额</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.short_balance?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融资买入额</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.margin_buy?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融券卖出额</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.short_sell?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>证券公司数量</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.broker_count?.toLocaleString() || '-'}家</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>营业部数量</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.branch_count?.toLocaleString() || '-'}家</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>个人投资者</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.individual_count?.toFixed(2) || '-'}万名</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>机构投资者</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.institution_count?.toLocaleString() || '-'}家</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>活跃投资者</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.active_count?.toFixed(2) || '-'}万名</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>担保物总价值</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.collateral_value?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>平均维持担保比例</StatLabel>
-                  <StatNumber>{accountInfoData[0]?.collateral_ratio?.toFixed(1) || '-'}%</StatNumber>
-                  <StatHelpText>
+              <SimpleGrid columns={4} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(accountInfoData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融资余额</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.margin_balance?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融券余额</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.short_balance?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融资买入额</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.margin_buy?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融券卖出额</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.short_sell?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>证券公司数量</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.broker_count?.toLocaleString() || '-'}家</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>营业部数量</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.branch_count?.toLocaleString() || '-'}家</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>个人投资者</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.individual_count?.toFixed(2) || '-'}万名</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>机构投资者</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.institution_count?.toLocaleString() || '-'}家</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>活跃投资者</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.active_count?.toFixed(2) || '-'}万名</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>担保物总价值</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.collateral_value?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>平均维持担保比例</Stat.Label>
+                  <Stat.ValueText>{accountInfoData[0]?.collateral_ratio?.toFixed(1) || '-'}%</Stat.ValueText>
+                  <Stat.HelpText>
                     {accountInfoData[0]?.collateral_ratio !== null 
                       ? accountInfoData[0]!.collateral_ratio! > 250 ? '安全' : '关注'
                       : '-'}
-                  </StatHelpText>
-                </Stat>
-                <Stat>
-                  <StatLabel>数据条数</StatLabel>
-                  <StatNumber>{accountInfoData.length}</StatNumber>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>数据条数</Stat.Label>
+                  <Stat.ValueText>{accountInfoData.length}</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th isNumeric>融资余额 (亿)</Th>
-                    <Th isNumeric>融券余额 (亿)</Th>
-                    <Th isNumeric>融资买入 (亿)</Th>
-                    <Th isNumeric>融券卖出 (亿)</Th>
-                    <Th isNumeric>券商数量</Th>
-                    <Th isNumeric>个人投资者 (万)</Th>
-                    <Th isNumeric>担保物价值 (亿)</Th>
-                    <Th isNumeric>担保比例 (%)</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资余额 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余额 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资买入 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券卖出 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >券商数量</Table.ColumnHeader>
+                    <Table.ColumnHeader >个人投资者 (万)</Table.ColumnHeader>
+                    <Table.ColumnHeader >担保物价值 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >担保比例 (%)</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {accountInfoData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td isNumeric>{item.margin_balance?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.short_balance?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.margin_buy?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.short_sell?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.broker_count?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.individual_count?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.collateral_value?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell >{item.margin_balance?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_balance?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.margin_buy?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_sell?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.broker_count?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.individual_count?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.collateral_value?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >
                         {item.collateral_ratio !== null ? (
-                          <Badge colorScheme={item.collateral_ratio > 250 ? 'green' : 'yellow'}>
+                          <Badge colorPalette={item.collateral_ratio > 250 ? 'green' : 'yellow'}>
                             {item.collateral_ratio.toFixed(1)}%
                           </Badge>
                         ) : '-'}
-                      </Td>
-                    </Tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {accountInfoData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -471,89 +439,87 @@ const MarginTradingPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 上交所汇总 */}
-        <TabPanel>
+        <Tabs.Content value="上交所明细">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <InputGroup size="sm" w="200px">
-                <InputLeftAddon fontSize="xs">开始日期</InputLeftAddon>
-                <Input
+              <InputGroup w="200px" startAddon="开始日期">
+  <Input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
-              <InputGroup size="sm" w="200px">
-                <InputLeftAddon fontSize="xs">结束日期</InputLeftAddon>
-                <Input
+              <InputGroup w="200px" startAddon="结束日期">
+  <Input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchMarginSseData}
-                isLoading={loading && activeTab === 2}
+                loading={loading && activeTab === "深交所"}
               >
                 查询
               </Button>
             </Flex>
             
             {marginSseData.length > 0 && (
-              <SimpleGrid columns={4} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>数据条数</StatLabel>
-                  <StatNumber>{marginSseData.length}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>最新融资余额</StatLabel>
-                  <StatNumber>{((marginSseData[0]?.margin_balance || 0) / 100000000).toFixed(2)}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>最新融券余量金额</StatLabel>
-                  <StatNumber>{((marginSseData[0]?.short_remaining_amount || 0) / 100000000).toFixed(2)}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>最新融资融券余额</StatLabel>
-                  <StatNumber>{((marginSseData[0]?.total_margin_short_balance || 0) / 100000000).toFixed(2)}亿</StatNumber>
-                </Stat>
+              <SimpleGrid columns={4} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>数据条数</Stat.Label>
+                  <Stat.ValueText>{marginSseData.length}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>最新融资余额</Stat.Label>
+                  <Stat.ValueText>{((marginSseData[0]?.margin_balance || 0) / 100000000).toFixed(2)}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>最新融券余量金额</Stat.Label>
+                  <Stat.ValueText>{((marginSseData[0]?.short_remaining_amount || 0) / 100000000).toFixed(2)}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>最新融资融券余额</Stat.Label>
+                  <Stat.ValueText>{((marginSseData[0]?.total_margin_short_balance || 0) / 100000000).toFixed(2)}亿</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>信用交易日期</Th>
-                    <Th isNumeric>融资余额 (元)</Th>
-                    <Th isNumeric>融资买入额 (元)</Th>
-                    <Th isNumeric>融券余量</Th>
-                    <Th isNumeric>融券余量金额 (元)</Th>
-                    <Th isNumeric>融券卖出量</Th>
-                    <Th isNumeric>融资融券余额 (元)</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>信用交易日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资余额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资买入额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余量</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余量金额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券卖出量</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资融券余额 (元)</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {marginSseData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td>{item.credit_trade_date}</Td>
-                      <Td isNumeric>{item.margin_balance?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.margin_buy?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_remaining?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_remaining_amount?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_sell?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.total_margin_short_balance?.toLocaleString() || '-'}</Td>
-                    </Tr>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell>{item.credit_trade_date}</Table.Cell>
+                      <Table.Cell >{item.margin_balance?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.margin_buy?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_remaining?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_remaining_amount?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_sell?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.total_margin_short_balance?.toLocaleString() || '-'}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {marginSseData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -561,80 +527,79 @@ const MarginTradingPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 上交所明细 */}
-        <TabPanel>
+        <Tabs.Content value="深交所汇总">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <InputGroup size="sm" w="200px">
-                <InputLeftAddon fontSize="xs">交易日期</InputLeftAddon>
-                <Input
+              <InputGroup w="200px" startAddon="交易日期">
+  <Input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchMarginDetailSseData}
-                isLoading={loading && activeTab === 3}
+                loading={loading && activeTab === "上交所明细"}
               >
                 查询
               </Button>
             </Flex>
             
             {marginDetailSseData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>证券数量</StatLabel>
-                  <StatNumber>{marginDetailSseData.length}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>交易日期</StatLabel>
-                  <StatNumber>{marginDetailSseData[0]?.credit_trade_date || '-'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>总融资余额</StatLabel>
-                  <StatNumber>{(marginDetailSseData.reduce((sum, item) => sum + (item.margin_balance || 0), 0) / 100000000).toFixed(2)}亿</StatNumber>
-                </Stat>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>证券数量</Stat.Label>
+                  <Stat.ValueText>{marginDetailSseData.length}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>交易日期</Stat.Label>
+                  <Stat.ValueText>{marginDetailSseData[0]?.credit_trade_date || '-'}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>总融资余额</Stat.Label>
+                  <Stat.ValueText>{(marginDetailSseData.reduce((sum, item) => sum + (item.margin_balance || 0), 0) / 100000000).toFixed(2)}亿</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>信用交易日期</Th>
-                    <Th>标的证券代码</Th>
-                    <Th>标的证券简称</Th>
-                    <Th isNumeric>融资余额 (元)</Th>
-                    <Th isNumeric>融资买入额 (元)</Th>
-                    <Th isNumeric>融资偿还额 (元)</Th>
-                    <Th isNumeric>融券余量</Th>
-                    <Th isNumeric>融券卖出量</Th>
-                    <Th isNumeric>融券偿还量</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>信用交易日期</Table.ColumnHeader>
+                    <Table.ColumnHeader>标的证券代码</Table.ColumnHeader>
+                    <Table.ColumnHeader>标的证券简称</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资余额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资买入额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资偿还额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余量</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券卖出量</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券偿还量</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {marginDetailSseData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td>{item.credit_trade_date}</Td>
-                      <Td>{item.stock_code}</Td>
-                      <Td>{item.stock_name}</Td>
-                      <Td isNumeric>{item.margin_balance?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.margin_buy?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.margin_repay?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_remaining?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_sell?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_repay?.toLocaleString() || '-'}</Td>
-                    </Tr>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell>{item.credit_trade_date}</Table.Cell>
+                      <Table.Cell>{item.stock_code}</Table.Cell>
+                      <Table.Cell>{item.stock_name}</Table.Cell>
+                      <Table.Cell >{item.margin_balance?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.margin_buy?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.margin_repay?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_remaining?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_sell?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_repay?.toLocaleString() || '-'}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {marginDetailSseData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -642,158 +607,156 @@ const MarginTradingPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 深交所汇总 */}
-        <TabPanel>
+        <Tabs.Content value="深交所明细">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <InputGroup size="sm" w="200px">
-                <InputLeftAddon fontSize="xs">交易日期</InputLeftAddon>
-                <Input
+              <InputGroup w="200px" startAddon="交易日期">
+  <Input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchMarginSzseData}
-                isLoading={loading && activeTab === 4}
+                loading={loading && activeTab === "深交所汇总"}
               >
                 查询
               </Button>
             </Flex>
             
             {marginSzseData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>融资买入额</StatLabel>
-                  <StatNumber>{marginSzseData[0]?.margin_buy?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融资余额</StatLabel>
-                  <StatNumber>{marginSzseData[0]?.margin_balance?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融券余量</StatLabel>
-                  <StatNumber>{marginSzseData[0]?.short_remaining?.toFixed(2) || '-'}亿股</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融券余额</StatLabel>
-                  <StatNumber>{marginSzseData[0]?.short_balance?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>融资融券余额</StatLabel>
-                  <StatNumber>{marginSzseData[0]?.total_margin_short_balance?.toFixed(2) || '-'}亿</StatNumber>
-                </Stat>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>融资买入额</Stat.Label>
+                  <Stat.ValueText>{marginSzseData[0]?.margin_buy?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融资余额</Stat.Label>
+                  <Stat.ValueText>{marginSzseData[0]?.margin_balance?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融券余量</Stat.Label>
+                  <Stat.ValueText>{marginSzseData[0]?.short_remaining?.toFixed(2) || '-'}亿股</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融券余额</Stat.Label>
+                  <Stat.ValueText>{marginSzseData[0]?.short_balance?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>融资融券余额</Stat.Label>
+                  <Stat.ValueText>{marginSzseData[0]?.total_margin_short_balance?.toFixed(2) || '-'}亿</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th isNumeric>融资买入额 (亿)</Th>
-                    <Th isNumeric>融资余额 (亿)</Th>
-                    <Th isNumeric>融券卖出量 (亿股)</Th>
-                    <Th isNumeric>融券余量 (亿股)</Th>
-                    <Th isNumeric>融券余额 (亿)</Th>
-                    <Th isNumeric>融资融券余额 (亿)</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader >融资买入额 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资余额 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券卖出量 (亿股)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余量 (亿股)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余额 (亿)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资融券余额 (亿)</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {marginSzseData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td isNumeric>{item.margin_buy?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.margin_balance?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.short_sell?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.short_remaining?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.short_balance?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.total_margin_short_balance?.toFixed(2) || '-'}</Td>
-                    </Tr>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell >{item.margin_buy?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.margin_balance?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_sell?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_remaining?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_balance?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.total_margin_short_balance?.toFixed(2) || '-'}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 深交所明细 */}
-        <TabPanel>
+        <Tabs.Content value="保证金比例查询">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <InputGroup size="sm" w="200px">
-                <InputLeftAddon fontSize="xs">交易日期</InputLeftAddon>
-                <Input
+              <InputGroup w="200px" startAddon="交易日期">
+  <Input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchMarginDetailSzseData}
-                isLoading={loading && activeTab === 5}
+                loading={loading && activeTab === "深交所明细"}
               >
                 查询
               </Button>
             </Flex>
             
             {marginDetailSzseData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>证券数量</StatLabel>
-                  <StatNumber>{marginDetailSzseData.length}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>总融资余额</StatLabel>
-                  <StatNumber>{(marginDetailSzseData.reduce((sum, item) => sum + (item.margin_balance || 0), 0) / 100000000).toFixed(2)}亿</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>总融券余额</StatLabel>
-                  <StatNumber>{(marginDetailSzseData.reduce((sum, item) => sum + (item.short_balance || 0), 0) / 100000000).toFixed(2)}亿</StatNumber>
-                </Stat>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>证券数量</Stat.Label>
+                  <Stat.ValueText>{marginDetailSzseData.length}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>总融资余额</Stat.Label>
+                  <Stat.ValueText>{(marginDetailSzseData.reduce((sum, item) => sum + (item.margin_balance || 0), 0) / 100000000).toFixed(2)}亿</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>总融券余额</Stat.Label>
+                  <Stat.ValueText>{(marginDetailSzseData.reduce((sum, item) => sum + (item.short_balance || 0), 0) / 100000000).toFixed(2)}亿</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>证券代码</Th>
-                    <Th>证券简称</Th>
-                    <Th isNumeric>融资买入额 (元)</Th>
-                    <Th isNumeric>融资余额 (元)</Th>
-                    <Th isNumeric>融券卖出量</Th>
-                    <Th isNumeric>融券余量</Th>
-                    <Th isNumeric>融券余额 (元)</Th>
-                    <Th isNumeric>融资融券余额 (元)</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>证券代码</Table.ColumnHeader>
+                    <Table.ColumnHeader>证券简称</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资买入额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资余额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券卖出量</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余量</Table.ColumnHeader>
+                    <Table.ColumnHeader >融券余额 (元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >融资融券余额 (元)</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {marginDetailSzseData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td>{item.stock_code}</Td>
-                      <Td>{item.stock_name}</Td>
-                      <Td isNumeric>{item.margin_buy?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.margin_balance?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_sell?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_remaining?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.short_balance?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>{item.total_margin_short_balance?.toLocaleString() || '-'}</Td>
-                    </Tr>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell>{item.stock_code}</Table.Cell>
+                      <Table.Cell>{item.stock_name}</Table.Cell>
+                      <Table.Cell >{item.margin_buy?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.margin_balance?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_sell?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_remaining?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.short_balance?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >{item.total_margin_short_balance?.toLocaleString() || '-'}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
           </Box>
-        </TabPanel>
-      </TabPanels>
+        </Tabs.Content>
+      </Tabs.ContentGroup>
     </Box>
   );
 };

@@ -1,20 +1,5 @@
-import {
-  Box,
-  Flex,
-  HStack,
-  IconButton,
-  Input,
-  InputGroup,
-  InputLeftElement,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
-  Avatar,
-  Badge,
-  Tooltip,
-} from '@chakra-ui/react'
-import { FiMenu, FiSearch, FiBell, FiUser, FiSettings, FiLogOut } from 'react-icons/fi'
+import { Avatar, Badge, Box, Flex, HStack, IconButton, Input, InputGroup, Menu, Tooltip } from '@chakra-ui/react'
+import { FiMenu, FiBell, FiSearch } from 'react-icons/fi'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
@@ -60,22 +45,20 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         maxW="1800px"
         mx="auto"
       >
-        <HStack spacing={4}>
+        <HStack gap={4}>
           <IconButton
             display={{ base: 'flex', lg: 'none' }}
             variant="ghost"
             aria-label="打开菜单"
-            icon={<FiMenu />}
             onClick={onMenuClick}
             color="light.textSecondary"
             _hover={{ color: 'brand.500', bg: 'light.bgSecondary' }}
-          />
+          >
+            <FiMenu />
+          </IconButton>
           
           <form onSubmit={handleSearch}>
-            <InputGroup size="md" w={{ base: '180px', md: '320px' }}>
-              <InputLeftElement pointerEvents="none" h="full">
-                <FiSearch color="var(--chakra-colors-light-textMuted)" />
-              </InputLeftElement>
+            <InputGroup w={{ base: '180px', md: '320px' }} startElement={<FiSearch color="var(--chakra-colors-fg-subtle)" />}>
               <Input
                 placeholder="搜索股票代码/名称..."
                 value={searchValue}
@@ -101,38 +84,40 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           </form>
         </HStack>
 
-        <HStack spacing={2}>
-          <Tooltip label="系统通知" placement="bottom">
-            <Box position="relative">
-              <IconButton
-                variant="ghost"
-                aria-label="通知"
-                icon={<FiBell />}
-                size="md"
-                color="light.textSecondary"
-                _hover={{ 
-                  color: 'brand.500', 
-                  bg: 'light.bgSecondary' 
-                }}
-              />
-              <Badge
-                position="absolute"
-                top={1}
-                right={1}
-                colorScheme="red"
-                borderRadius="full"
-                boxSize={2}
-                p={0}
-              />
-            </Box>
-          </Tooltip>
+        <HStack gap={2}>
+          <Tooltip.Root>
+            <Tooltip.Trigger>
+              <Box position="relative">
+                <IconButton
+                  variant="ghost"
+                  aria-label="通知"
+                  size="md"
+                  color="light.textSecondary"
+                  _hover={{ 
+                    color: 'brand.500', 
+                    bg: 'light.bgSecondary' 
+                  }}
+                >
+                  <FiBell />
+                </IconButton>
+                <Badge
+                  position="absolute"
+                  top={1}
+                  right={1}
+                  colorPalette="red"
+                  borderRadius="full"
+                  boxSize={2}
+                  p={0}
+                />
+              </Box>
+            </Tooltip.Trigger>
+            <Tooltip.Content>系统通知</Tooltip.Content>
+          </Tooltip.Root>
           
-          <Menu>
-            <MenuButton>
-              <Avatar 
-                size="sm" 
-                name={user?.username}
-                icon={<FiUser />}
+          <Menu.Root>
+            <Menu.Trigger>
+              <Avatar.Root 
+                size="sm"
                 bg="brand.500"
                 color="white"
                 cursor="pointer"
@@ -140,31 +125,30 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                   boxShadow: '0 0 15px rgba(33, 150, 243, 0.4)',
                 }}
                 transition="all 0.2s"
-              />
-            </MenuButton>
-            <MenuList>
-              <MenuItem 
-                icon={<FiUser />} 
+              >
+                <Avatar.Fallback name={user?.username} />
+              </Avatar.Root>
+            </Menu.Trigger>
+            <Menu.Content>
+              <Menu.Item value="user__username_____个人中心" 
                 _hover={{ bg: 'light.bgSecondary' }}
               >
                 {user?.username || '个人中心'}
-              </MenuItem>
-              <MenuItem 
-                icon={<FiSettings />} 
+              </Menu.Item>
+              <Menu.Item value="系统设置" 
                 _hover={{ bg: 'light.bgSecondary' }}
               >
                 系统设置
-              </MenuItem>
-              <MenuItem 
-                icon={<FiLogOut />} 
+              </Menu.Item>
+              <Menu.Item value="退出登录" 
                 onClick={handleLogout}
                 _hover={{ bg: 'light.bgSecondary' }}
                 color="red.500"
               >
                 退出登录
-              </MenuItem>
-            </MenuList>
-          </Menu>
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Root>
         </HStack>
       </Flex>
     </Box>

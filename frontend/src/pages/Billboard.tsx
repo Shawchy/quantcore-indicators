@@ -1,24 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Text,
-  Badge,
-  Input,
-  Button,
-  HStack,
-  VStack,
-  Spinner,
-  Alert,
-  AlertIcon,
-  useColorModeValue,
-} from '@chakra-ui/react'
+import { Alert, Badge, Box, Button, HStack, Heading, Input, Spinner, Table, Text, VStack } from '@chakra-ui/react'
+import { useColorModeValue } from '../components/ui/color-mode'
 import { billboardApi } from '../services/api'
 
 interface BillboardEntry {
@@ -97,7 +79,7 @@ const Billboard: React.FC = () => {
 
   return (
     <Box p={6} bg={bgColor} borderRadius="lg" shadow="md">
-      <VStack spacing={6} align="stretch">
+      <VStack gap={6} align="stretch">
         <Heading size="lg">龙虎榜</Heading>
         
         <HStack>
@@ -107,7 +89,7 @@ const Billboard: React.FC = () => {
             onChange={(e) => setTradeDate(e.target.value)}
             maxW="300px"
           />
-          <Button colorScheme="blue" onClick={handleSearch}>
+          <Button colorPalette="blue" onClick={handleSearch}>
             查询
           </Button>
           <Button onClick={() => { setTradeDate(''); fetchBillboard() }}>
@@ -122,61 +104,61 @@ const Billboard: React.FC = () => {
         )}
 
         {error && (
-          <Alert status="error">
-            <AlertIcon />
+          <Alert.Root status="error">
+            <Alert.Indicator />
             {error}
-          </Alert>
+          </Alert.Root>
         )}
 
         {!loading && !error && data.length === 0 && (
-          <Alert status="info">
-            <AlertIcon />
+          <Alert.Root status="info">
+            <Alert.Indicator />
             暂无龙虎榜数据
-          </Alert>
+          </Alert.Root>
         )}
 
         {!loading && data.length > 0 && (
           <Box overflowX="auto">
-            <Table variant="simple" size="sm">
-              <Thead>
-                <Tr>
-                  <Th>代码</Th>
-                  <Th>名称</Th>
-                  <Th isNumeric>收盘价</Th>
-                  <Th isNumeric>涨跌幅</Th>
-                  <Th isNumeric>成交额</Th>
-                  <Th isNumeric>净流入</Th>
-                  <Th isNumeric>买入额</Th>
-                  <Th isNumeric>卖出额</Th>
-                  <Th>上榜原因</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
+            <Table.Root  size="sm">
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeader>代码</Table.ColumnHeader>
+                  <Table.ColumnHeader>名称</Table.ColumnHeader>
+                  <Table.ColumnHeader >收盘价</Table.ColumnHeader>
+                  <Table.ColumnHeader >涨跌幅</Table.ColumnHeader>
+                  <Table.ColumnHeader >成交额</Table.ColumnHeader>
+                  <Table.ColumnHeader >净流入</Table.ColumnHeader>
+                  <Table.ColumnHeader >买入额</Table.ColumnHeader>
+                  <Table.ColumnHeader >卖出额</Table.ColumnHeader>
+                  <Table.ColumnHeader>上榜原因</Table.ColumnHeader>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {data.map((item, index) => (
-                  <Tr key={`${item.code}-${index}`} _hover={{ bg: hoverBg }}>
-                    <Td fontWeight="medium">{item.code}</Td>
-                    <Td>{item.name}</Td>
-                    <Td isNumeric>{formatNumber(item.close_price)}</Td>
-                    <Td isNumeric>
-                      <Badge colorScheme={getChangePctColor(item.change_pct)}>
+                  <Table.Row key={`${item.code}-${index}`} _hover={{ bg: hoverBg }}>
+                    <Table.Cell fontWeight="medium">{item.code}</Table.Cell>
+                    <Table.Cell>{item.name}</Table.Cell>
+                    <Table.Cell >{formatNumber(item.close_price)}</Table.Cell>
+                    <Table.Cell >
+                      <Badge colorPalette={getChangePctColor(item.change_pct)}>
                         {formatNumber(item.change_pct)}%
                       </Badge>
-                    </Td>
-                    <Td isNumeric>{formatAmount(item.turnover_amount)}</Td>
-                    <Td isNumeric>
-                      <Badge colorScheme={item.net_amount && item.net_amount > 0 ? 'red' : 'green'}>
+                    </Table.Cell>
+                    <Table.Cell >{formatAmount(item.turnover_amount)}</Table.Cell>
+                    <Table.Cell >
+                      <Badge colorPalette={item.net_amount && item.net_amount > 0 ? 'red' : 'green'}>
                         {formatAmount(item.net_amount)}
                       </Badge>
-                    </Td>
-                    <Td isNumeric>{formatAmount(item.buy_amount)}</Td>
-                    <Td isNumeric>{formatAmount(item.sell_amount)}</Td>
-                    <Td maxW="200px" isTruncated title={item.reason || ''}>
+                    </Table.Cell>
+                    <Table.Cell >{formatAmount(item.buy_amount)}</Table.Cell>
+                    <Table.Cell >{formatAmount(item.sell_amount)}</Table.Cell>
+                    <Table.Cell maxW="200px" truncate title={item.reason || ''}>
                       <Text fontSize="sm">{item.reason || '-'}</Text>
-                    </Td>
-                  </Tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ))}
-              </Tbody>
-            </Table>
+              </Table.Body>
+            </Table.Root>
           </Box>
         )}
 

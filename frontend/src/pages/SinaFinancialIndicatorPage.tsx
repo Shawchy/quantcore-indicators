@@ -3,36 +3,8 @@
  * 展示 86 个财务指标数据
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Spinner,
-  Center,
-  Button,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Badge,
-  useToast,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  SimpleGrid,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Heading, Input, InputGroup, SimpleGrid, Spinner, Stat, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockFinancialIndicator,
@@ -43,29 +15,29 @@ const SinaFinancialIndicatorPage: React.FC = () => {
   const [stockCode, setStockCode] = useState('600004');
   const [startYear, setStartYear] = useState('2020');
   const [indicatorData, setIndicatorData] = useState<StockFinancialIndicator[]>([]);
-  const [, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState("盈利能力");
   
-  const toast = useToast();
+  ;
 
   // 获取财务指标数据
   const fetchFinancialIndicator = async (code: string, year: string) => {
     if (!code) {
-      toast({ title: '请输入股票代码', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请输入股票代码', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getFinancialIndicator(code, year);
       setIndicatorData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条数据`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取财务指标数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -95,53 +67,53 @@ const SinaFinancialIndicatorPage: React.FC = () => {
     
     return (
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={4} mb={6}>
-        <Stat>
-          <StatLabel>摊薄每股收益</StatLabel>
-          <StatNumber>{formatValue(latestData.diluted_eps, '元')}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>摊薄每股收益</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.diluted_eps, '元')}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>净资产收益率</StatLabel>
-          <StatNumber>{formatValue(latestData.roe, '%')}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>净资产收益率</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.roe, '%')}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>销售毛利率</StatLabel>
-          <StatNumber>{formatValue(latestData.gross_profit_margin, '%')}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>销售毛利率</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.gross_profit_margin, '%')}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>主营业务收入增长率</StatLabel>
-          <StatNumber>{formatValue(latestData.revenue_growth_rate, '%')}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>主营业务收入增长率</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.revenue_growth_rate, '%')}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>净利润增长率</StatLabel>
-          <StatNumber>{formatValue(latestData.net_profit_growth_rate, '%')}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>净利润增长率</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.net_profit_growth_rate, '%')}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>资产负债率</StatLabel>
-          <StatNumber>{formatValue(latestData.asset_liability_ratio, '%')}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>资产负债率</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.asset_liability_ratio, '%')}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>流动比率</StatLabel>
-          <StatNumber>{formatValue(latestData.current_ratio)}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>流动比率</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.current_ratio)}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>应收账款周转率</StatLabel>
-          <StatNumber>{formatValue(latestData.accounts_receivable_turnover, '次')}</StatNumber>
-          <StatHelpText>最新报告期</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>应收账款周转率</Stat.Label>
+          <Stat.ValueText>{formatValue(latestData.accounts_receivable_turnover, '次')}</Stat.ValueText>
+          <Stat.HelpText>最新报告期</Stat.HelpText>
+        </Stat.Root>
       </SimpleGrid>
     );
   };
@@ -153,38 +125,38 @@ const SinaFinancialIndicatorPage: React.FC = () => {
     return (
       <Box overflowX="auto" mb={6}>
         <Heading size="md" mb={4}>每股指标</Heading>
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>日期</Th>
-              <Th isNumeric>摊薄每股收益</Th>
-              <Th isNumeric>加权每股收益</Th>
-              <Th isNumeric>调整后每股收益</Th>
-              <Th isNumeric>扣非后每股收益</Th>
-              <Th isNumeric>每股净资产 (调整前)</Th>
-              <Th isNumeric>每股净资产 (调整后)</Th>
-              <Th isNumeric>每股经营性现金流</Th>
-              <Th isNumeric>每股资本公积金</Th>
-              <Th isNumeric>每股未分配利润</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>日期</Table.ColumnHeader>
+              <Table.ColumnHeader >摊薄每股收益</Table.ColumnHeader>
+              <Table.ColumnHeader >加权每股收益</Table.ColumnHeader>
+              <Table.ColumnHeader >调整后每股收益</Table.ColumnHeader>
+              <Table.ColumnHeader >扣非后每股收益</Table.ColumnHeader>
+              <Table.ColumnHeader >每股净资产 (调整前)</Table.ColumnHeader>
+              <Table.ColumnHeader >每股净资产 (调整后)</Table.ColumnHeader>
+              <Table.ColumnHeader >每股经营性现金流</Table.ColumnHeader>
+              <Table.ColumnHeader >每股资本公积金</Table.ColumnHeader>
+              <Table.ColumnHeader >每股未分配利润</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.map((item, index) => (
-              <Tr key={item.code || item.date || index}>
-                <Td fontWeight="bold">{item.date || '-'}</Td>
-                <Td isNumeric>{formatValue(item.diluted_eps)}</Td>
-                <Td isNumeric>{formatValue(item.weighted_eps)}</Td>
-                <Td isNumeric>{formatValue(item.adjusted_eps)}</Td>
-                <Td isNumeric>{formatValue(item.non_recurring_eps)}</Td>
-                <Td isNumeric>{formatValue(item.adjusted_net_asset_per_share_before)}</Td>
-                <Td isNumeric>{formatValue(item.adjusted_net_asset_per_share_after)}</Td>
-                <Td isNumeric>{formatValue(item.operating_cash_flow_per_share)}</Td>
-                <Td isNumeric>{formatValue(item.capital_reserve_per_share)}</Td>
-                <Td isNumeric>{formatValue(item.undistributed_profit_per_share)}</Td>
-              </Tr>
+              <Table.Row key={item.code || item.date || index}>
+                <Table.Cell fontWeight="bold">{item.date || '-'}</Table.Cell>
+                <Table.Cell >{formatValue(item.diluted_eps)}</Table.Cell>
+                <Table.Cell >{formatValue(item.weighted_eps)}</Table.Cell>
+                <Table.Cell >{formatValue(item.adjusted_eps)}</Table.Cell>
+                <Table.Cell >{formatValue(item.non_recurring_eps)}</Table.Cell>
+                <Table.Cell >{formatValue(item.adjusted_net_asset_per_share_before)}</Table.Cell>
+                <Table.Cell >{formatValue(item.adjusted_net_asset_per_share_after)}</Table.Cell>
+                <Table.Cell >{formatValue(item.operating_cash_flow_per_share)}</Table.Cell>
+                <Table.Cell >{formatValue(item.capital_reserve_per_share)}</Table.Cell>
+                <Table.Cell >{formatValue(item.undistributed_profit_per_share)}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
@@ -196,40 +168,40 @@ const SinaFinancialIndicatorPage: React.FC = () => {
     return (
       <Box overflowX="auto" mb={6}>
         <Heading size="md" mb={4}>盈利能力</Heading>
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>日期</Th>
-              <Th isNumeric>总资产利润率</Th>
-              <Th isNumeric>主营业务利润率</Th>
-              <Th isNumeric>总资产净利润率</Th>
-              <Th isNumeric>成本费用利润率</Th>
-              <Th isNumeric>营业利润率</Th>
-              <Th isNumeric>主营业务成本率</Th>
-              <Th isNumeric>销售净利率</Th>
-              <Th isNumeric>销售毛利率</Th>
-              <Th isNumeric>净资产收益率</Th>
-              <Th isNumeric>加权净资产收益率</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>日期</Table.ColumnHeader>
+              <Table.ColumnHeader >总资产利润率</Table.ColumnHeader>
+              <Table.ColumnHeader >主营业务利润率</Table.ColumnHeader>
+              <Table.ColumnHeader >总资产净利润率</Table.ColumnHeader>
+              <Table.ColumnHeader >成本费用利润率</Table.ColumnHeader>
+              <Table.ColumnHeader >营业利润率</Table.ColumnHeader>
+              <Table.ColumnHeader >主营业务成本率</Table.ColumnHeader>
+              <Table.ColumnHeader >销售净利率</Table.ColumnHeader>
+              <Table.ColumnHeader >销售毛利率</Table.ColumnHeader>
+              <Table.ColumnHeader >净资产收益率</Table.ColumnHeader>
+              <Table.ColumnHeader >加权净资产收益率</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.map((item, index) => (
-              <Tr key={item.code || item.date || index}>
-                <Td fontWeight="bold">{item.date || '-'}</Td>
-                <Td isNumeric>{formatValue(item.return_on_total_assets, '%')}</Td>
-                <Td isNumeric>{formatValue(item.return_on_main_business, '%')}</Td>
-                <Td isNumeric>{formatValue(item.return_on_net_assets, '%')}</Td>
-                <Td isNumeric>{formatValue(item.return_on_cost_expense, '%')}</Td>
-                <Td isNumeric>{formatValue(item.operating_profit_margin, '%')}</Td>
-                <Td isNumeric>{formatValue(item.main_business_cost_ratio, '%')}</Td>
-                <Td isNumeric>{formatValue(item.net_profit_margin, '%')}</Td>
-                <Td isNumeric>{formatValue(item.gross_profit_margin, '%')}</Td>
-                <Td isNumeric>{formatValue(item.roe, '%')}</Td>
-                <Td isNumeric>{formatValue(item.weighted_roe, '%')}</Td>
-              </Tr>
+              <Table.Row key={item.code || item.date || index}>
+                <Table.Cell fontWeight="bold">{item.date || '-'}</Table.Cell>
+                <Table.Cell >{formatValue(item.return_on_total_assets, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.return_on_main_business, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.return_on_net_assets, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.return_on_cost_expense, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.operating_profit_margin, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.main_business_cost_ratio, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.net_profit_margin, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.gross_profit_margin, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.roe, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.weighted_roe, '%')}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
@@ -241,28 +213,28 @@ const SinaFinancialIndicatorPage: React.FC = () => {
     return (
       <Box overflowX="auto" mb={6}>
         <Heading size="md" mb={4}>成长能力</Heading>
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>日期</Th>
-              <Th isNumeric>主营业务收入增长率</Th>
-              <Th isNumeric>净利润增长率</Th>
-              <Th isNumeric>净资产增长率</Th>
-              <Th isNumeric>总资产增长率</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>日期</Table.ColumnHeader>
+              <Table.ColumnHeader >主营业务收入增长率</Table.ColumnHeader>
+              <Table.ColumnHeader >净利润增长率</Table.ColumnHeader>
+              <Table.ColumnHeader >净资产增长率</Table.ColumnHeader>
+              <Table.ColumnHeader >总资产增长率</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.map((item, index) => (
-              <Tr key={item.code || item.date || index}>
-                <Td fontWeight="bold">{item.date || '-'}</Td>
-                <Td isNumeric>{formatValue(item.revenue_growth_rate, '%')}</Td>
-                <Td isNumeric>{formatValue(item.net_profit_growth_rate, '%')}</Td>
-                <Td isNumeric>{formatValue(item.net_assets_growth_rate, '%')}</Td>
-                <Td isNumeric>{formatValue(item.total_assets_growth_rate, '%')}</Td>
-              </Tr>
+              <Table.Row key={item.code || item.date || index}>
+                <Table.Cell fontWeight="bold">{item.date || '-'}</Table.Cell>
+                <Table.Cell >{formatValue(item.revenue_growth_rate, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.net_profit_growth_rate, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.net_assets_growth_rate, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.total_assets_growth_rate, '%')}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
@@ -274,36 +246,36 @@ const SinaFinancialIndicatorPage: React.FC = () => {
     return (
       <Box overflowX="auto" mb={6}>
         <Heading size="md" mb={4}>营运能力</Heading>
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>日期</Th>
-              <Th isNumeric>应收账款周转率</Th>
-              <Th isNumeric>应收账款周转天数</Th>
-              <Th isNumeric>存货周转率</Th>
-              <Th isNumeric>存货周转天数</Th>
-              <Th isNumeric>总资产周转率</Th>
-              <Th isNumeric>总资产周转天数</Th>
-              <Th isNumeric>流动资产周转率</Th>
-              <Th isNumeric>流动资产周转天数</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>日期</Table.ColumnHeader>
+              <Table.ColumnHeader >应收账款周转率</Table.ColumnHeader>
+              <Table.ColumnHeader >应收账款周转天数</Table.ColumnHeader>
+              <Table.ColumnHeader >存货周转率</Table.ColumnHeader>
+              <Table.ColumnHeader >存货周转天数</Table.ColumnHeader>
+              <Table.ColumnHeader >总资产周转率</Table.ColumnHeader>
+              <Table.ColumnHeader >总资产周转天数</Table.ColumnHeader>
+              <Table.ColumnHeader >流动资产周转率</Table.ColumnHeader>
+              <Table.ColumnHeader >流动资产周转天数</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.map((item, index) => (
-              <Tr key={item.code || item.date || index}>
-                <Td fontWeight="bold">{item.date || '-'}</Td>
-                <Td isNumeric>{formatValue(item.accounts_receivable_turnover, '次')}</Td>
-                <Td isNumeric>{formatValue(item.accounts_receivable_turnover_days, '天')}</Td>
-                <Td isNumeric>{formatValue(item.inventory_turnover, '次')}</Td>
-                <Td isNumeric>{formatValue(item.inventory_turnover_days, '天')}</Td>
-                <Td isNumeric>{formatValue(item.total_assets_turnover, '次')}</Td>
-                <Td isNumeric>{formatValue(item.total_assets_turnover_days, '天')}</Td>
-                <Td isNumeric>{formatValue(item.current_assets_turnover, '次')}</Td>
-                <Td isNumeric>{formatValue(item.current_assets_turnover_days, '天')}</Td>
-              </Tr>
+              <Table.Row key={item.code || item.date || index}>
+                <Table.Cell fontWeight="bold">{item.date || '-'}</Table.Cell>
+                <Table.Cell >{formatValue(item.accounts_receivable_turnover, '次')}</Table.Cell>
+                <Table.Cell >{formatValue(item.accounts_receivable_turnover_days, '天')}</Table.Cell>
+                <Table.Cell >{formatValue(item.inventory_turnover, '次')}</Table.Cell>
+                <Table.Cell >{formatValue(item.inventory_turnover_days, '天')}</Table.Cell>
+                <Table.Cell >{formatValue(item.total_assets_turnover, '次')}</Table.Cell>
+                <Table.Cell >{formatValue(item.total_assets_turnover_days, '天')}</Table.Cell>
+                <Table.Cell >{formatValue(item.current_assets_turnover, '次')}</Table.Cell>
+                <Table.Cell >{formatValue(item.current_assets_turnover_days, '天')}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
@@ -315,34 +287,34 @@ const SinaFinancialIndicatorPage: React.FC = () => {
     return (
       <Box overflowX="auto" mb={6}>
         <Heading size="md" mb={4}>偿债能力</Heading>
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>日期</Th>
-              <Th isNumeric>流动比率</Th>
-              <Th isNumeric>速动比率</Th>
-              <Th isNumeric>现金比率</Th>
-              <Th isNumeric>资产负债率</Th>
-              <Th isNumeric>股东权益比率</Th>
-              <Th isNumeric>长期负债比率</Th>
-              <Th isNumeric>利息支付倍数</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>日期</Table.ColumnHeader>
+              <Table.ColumnHeader >流动比率</Table.ColumnHeader>
+              <Table.ColumnHeader >速动比率</Table.ColumnHeader>
+              <Table.ColumnHeader >现金比率</Table.ColumnHeader>
+              <Table.ColumnHeader >资产负债率</Table.ColumnHeader>
+              <Table.ColumnHeader >股东权益比率</Table.ColumnHeader>
+              <Table.ColumnHeader >长期负债比率</Table.ColumnHeader>
+              <Table.ColumnHeader >利息支付倍数</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.map((item, index) => (
-              <Tr key={item.code || item.date || index}>
-                <Td fontWeight="bold">{item.date || '-'}</Td>
-                <Td isNumeric>{formatValue(item.current_ratio)}</Td>
-                <Td isNumeric>{formatValue(item.quick_ratio)}</Td>
-                <Td isNumeric>{formatValue(item.cash_ratio, '%')}</Td>
-                <Td isNumeric>{formatValue(item.asset_liability_ratio, '%')}</Td>
-                <Td isNumeric>{formatValue(item.equity_ratio, '%')}</Td>
-                <Td isNumeric>{formatValue(item.long_term_debt_ratio, '%')}</Td>
-                <Td isNumeric>{formatValue(item.interest_payment_multiple)}</Td>
-              </Tr>
+              <Table.Row key={item.code || item.date || index}>
+                <Table.Cell fontWeight="bold">{item.date || '-'}</Table.Cell>
+                <Table.Cell >{formatValue(item.current_ratio)}</Table.Cell>
+                <Table.Cell >{formatValue(item.quick_ratio)}</Table.Cell>
+                <Table.Cell >{formatValue(item.cash_ratio, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.asset_liability_ratio, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.equity_ratio, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.long_term_debt_ratio, '%')}</Table.Cell>
+                <Table.Cell >{formatValue(item.interest_payment_multiple)}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
@@ -353,28 +325,28 @@ const SinaFinancialIndicatorPage: React.FC = () => {
 
     return (
       <Box overflowX="auto">
-        <Table variant="simple" size="xs">
-          <Thead>
-            <Tr>
-              <Th>日期</Th>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>日期</Table.ColumnHeader>
               {Object.keys(data[0]).filter(key => key !== 'date' && key !== 'extra_fields').map((field) => (
-                <Th key={field} isNumeric>{field}</Th>
+                <Table.ColumnHeader key={field} >{field}</Table.ColumnHeader>
               ))}
-            </Tr>
-          </Thead>
-          <Tbody>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.map((item, index) => (
-              <Tr key={item.code || item.date || index}>
-                <Td fontWeight="bold">{item.date || '-'}</Td>
+              <Table.Row key={item.code || item.date || index}>
+                <Table.Cell fontWeight="bold">{item.date || '-'}</Table.Cell>
                 {Object.keys(item).filter(key => key !== 'date' && key !== 'extra_fields').map((field) => (
-                  <Td key={field} isNumeric>
+                  <Table.Cell key={field} >
                     {formatValue(item[field as keyof StockFinancialIndicator] as number)}
-                  </Td>
+                  </Table.Cell>
                 ))}
-              </Tr>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     );
   };
@@ -385,30 +357,28 @@ const SinaFinancialIndicatorPage: React.FC = () => {
 
       {/* 搜索栏 */}
       <Flex gap={4} mb={6} align="center" flexWrap="wrap">
-        <InputGroup width={{ base: "100%", md: "250px" }}>
-          <InputLeftAddon>股票代码</InputLeftAddon>
-          <Input
+        <InputGroup width={{ base: "100%", md: "250px" }} startAddon="股票代码">
+  <Input
             value={stockCode}
             onChange={(e) => setStockCode(e.target.value.toUpperCase())}
             placeholder="输入股票代码，如：600004"
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           />
-        </InputGroup>
+</InputGroup>
         
-        <InputGroup width={{ base: "100%", md: "200px" }}>
-          <InputLeftAddon>开始年份</InputLeftAddon>
-          <Input
+        <InputGroup width={{ base: "100%", md: "200px" }} startAddon="开始年份">
+  <Input
             value={startYear}
             onChange={(e) => setStartYear(e.target.value)}
             placeholder="输入年份，如：2020"
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           />
-        </InputGroup>
+</InputGroup>
         
-        <Button onClick={handleSearch} colorScheme="blue" isLoading={loading}>
+        <Button onClick={handleSearch} colorPalette="blue" loading={loading}>
           查询
         </Button>
-        <Badge colorScheme="blue" fontSize="0.8em">
+        <Badge colorPalette="blue" fontSize="0.8em">
           示例：600004（南方航空）
         </Badge>
       </Flex>
@@ -429,43 +399,43 @@ const SinaFinancialIndicatorPage: React.FC = () => {
           {renderMainMetrics(indicatorData)}
 
           {/* Tab 面板 */}
-          <Tabs onChange={setActiveTab} colorScheme="blue" isFitted>
-            <TabList mb={4}>
-              <Tab>每股指标</Tab>
-              <Tab>盈利能力</Tab>
-              <Tab>成长能力</Tab>
-              <Tab>营运能力</Tab>
-              <Tab>偿债能力</Tab>
-              <Tab>完整数据</Tab>
-            </TabList>
+          <Tabs.Root onValueChange={(e) => setActiveTab(e.value)} colorPalette="blue">
+            <Tabs.List mb={4}>
+              <Tabs.Trigger value="每股指标">每股指标</Tabs.Trigger>
+              <Tabs.Trigger value="盈利能力">盈利能力</Tabs.Trigger>
+              <Tabs.Trigger value="成长能力">成长能力</Tabs.Trigger>
+              <Tabs.Trigger value="营运能力">营运能力</Tabs.Trigger>
+              <Tabs.Trigger value="偿债能力">偿债能力</Tabs.Trigger>
+              <Tabs.Trigger value="完整数据">完整数据</Tabs.Trigger>
+            </Tabs.List>
 
-            <TabPanels>
-              <TabPanel p={0}>
+            <Tabs.ContentGroup>
+              <Tabs.Content value="盈利能力" p={0}>
                 {renderPerShareMetrics(indicatorData)}
-              </TabPanel>
+              </Tabs.Content>
               
-              <TabPanel p={0}>
+              <Tabs.Content value="成长能力" p={0}>
                 {renderProfitabilityMetrics(indicatorData)}
-              </TabPanel>
+              </Tabs.Content>
               
-              <TabPanel p={0}>
+              <Tabs.Content value="营运能力" p={0}>
                 {renderGrowthMetrics(indicatorData)}
-              </TabPanel>
+              </Tabs.Content>
               
-              <TabPanel p={0}>
+              <Tabs.Content value="偿债能力" p={0}>
                 {renderOperationalMetrics(indicatorData)}
-              </TabPanel>
+              </Tabs.Content>
               
-              <TabPanel p={0}>
+              <Tabs.Content value="完整数据" p={0}>
                 {renderSolvencyMetrics(indicatorData)}
-              </TabPanel>
+              </Tabs.Content>
               
-              <TabPanel p={0}>
+              <Tabs.Content value="完整数据" p={0}>
                 <Heading size="md" mb={4}>完整数据（所有字段）</Heading>
                 {renderFullTable(indicatorData)}
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
+              </Tabs.Content>
+            </Tabs.ContentGroup>
+          </Tabs.Root>
         </>
       )}
 

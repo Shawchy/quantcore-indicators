@@ -1,40 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import {
-  Card,
-  CardBody,
-  CardHeader,
-  Heading,
-  VStack,
-  HStack,
-  Text,
-  Badge,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatArrow,
-  SimpleGrid,
-  Spinner,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  Flex,
-  useToast,
-  Button,
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  Icon,
-} from '@chakra-ui/react'
+import { Badge, Box, Breadcrumb, Button, Card, Flex, HStack, Heading, Icon, SimpleGrid, Spinner, Stat, Table, Tabs, Text, VStack } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import { FiArrowLeft } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
 import { stockApi, realtimeApi, boardApi } from '../services/api'
@@ -50,7 +17,7 @@ const StockDetail = () => {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
   const location = useLocation()
-  const toast = useToast()
+  
   
   // 判断是否来自自选股页面
   const isFromWatchlist = location.state?.from === 'watchlist'
@@ -122,12 +89,12 @@ const StockDetail = () => {
   // 显示错误提示
   useEffect(() => {
     if (code && !isValidCode) {
-      toast({
+      toaster.create({
         title: '无效的股票代码',
         description: '请输入 6 位数字股票代码',
-        status: 'error',
+        type: 'error',
         duration: 5000,
-        isClosable: true,
+        closable: true,
       })
       navigate('/')
     }
@@ -140,7 +107,7 @@ const StockDetail = () => {
   const klines = (() => {
     if (!klineData) return []
     
-    const resp = klineData as ApiResponse<{ klines?: KLineData[]; data?: KLineData[] } | KLineData[]>
+    const resp = klineData as unknown as ApiResponse<{ klines?: KLineData[]; data?: KLineData[] } | KLineData[]>
     if (resp.success && resp.data) {
       const innerData = resp.data
       
@@ -172,7 +139,7 @@ const StockDetail = () => {
   
   const weeklyKlines = (() => {
     if (!weeklyKlineData) return []
-    const innerData = (weeklyKlineData as ApiResponse<KLineData[] | { data: KLineData[] }>)?.data
+    const innerData = (weeklyKlineData as unknown as ApiResponse<KLineData[] | { data: KLineData[] }>)?.data
     if (Array.isArray(innerData)) return innerData
     if (innerData && 'data' in innerData && Array.isArray(innerData.data)) return innerData.data
     return []
@@ -180,14 +147,14 @@ const StockDetail = () => {
   
   const monthlyKlines = (() => {
     if (!monthlyKlineData) return []
-    const innerData = (monthlyKlineData as ApiResponse<KLineData[] | { data: KLineData[] }>)?.data
+    const innerData = (monthlyKlineData as unknown as ApiResponse<KLineData[] | { data: KLineData[] }>)?.data
     if (Array.isArray(innerData)) return innerData
     if (innerData && 'data' in innerData && Array.isArray(innerData.data)) return innerData.data
     return []
   })()
   
-  const indicators = ((indicatorData as ApiResponse<TechnicalIndicator[]> | undefined)?.data) || []
-  const boards = ((boardData as ApiResponse<BoardInfo[]> | undefined)?.data) || []
+  const indicators = ((indicatorData as unknown as ApiResponse<TechnicalIndicator[]> | undefined)?.data) || []
+  const boards = ((boardData as unknown as ApiResponse<BoardInfo[]> | undefined)?.data) || []
   const capitalFlows: CapitalFlow[] = []
   const shareholders: Shareholder[] = []
 
@@ -196,8 +163,8 @@ const StockDetail = () => {
     // K线数据加载状态
   }, [klines])
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getKlineOption = () => {
+  // @ts-expect-error reserved for future use
+  const _getKlineOption = () => {
   //   if (!klines.length) {
   //     return {
   //       title: {
@@ -270,8 +237,8 @@ const StockDetail = () => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getWeeklyKlineOption = () => {
+  // @ts-expect-error reserved for future use
+  const _getWeeklyKlineOption = () => {
     if (!weeklyKlines.length) {
       return {
         title: {
@@ -344,8 +311,8 @@ const StockDetail = () => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getMonthlyKlineOption = () => {
+  // @ts-expect-error reserved for future use
+  const _getMonthlyKlineOption = () => {
     if (!monthlyKlines.length) {
       return {
         title: {
@@ -418,8 +385,8 @@ const StockDetail = () => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getIndicatorOption = () => {
+  // @ts-expect-error reserved for future use
+  const _getIndicatorOption = () => {
     if (!indicators.length) {
       return {
         title: {
@@ -477,41 +444,41 @@ const StockDetail = () => {
   }
 
   return (
-    <VStack spacing={6} align="stretch">
+    <VStack gap={6} align="stretch">
       {/* 面包屑导航和返回按钮 */}
       <HStack justify="space-between" mb={2}>
-        <Breadcrumb separator="/">
-          <BreadcrumbItem>
-            <BreadcrumbLink onClick={() => navigate('/')} color="light.textSecondary" _hover={{ color: 'brand.400' }}>
+        <Breadcrumb.Root>
+          <Breadcrumb.Item>
+            <Breadcrumb.Link onClick={() => navigate('/')} color="light.textSecondary" _hover={{ color: 'brand.400' }}>
               首页
-            </BreadcrumbLink>
-          </BreadcrumbItem>
+            </Breadcrumb.Link>
+          </Breadcrumb.Item>
           {isFromWatchlist && (
-            <BreadcrumbItem>
-              <BreadcrumbLink onClick={() => navigate('/watchlist')} color="light.textSecondary" _hover={{ color: 'brand.400' }}>
+            <Breadcrumb.Item>
+              <Breadcrumb.Link onClick={() => navigate('/watchlist')} color="light.textSecondary" _hover={{ color: 'brand.400' }}>
                 自选股
-              </BreadcrumbLink>
-            </BreadcrumbItem>
+              </Breadcrumb.Link>
+            </Breadcrumb.Item>
           )}
-          <BreadcrumbItem isCurrentPage>
+          <Breadcrumb.Item >
             <Text color="light.text" fontWeight="medium">{stock?.name || code}</Text>
-          </BreadcrumbItem>
-        </Breadcrumb>
+          </Breadcrumb.Item>
+        </Breadcrumb.Root>
         
         {isFromWatchlist && (
           <Button
-            leftIcon={<Icon as={FiArrowLeft} />}
             size="sm"
             variant="ghost"
             onClick={() => navigate('/watchlist')}
           >
+            <Icon as={FiArrowLeft} />
             返回自选股
           </Button>
         )}
       </HStack>
 
       <HStack justify="space-between" flexWrap="wrap" gap={4}>
-        <VStack align="start" spacing={1}>
+        <VStack align="start" gap={1}>
           <Heading size="lg" color="light.text">
             {stock?.name || code}
             <Text as="span" fontSize="md" color="light.textMuted" ml={2} fontFamily="mono">
@@ -525,12 +492,12 @@ const StockDetail = () => {
             >
               {stock?.market}
             </Badge>
-            {stock?.industry && <Badge colorScheme="purple" variant="subtle">{stock.industry}</Badge>}
+            {stock?.industry && <Badge colorPalette="purple" variant="subtle">{stock.industry}</Badge>}
           </HStack>
         </VStack>
 
         {quote && (
-          <VStack align="end" spacing={1}>
+          <VStack align="end" gap={1}>
             <Text 
               fontSize="3xl" 
               fontWeight="bold" 
@@ -540,9 +507,9 @@ const StockDetail = () => {
               {quote.price?.toFixed(2)}
             </Text>
             <HStack>
-              <Stat>
-                <StatArrow type={quote.change_pct >= 0 ? 'increase' : 'decrease'} color={quote.change_pct >= 0 ? 'up.500' : 'down.500'} />
-              </Stat>
+              <Stat.Root>
+                {quote.change_pct >= 0 ? <Stat.UpIndicator color="up.500" /> : <Stat.DownIndicator color="down.500" />}
+              </Stat.Root>
               <Text color={quote.change_pct >= 0 ? 'up.500' : 'down.500'} fontWeight="bold" fontFamily="mono">
                 {quote.change_pct >= 0 ? '+' : ''}{quote.change_pct?.toFixed(2)}%
               </Text>
@@ -551,291 +518,291 @@ const StockDetail = () => {
         )}
       </HStack>
 
-      <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+      <SimpleGrid columns={{ base: 2, md: 4 }} gap={4}>
         {[
           { label: '今开', value: quote?.open?.toFixed(2) || '--' },
           { label: '最高', value: quote?.high?.toFixed(2) || '--', color: 'up.500' },
           { label: '最低', value: quote?.low?.toFixed(2) || '--', color: 'down.500' },
           { label: '成交量', value: quote?.volume ? (quote.volume / 10000).toFixed(0) + '万' : '--' },
         ].map((item) => (
-          <Card key={item.label} size="sm">
-            <CardBody p={4}>
-              <Stat size="sm">
-                <StatLabel color="light.textSecondary" fontSize="xs">{item.label}</StatLabel>
-                <StatNumber fontSize="md" color={item.color || 'light.text'} fontFamily="mono">{item.value}</StatNumber>
-              </Stat>
-            </CardBody>
-          </Card>
+          <Card.Root key={item.label} size="sm">
+            <Card.Body p={4}>
+              <Stat.Root size="sm">
+                <Stat.Label color="light.textSecondary" fontSize="xs">{item.label}</Stat.Label>
+                <Stat.ValueText fontSize="md" color={item.color || 'light.text'} fontFamily="mono">{item.value}</Stat.ValueText>
+              </Stat.Root>
+            </Card.Body>
+          </Card.Root>
         ))}
       </SimpleGrid>
 
-      <Card>
-        <CardBody>
-          <Tabs variant="line" lazyBehavior="keepMounted">
-            <TabList borderColor="light.border">
-              <Tab color="light.textSecondary">日 K 线</Tab>
-              <Tab color="light.textSecondary">周 K 线</Tab>
-              <Tab color="light.textSecondary">月 K 线</Tab>
-            </TabList>
-            <TabPanels>
-              <TabPanel p={0} pt={4}>
+      <Card.Root>
+        <Card.Body>
+          <Tabs.Root variant="line">
+            <Tabs.List borderColor="light.border">
+              <Tabs.Trigger value="日_k_线">日 K 线</Tabs.Trigger>
+              <Tabs.Trigger value="周_k_线">周 K 线</Tabs.Trigger>
+              <Tabs.Trigger value="月_k_线">月 K 线</Tabs.Trigger>
+            </Tabs.List>
+            <Tabs.ContentGroup>
+              <Tabs.Content value="周_k_线" p={0} pt={4}>
                 <KLineChart
                   data={klines}
                   loading={klineLoading}
                   type="daily"
                   height="400px"
                 />
-              </TabPanel>
-              <TabPanel p={0} pt={4}>
+              </Tabs.Content>
+              <Tabs.Content value="月_k_线" p={0} pt={4}>
                 <KLineChart
                   data={weeklyKlines}
                   loading={weeklyKlineLoading}
                   type="weekly"
                   height="400px"
                 />
-              </TabPanel>
-              <TabPanel p={0} pt={4}>
+              </Tabs.Content>
+              <Tabs.Content value="月K" p={0} pt={4}>
                 <KLineChart
                   data={monthlyKlines}
                   loading={monthlyKlineLoading}
                   type="monthly"
                   height="400px"
                 />
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
-        </CardBody>
-      </Card>
+              </Tabs.Content>
+            </Tabs.ContentGroup>
+          </Tabs.Root>
+        </Card.Body>
+      </Card.Root>
 
       {/* 实时盘口 */}
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Flex justify="space-between" align="center">
             <Heading size="sm" color="light.text">
               实时盘口
             </Heading>
             {realtimeQuoteData && (
-              <Badge fontSize="xs" colorScheme="blue">
+              <Badge fontSize="xs" colorPalette="blue">
                 更新：{realtimeQuoteData.update_time}
               </Badge>
             )}
           </Flex>
-        </CardHeader>
-        <CardBody>
+        </Card.Header>
+        <Card.Body>
           <RealtimeQuotePanel
             data={realtimeQuoteData ?? null}
             loading={quoteLoading}
             error={null}
           />
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
       {/* 成交明细 */}
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Flex justify="space-between" align="center">
             <Heading size="sm" color="light.text">
               成交明细
             </Heading>
             {tickData && (
-              <Badge fontSize="xs" colorScheme="green">
+              <Badge fontSize="xs" colorPalette="green">
                 共 {tickData.total_records} 笔
               </Badge>
             )}
           </Flex>
-        </CardHeader>
-        <CardBody>
+        </Card.Header>
+        <Card.Body>
           <TickDataTable
             data={tickData ?? null}
             loading={tickLoading}
             error={null}
           />
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
       {/* 所属板块 */}
       {boards.length > 0 && (
-        <Card>
-          <CardHeader pb={2}>
+        <Card.Root>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">所属板块</Heading>
-          </CardHeader>
-          <CardBody>
+          </Card.Header>
+          <Card.Body>
             <SimpleGrid columns={[1, 2, 3]} gap={4}>
               {boards.map((board: BoardInfo) => (
-                <Card key={board.code || board.name} size="sm">
-                  <CardBody p={4}>
-                    <VStack align="start" spacing={2}>
+                <Card.Root key={board.code || board.name} size="sm">
+                  <Card.Body p={4}>
+                    <VStack align="start" gap={2}>
                       <Text fontSize="xs" color="light.textSecondary">{board.board_type}</Text>
                       <Text fontSize="md" fontWeight="bold" color="light.text">{board.name}</Text>
-                      <HStack spacing={4}>
+                      <HStack gap={4}>
                         <Text fontSize="xs" color="light.textSecondary">
                           价格：{board.close_price?.toFixed(2) || '-'}
                         </Text>
-                        <Badge colorScheme={board.change_pct && board.change_pct > 0 ? 'red' : 'green'}>
+                        <Badge colorPalette={board.change_pct && board.change_pct > 0 ? 'red' : 'green'}>
                           {board.change_pct?.toFixed(2) || 0}%
                         </Badge>
                       </HStack>
                     </VStack>
-                  </CardBody>
-                </Card>
+                  </Card.Body>
+                </Card.Root>
               ))}
             </SimpleGrid>
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       )}
 
       {/* 资金流向 */}
       {capitalFlows.length > 0 && (
-        <Card>
-          <CardHeader pb={2}>
+        <Card.Root>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">资金流向</Heading>
-          </CardHeader>
-          <CardBody>
-            <TableContainer>
-              <Table size="sm" variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th borderColor="light.border" color="light.textSecondary">日期</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>收盘价</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>涨跌幅</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>主力净流入</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>主力净流入率</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>超大单</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>大单</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>中单</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>小单</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+          </Card.Header>
+          <Card.Body>
+            <Box>
+              <Table.Root size="sm" >
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">日期</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >收盘价</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >涨跌幅</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >主力净流入</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >主力净流入率</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >超大单</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >大单</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >中单</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >小单</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {capitalFlows.slice(-10).reverse().map((item: CapitalFlow) => (
-                    <Tr key={item.trade_date} _hover={{ bg: 'light.bgSecondary' }}>
-                      <Td borderColor="light.border" color="light.text">{item.trade_date}</Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                    <Table.Row key={item.trade_date} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Table.Cell borderColor="light.border" color="light.text">{item.trade_date}</Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {item.close_price?.toFixed(2) || '-'}
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
-                        <Badge colorScheme={item.change_pct && item.change_pct > 0 ? 'red' : 'green'}>
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                        <Badge colorPalette={item.change_pct && item.change_pct > 0 ? 'red' : 'green'}>
                           {item.change_pct?.toFixed(2) || 0}%
                         </Badge>
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
-                        <Badge colorScheme={item.main_net_amount && item.main_net_amount > 0 ? 'red' : 'green'}>
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                        <Badge colorPalette={item.main_net_amount && item.main_net_amount > 0 ? 'red' : 'green'}>
                           {(item.main_net_amount / 10000).toFixed(0)}万
                         </Badge>
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {item.main_net_amount_rate?.toFixed(2) || 0}%
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {(item.buy_elg_amount / 10000).toFixed(0)}万
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {(item.buy_lg_amount / 10000).toFixed(0)}万
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {(item.buy_md_amount / 10000).toFixed(0)}万
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {(item.buy_sm_amount / 10000).toFixed(0)}万
-                      </Td>
-                    </Tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
-          </CardBody>
-        </Card>
+                </Table.Body>
+              </Table.Root>
+            </Box>
+          </Card.Body>
+        </Card.Root>
       )}
 
       {/* 前十大股东 */}
       {shareholders.length > 0 && (
-        <Card>
-          <CardHeader pb={2}>
+        <Card.Root>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">前十大股东</Heading>
-          </CardHeader>
-          <CardBody>
-            <TableContainer>
-              <Table size="sm" variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th borderColor="light.border" color="light.textSecondary">股东名称</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>持股数 (股)</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>持股比例</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>持股变化</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">报告期</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+          </Card.Header>
+          <Card.Body>
+            <Box>
+              <Table.Root size="sm" >
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">股东名称</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >持股数 (股)</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >持股比例</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >持股变化</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">报告期</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {shareholders.map((item: Shareholder) => (
-                    <Tr key={item.shareholder_name} _hover={{ bg: 'light.bgSecondary' }}>
-                      <Td borderColor="light.border" color="light.text">{item.shareholder_name}</Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                    <Table.Row key={item.shareholder_name} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Table.Cell borderColor="light.border" color="light.text">{item.shareholder_name}</Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {item.hold_amount?.toLocaleString() || '-'}
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
                         {item.hold_ratio?.toFixed(2) || 0}%
-                      </Td>
-                      <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">
-                        <Badge colorScheme={item.change_amount && item.change_amount > 0 ? 'red' : 'green'}>
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                        <Badge colorPalette={item.change_amount && item.change_amount > 0 ? 'red' : 'green'}>
                           {item.change_amount?.toLocaleString() || 0}
                         </Badge>
-                      </Td>
-                      <Td borderColor="light.border" color="light.text">{item.report_date}</Td>
-                    </Tr>
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.text">{item.report_date}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
-          </CardBody>
-        </Card>
+                </Table.Body>
+              </Table.Root>
+            </Box>
+          </Card.Body>
+        </Card.Root>
       )}
 
       {/* 技术指标图表 - 暂时未实现
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Heading size="sm" color="light.text">技术指标</Heading>
-        </CardHeader>
-        <CardBody>
+        </Card.Header>
+        <Card.Body>
           <IndicatorChart
             data={indicators}
             loading={indicatorLoading}
             height="300px"
           />
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
       */}
 
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Heading size="sm" color="light.text">指标数据</Heading>
-        </CardHeader>
-        <CardBody>
-          <TableContainer>
-            <Table size="sm" variant="simple">
-              <Thead>
-                <Tr>
-                  <Th borderColor="light.border" color="light.textSecondary">日期</Th>
-                  <Th borderColor="light.border" color="light.textSecondary" isNumeric>MA5</Th>
-                  <Th borderColor="light.border" color="light.textSecondary" isNumeric>MA20</Th>
-                  <Th borderColor="light.border" color="light.textSecondary" isNumeric>RSI6</Th>
-                  <Th borderColor="light.border" color="light.textSecondary" isNumeric>MACD</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
+        </Card.Header>
+        <Card.Body>
+          <Box>
+            <Table.Root size="sm" >
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">日期</Table.ColumnHeader>
+                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >MA5</Table.ColumnHeader>
+                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >MA20</Table.ColumnHeader>
+                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >RSI6</Table.ColumnHeader>
+                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >MACD</Table.ColumnHeader>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {indicators.slice(-20).reverse().map((item: TechnicalIndicator) => (
-                  <Tr key={item.date} _hover={{ bg: 'light.bgSecondary' }}>
-                    <Td borderColor="light.border" color="light.text">{item.date}</Td>
-                    <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">{item.ma5?.toFixed(2)}</Td>
-                    <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">{item.ma20?.toFixed(2)}</Td>
-                    <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">{item.rsi6?.toFixed(2)}</Td>
-                    <Td borderColor="light.border" isNumeric fontFamily="mono" color="light.text">{item.macd?.toFixed(4)}</Td>
-                  </Tr>
+                  <Table.Row key={item.date} _hover={{ bg: 'light.bgSecondary' }}>
+                    <Table.Cell borderColor="light.border" color="light.text">{item.date}</Table.Cell>
+                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.ma5?.toFixed(2)}</Table.Cell>
+                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.ma20?.toFixed(2)}</Table.Cell>
+                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.rsi6?.toFixed(2)}</Table.Cell>
+                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.macd?.toFixed(4)}</Table.Cell>
+                  </Table.Row>
                 ))}
-              </Tbody>
-            </Table>
-          </TableContainer>
-        </CardBody>
-      </Card>
+              </Table.Body>
+            </Table.Root>
+          </Box>
+        </Card.Body>
+      </Card.Root>
     </VStack>
   )
 }

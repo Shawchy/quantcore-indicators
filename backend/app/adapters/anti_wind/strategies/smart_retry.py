@@ -4,7 +4,7 @@
 根据错误类型智能决策重试策略，自动降级。
 """
 
-import asyncio
+import inspect
 import random
 from typing import Any, Dict, Optional, Callable
 from loguru import logger
@@ -60,7 +60,7 @@ class SmartRetryStrategy(BaseStrategy):
                 logger.debug(f"执行 {context}（第 {self._current_attempt}/{self._max_retries} 次尝试）")
                 
                 # 执行函数
-                result = await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
+                result = await func(*args, **kwargs) if inspect.iscoroutinefunction(func) else func(*args, **kwargs)
                 
                 # 成功，重置尝试计数
                 self._current_attempt = 0

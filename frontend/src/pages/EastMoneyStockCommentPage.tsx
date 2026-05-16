@@ -2,50 +2,15 @@
  * 东方财富千股千评页面
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Badge,
-  Spinner,
-  Center,
-  Button,
-  Grid,
-  Stat,
-  StatLabel,
-  StatNumber,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalCloseButton,
-  ModalBody,
-  ModalFooter,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-
-  useDisclosure,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Dialog, Flex, Grid, Heading, Input, InputGroup, Spinner, Stat, Table, Tabs, Text, useDisclosure } from '@chakra-ui/react'
 import {
   eastMoneyApi,
   type StockComment,
   type StockCommentDetailInstitution,
   type StockCommentDetailScore,
 } from '@/services/akshare/index';
-import ReactECharts from 'echarts-for-react'
+import EChartsReactCore from 'echarts-for-react/lib/core'
+import echarts from '@/lib/echarts'
 
 const EastMoneyStockCommentPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -56,7 +21,7 @@ const EastMoneyStockCommentPage: React.FC = () => {
   const [scoreData, setScoreData] = useState<StockCommentDetailScore[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { open, onOpen, setOpen } = useDisclosure();
 
   // 获取千股千评数据
   const fetchComments = async () => {
@@ -129,18 +94,17 @@ const EastMoneyStockCommentPage: React.FC = () => {
       <Flex justify="space-between" align="center" mb={6}>
         <Heading size="lg">东方财富千股千评</Heading>
         <Flex gap={4} align="center">
-          <InputGroup width="300px">
-            <InputLeftAddon>股票代码/名称</InputLeftAddon>
-            <Input
+          <InputGroup width="300px" startAddon="股票代码/名称">
+  <Input
               value={searchCode}
               onChange={(e) => setSearchCode(e.target.value)}
               placeholder="输入股票代码或名称"
             />
-          </InputGroup>
-          <Button onClick={handleSearch} colorScheme="blue">
+</InputGroup>
+          <Button onClick={handleSearch} colorPalette="blue">
             搜索
           </Button>
-          <Button onClick={handleRefresh} colorScheme="green" isLoading={loading}>
+          <Button onClick={handleRefresh} colorPalette="green" loading={loading}>
             刷新
           </Button>
         </Flex>
@@ -148,22 +112,22 @@ const EastMoneyStockCommentPage: React.FC = () => {
 
       {/* 统计信息 */}
       <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
-        <Stat>
-          <StatLabel>股票总数</StatLabel>
-          <StatNumber color="blue.500">{stats.total}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>上涨</StatLabel>
-          <StatNumber color="red.500">{stats.positive}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>下跌</StatLabel>
-          <StatNumber color="green.500">{stats.negative}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>平均综合得分</StatLabel>
-          <StatNumber color="purple.500">{stats.avgScore.toFixed(2)}</StatNumber>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>股票总数</Stat.Label>
+          <Stat.ValueText color="blue.500">{stats.total}</Stat.ValueText>
+        </Stat.Root>
+        <Stat.Root>
+          <Stat.Label>上涨</Stat.Label>
+          <Stat.ValueText color="red.500">{stats.positive}</Stat.ValueText>
+        </Stat.Root>
+        <Stat.Root>
+          <Stat.Label>下跌</Stat.Label>
+          <Stat.ValueText color="green.500">{stats.negative}</Stat.ValueText>
+        </Stat.Root>
+        <Stat.Root>
+          <Stat.Label>平均综合得分</Stat.Label>
+          <Stat.ValueText color="purple.500">{stats.avgScore.toFixed(2)}</Stat.ValueText>
+        </Stat.Root>
       </Grid>
 
       {/* 千股千评表格 */}
@@ -173,70 +137,70 @@ const EastMoneyStockCommentPage: React.FC = () => {
         </Center>
       ) : (
         <Box overflowX="auto">
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th>序号</Th>
-                <Th>代码</Th>
-                <Th>名称</Th>
-                <Th>最新价</Th>
-                <Th>涨跌幅</Th>
-                <Th>换手率</Th>
-                <Th>市盈率</Th>
-                <Th>主力成本</Th>
-                <Th>机构参与度</Th>
-                <Th>综合得分</Th>
-                <Th>上升</Th>
-                <Th>目前排名</Th>
-                <Th>关注指数</Th>
-                <Th>操作</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
+          <Table.Root  size="sm">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeader>序号</Table.ColumnHeader>
+                <Table.ColumnHeader>代码</Table.ColumnHeader>
+                <Table.ColumnHeader>名称</Table.ColumnHeader>
+                <Table.ColumnHeader>最新价</Table.ColumnHeader>
+                <Table.ColumnHeader>涨跌幅</Table.ColumnHeader>
+                <Table.ColumnHeader>换手率</Table.ColumnHeader>
+                <Table.ColumnHeader>市盈率</Table.ColumnHeader>
+                <Table.ColumnHeader>主力成本</Table.ColumnHeader>
+                <Table.ColumnHeader>机构参与度</Table.ColumnHeader>
+                <Table.ColumnHeader>综合得分</Table.ColumnHeader>
+                <Table.ColumnHeader>上升</Table.ColumnHeader>
+                <Table.ColumnHeader>目前排名</Table.ColumnHeader>
+                <Table.ColumnHeader>关注指数</Table.ColumnHeader>
+                <Table.ColumnHeader>操作</Table.ColumnHeader>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {comments.map((stock) => (
-                <Tr key={stock.serial_no}>
-                  <Td>{stock.serial_no}</Td>
-                  <Td>
+                <Table.Row key={stock.serial_no}>
+                  <Table.Cell>{stock.serial_no}</Table.Cell>
+                  <Table.Cell>
                     <Text fontWeight="bold">{stock.code}</Text>
-                  </Td>
-                  <Td>{stock.name}</Td>
-                  <Td>{stock.latest_price.toFixed(2)}</Td>
-                  <Td color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
+                  </Table.Cell>
+                  <Table.Cell>{stock.name}</Table.Cell>
+                  <Table.Cell>{stock.latest_price.toFixed(2)}</Table.Cell>
+                  <Table.Cell color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
                     {stock.change_pct.toFixed(2)}%
-                  </Td>
-                  <Td>{stock.turnover_rate.toFixed(2)}%</Td>
-                  <Td>{stock.pe_ratio.toFixed(2)}</Td>
-                  <Td>{stock.main_force_cost.toFixed(2)}</Td>
-                  <Td>
-                    <Badge colorScheme={stock.institution_participation > 30 ? 'red' : 'blue'}>
+                  </Table.Cell>
+                  <Table.Cell>{stock.turnover_rate.toFixed(2)}%</Table.Cell>
+                  <Table.Cell>{stock.pe_ratio.toFixed(2)}</Table.Cell>
+                  <Table.Cell>{stock.main_force_cost.toFixed(2)}</Table.Cell>
+                  <Table.Cell>
+                    <Badge colorPalette={stock.institution_participation > 30 ? 'red' : 'blue'}>
                       {stock.institution_participation.toFixed(2)}%
                     </Badge>
-                  </Td>
-                  <Td>
-                    <Badge colorScheme={stock.comprehensive_score > 60 ? 'green' : 'orange'}>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge colorPalette={stock.comprehensive_score > 60 ? 'green' : 'orange'}>
                       {stock.comprehensive_score.toFixed(2)}
                     </Badge>
-                  </Td>
-                  <Td>
-                    <Badge colorScheme={stock.rise > 0 ? 'red' : 'green'}>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge colorPalette={stock.rise > 0 ? 'red' : 'green'}>
                       {stock.rise > 0 ? '+' : ''}{stock.rise}
                     </Badge>
-                  </Td>
-                  <Td>{stock.current_rank}</Td>
-                  <Td>{stock.attention_index.toFixed(1)}</Td>
-                  <Td>
+                  </Table.Cell>
+                  <Table.Cell>{stock.current_rank}</Table.Cell>
+                  <Table.Cell>{stock.attention_index.toFixed(1)}</Table.Cell>
+                  <Table.Cell>
                     <Button 
                       size="sm" 
-                      colorScheme="blue"
+                      colorPalette="blue"
                       onClick={() => handleViewDetail(stock)}
                     >
                       详情
                     </Button>
-                  </Td>
-                </Tr>
+                  </Table.Cell>
+                </Table.Row>
               ))}
-            </Tbody>
-          </Table>
+            </Table.Body>
+          </Table.Root>
           {comments.length === 0 && (
             <Center h="200px">
               <Text color="gray.500">暂无数据</Text>
@@ -246,29 +210,29 @@ const EastMoneyStockCommentPage: React.FC = () => {
       )}
 
       {/* 详情弹窗 */}
-      <Modal isOpen={isOpen} onClose={onClose} size="6xl">
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>
+      <Dialog.Root open={open} onOpenChange={(details) => setOpen(details.open)} size="full">
+        <Dialog.Backdrop />
+        <Dialog.Content>
+          <Dialog.Header>
             {selectedStock?.code} - {selectedStock?.name} 详情
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
+          </Dialog.Header>
+          <Dialog.CloseTrigger />
+          <Dialog.Body>
             {detailLoading ? (
               <Center h="400px">
                 <Spinner size="xl" />
               </Center>
             ) : (
-              <Tabs colorScheme="blue">
-                <TabList>
-                  <Tab>机构参与度</Tab>
-                  <Tab>历史评分</Tab>
-                </TabList>
-                <TabPanels>
+              <Tabs.Root colorPalette="blue">
+                <Tabs.List>
+                  <Tabs.Trigger value="机构参与度">机构参与度</Tabs.Trigger>
+                  <Tabs.Trigger value="历史评分">历史评分</Tabs.Trigger>
+                </Tabs.List>
+                <Tabs.ContentGroup>
                   {/* 机构参与度 */}
-                  <TabPanel>
+                  <Tabs.Content value="历史评分">
                     <Box h="400px">
-                      <ReactECharts
+                      <EChartsReactCore echarts={echarts}
                         option={{
                           grid: { left: 60, right: 20, top: 30, bottom: 40 },
                           xAxis: { type: 'category', data: institutionData.map(d => d.trading_day), axisLabel: { color: '#64748b' } },
@@ -287,12 +251,12 @@ const EastMoneyStockCommentPage: React.FC = () => {
                         style={{ height: '100%', width: '100%' }}
                       />
                     </Box>
-                  </TabPanel>
+                  </Tabs.Content>
 
                   {/* 历史评分 */}
-                  <TabPanel>
+                  <Tabs.Content value="机构参与度">
                     <Box h="400px">
-                      <ReactECharts
+                      <EChartsReactCore echarts={echarts}
                         option={{
                           grid: { left: 60, right: 20, top: 30, bottom: 40 },
                           xAxis: { type: 'category', data: scoreData.map(d => d.trading_day), axisLabel: { color: '#64748b' } },
@@ -311,16 +275,16 @@ const EastMoneyStockCommentPage: React.FC = () => {
                         style={{ height: '100%', width: '100%' }}
                       />
                     </Box>
-                  </TabPanel>
-                </TabPanels>
-              </Tabs>
+                  </Tabs.Content>
+                </Tabs.ContentGroup>
+              </Tabs.Root>
             )}
-          </ModalBody>
-          <ModalFooter>
-            <Button onClick={onClose}>关闭</Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+          </Dialog.Body>
+          <Dialog.Footer>
+            <Button onClick={() => setOpen(false)}>关闭</Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Root>
     </Box>
   );
 };

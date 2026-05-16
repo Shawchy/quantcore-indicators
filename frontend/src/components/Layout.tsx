@@ -1,18 +1,14 @@
 import { Outlet } from 'react-router-dom'
-import {
-  Box,
-  Flex,
-  useDisclosure,
-} from '@chakra-ui/react'
+import { Box, Flex, useDisclosure } from '@chakra-ui/react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 
 const Layout = () => {
-  const { isOpen, onOpen, onClose } = useDisclosure()
+  const { open, onOpen, setOpen } = useDisclosure()
 
   return (
     <Flex minH="100vh" bg="light.bg">
-      <Sidebar isOpen={isOpen} onClose={onClose} />
+      <Sidebar open={open} onOpenChange={(details) => setOpen(details.open)} />
       
       <Flex 
         flexDir="column" 

@@ -1,40 +1,9 @@
-import {
-  Card,
-  CardBody,
-  CardHeader,
-  Heading,
-  VStack,
-  HStack,
-  Badge,
-  Button,
-  Spinner,
-  SimpleGrid,
-  Stat,
-  StatLabel,
-  StatNumber,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  FormControl,
-  FormLabel,
-  Input,
-  Select,
-  NumberInput,
-  NumberInputField,
-  NumberInputStepper,
-  NumberIncrementStepper,
-  NumberDecrementStepper,
-  Flex,
-} from '@chakra-ui/react'
+import { Badge, Box, Button, Card, Field, Flex, HStack, Heading, Input, NumberInput, NativeSelect, SimpleGrid, Spinner, Stat, Table, VStack } from '@chakra-ui/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import ReactECharts from 'echarts-for-react'
+import EChartsReactCore from 'echarts-for-react/lib/core'
+import echarts from '../lib/echarts'
 import { backtestApi, strategyApi } from '../services/api'
-import { FiPlay } from 'react-icons/fi'
 
 const Backtest = () => {
   const queryClient = useQueryClient()
@@ -183,20 +152,20 @@ const Backtest = () => {
   }
 
   return (
-    <VStack spacing={6} align="stretch">
+    <VStack gap={6} align="stretch">
       <Heading size="lg" color="light.text">
         策略回测
       </Heading>
 
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Heading size="sm" color="light.text">回测配置</Heading>
-        </CardHeader>
-        <CardBody pt={2}>
-          <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
-            <FormControl>
-              <FormLabel color="light.textSecondary" fontSize="sm">选择策略</FormLabel>
-              <Select
+        </Card.Header>
+        <Card.Body pt={2}>
+          <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={4}>
+            <Field.Root>
+              <Field.Label color="light.textSecondary" fontSize="sm">选择策略</Field.Label>
+              <NativeSelect.Root><NativeSelect.Field
                 value={config.strategy_id}
                 onChange={(e) => setConfig({ ...config, strategy_id: e.target.value })}
                 placeholder="选择策略"
@@ -210,10 +179,10 @@ const Backtest = () => {
                     {s.name}
                   </option>
                 ))}
-              </Select>
-            </FormControl>
-            <FormControl>
-              <FormLabel color="light.textSecondary" fontSize="sm">开始日期</FormLabel>
+              </NativeSelect.Field></NativeSelect.Root>
+            </Field.Root>
+            <Field.Root>
+              <Field.Label color="light.textSecondary" fontSize="sm">开始日期</Field.Label>
               <Input
                 type="date"
                 value={config.start_date}
@@ -223,9 +192,9 @@ const Backtest = () => {
                 _hover={{ borderColor: 'brand.400' }}
                 _focus={{ borderColor: 'brand.500', bg: 'white' }}
               />
-            </FormControl>
-            <FormControl>
-              <FormLabel color="light.textSecondary" fontSize="sm">结束日期</FormLabel>
+            </Field.Root>
+            <Field.Root>
+              <Field.Label color="light.textSecondary" fontSize="sm">结束日期</Field.Label>
               <Input
                 type="date"
                 value={config.end_date}
@@ -235,29 +204,29 @@ const Backtest = () => {
                 _hover={{ borderColor: 'brand.400' }}
                 _focus={{ borderColor: 'brand.500', bg: 'white' }}
               />
-            </FormControl>
-            <FormControl>
-              <FormLabel color="light.textSecondary" fontSize="sm">初始资金</FormLabel>
-              <NumberInput
-                value={config.initial_capital}
-                onChange={(_, v) => setConfig({ ...config, initial_capital: v })}
+            </Field.Root>
+            <Field.Root>
+              <Field.Label color="light.textSecondary" fontSize="sm">初始资金</Field.Label>
+              <NumberInput.Root
+                value={String(config.initial_capital)}
+                onValueChange={(e) => setConfig({ ...config, initial_capital: Number(e.value) })}
                 min={10000}
                 bg="light.bgSecondary"
                 borderColor="light.border"
               >
-                <NumberInputField 
+                <NumberInput.Input 
                   bg="light.bgSecondary"
                   borderColor="light.border"
                 />
-                <NumberInputStepper>
-                  <NumberIncrementStepper borderColor="light.border" color="light.textSecondary" />
-                  <NumberDecrementStepper borderColor="light.border" color="light.textSecondary" />
-                </NumberInputStepper>
-              </NumberInput>
-            </FormControl>
+                <NumberInput.Control>
+                  <NumberInput.IncrementTrigger borderColor="light.border" color="light.textSecondary" />
+                  <NumberInput.DecrementTrigger borderColor="light.border" color="light.textSecondary" />
+                </NumberInput.Control>
+              </NumberInput.Root>
+            </Field.Root>
           </SimpleGrid>
 
-          <HStack mt={6} justify="flex-end" spacing={3}>
+          <HStack mt={6} justify="flex-end" gap={3}>
             <Button
               variant="ghost"
               size="md"
@@ -273,136 +242,136 @@ const Backtest = () => {
               重置
             </Button>
             <Button
-              variant="primary"
+              variant="solid"
               size="md"
-              leftIcon={runMutation.isPending ? <Spinner size="sm" /> : <FiPlay />}
+              
               onClick={handleRun}
-              isLoading={runMutation.isPending}
+              loading={runMutation.isPending}
               loadingText="回测中"
-              isDisabled={!config.strategy_id || !config.start_date || !config.end_date}
+              disabled={!config.strategy_id || !config.start_date || !config.end_date}
               px={6}
             >
               开始回测
             </Button>
           </HStack>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
-        <Card>
-          <CardBody>
-            <Stat>
-              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">总收益率</StatLabel>
-              <StatNumber color={performanceData?.data?.total_return >= 0 ? 'red.500' : 'green.500'} fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={4}>
+        <Card.Root>
+          <Card.Body>
+            <Stat.Root>
+              <Stat.Label color="light.textSecondary" fontSize="xs" textTransform="uppercase">总收益率</Stat.Label>
+              <Stat.ValueText color={performanceData?.data?.total_return >= 0 ? 'red.500' : 'green.500'} fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
                 {performanceData?.data?.total_return ? `${performanceData.data.total_return >= 0 ? '+' : ''}${performanceData.data.total_return.toFixed(2)}%` : '-'}
-              </StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <Stat>
-              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">年化收益</StatLabel>
-              <StatNumber color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+              </Stat.ValueText>
+            </Stat.Root>
+          </Card.Body>
+        </Card.Root>
+        <Card.Root>
+          <Card.Body>
+            <Stat.Root>
+              <Stat.Label color="light.textSecondary" fontSize="xs" textTransform="uppercase">年化收益</Stat.Label>
+              <Stat.ValueText color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
                 {performanceData?.data?.annual_return ? `${performanceData.data.annual_return >= 0 ? '+' : ''}${performanceData.data.annual_return.toFixed(2)}%` : '-'}
-              </StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <Stat>
-              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">最大回撤</StatLabel>
-              <StatNumber color="red.500" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+              </Stat.ValueText>
+            </Stat.Root>
+          </Card.Body>
+        </Card.Root>
+        <Card.Root>
+          <Card.Body>
+            <Stat.Root>
+              <Stat.Label color="light.textSecondary" fontSize="xs" textTransform="uppercase">最大回撤</Stat.Label>
+              <Stat.ValueText color="red.500" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
                 {performanceData?.data?.max_drawdown ? `${performanceData.data.max_drawdown.toFixed(2)}%` : '-'}
-              </StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <Stat>
-              <StatLabel color="light.textSecondary" fontSize="xs" textTransform="uppercase">夏普比率</StatLabel>
-              <StatNumber color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
+              </Stat.ValueText>
+            </Stat.Root>
+          </Card.Body>
+        </Card.Root>
+        <Card.Root>
+          <Card.Body>
+            <Stat.Root>
+              <Stat.Label color="light.textSecondary" fontSize="xs" textTransform="uppercase">夏普比率</Stat.Label>
+              <Stat.ValueText color="light.text" fontSize="2xl" fontWeight="bold" fontFamily="mono" mt={1}>
                 {performanceData?.data?.sharpe_ratio || '-'}
-              </StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
+              </Stat.ValueText>
+            </Stat.Root>
+          </Card.Body>
+        </Card.Root>
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
-        <Card>
-          <CardHeader pb={2}>
+      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
+        <Card.Root>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">净值曲线</Heading>
-          </CardHeader>
-          <CardBody pt={2}>
-            <ReactECharts option={getEquityCurveOption()} style={{ height: '300px' }} />
-          </CardBody>
-        </Card>
+          </Card.Header>
+          <Card.Body pt={2}>
+            <EChartsReactCore echarts={echarts} option={getEquityCurveOption()} style={{ height: '300px' }} />
+          </Card.Body>
+        </Card.Root>
 
-        <Card>
-          <CardHeader pb={2}>
+        <Card.Root>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">回撤曲线</Heading>
-          </CardHeader>
-          <CardBody pt={2}>
-            <ReactECharts option={getDrawdownOption()} style={{ height: '300px' }} />
-          </CardBody>
-        </Card>
+          </Card.Header>
+          <Card.Body pt={2}>
+            <EChartsReactCore echarts={echarts} option={getDrawdownOption()} style={{ height: '300px' }} />
+          </Card.Body>
+        </Card.Root>
       </SimpleGrid>
 
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Heading size="sm" color="light.text">回测历史</Heading>
-        </CardHeader>
-        <CardBody>
+        </Card.Header>
+        <Card.Body>
           {historyLoading ? (
             <Flex justify="center" align="center" h="200px">
               <Spinner color="brand.500" />
             </Flex>
           ) : (
-            <TableContainer>
-              <Table size="sm" variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th borderColor="light.border" color="light.textSecondary">回测ID</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">策略</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">开始日期</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">结束日期</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>总收益</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">状态</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">创建时间</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root size="sm" >
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">回测ID</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">策略</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">开始日期</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">结束日期</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >总收益</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">状态</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">创建时间</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {history.map((record: any) => (
-                    <Tr key={record.backtest_id} _hover={{ bg: 'light.bgSecondary' }}>
-                      <Td borderColor="light.border" fontFamily="mono" fontSize="xs" color="light.text">{record.backtest_id}</Td>
-                      <Td borderColor="light.border" color="light.textSecondary">{record.strategy_id}</Td>
-                      <Td borderColor="light.border" color="light.textSecondary">{record.start_date}</Td>
-                      <Td borderColor="light.border" color="light.textSecondary">{record.end_date}</Td>
-                      <Td borderColor="light.border" isNumeric>
-                        <Badge variant={record.total_return >= 0 ? 'up' : 'down'}>
+                    <Table.Row key={record.backtest_id} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Table.Cell borderColor="light.border" fontFamily="mono" fontSize="xs" color="light.text">{record.backtest_id}</Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">{record.strategy_id}</Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">{record.start_date}</Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">{record.end_date}</Table.Cell>
+                      <Table.Cell borderColor="light.border" >
+                        <Badge variant={record.total_return >= 0 ? 'solid' : 'subtle'}>
                           {record.total_return >= 0 ? '+' : ''}{(record.total_return || 0).toFixed(2)}%
                         </Badge>
-                      </Td>
-                      <Td borderColor="light.border">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border">
                         <Badge 
                           bg={record.status === 'completed' ? 'green.100' : 'orange.100'}
                           color={record.status === 'completed' ? 'green.700' : 'orange.700'}
                         >
                           {record.status}
                         </Badge>
-                      </Td>
-                      <Td borderColor="light.border" color="light.textSecondary">{record.created_at}</Td>
-                    </Tr>
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">{record.created_at}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
           )}
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     </VStack>
   )
 }

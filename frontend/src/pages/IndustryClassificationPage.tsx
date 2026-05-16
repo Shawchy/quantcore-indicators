@@ -3,32 +3,8 @@
  * 包含：申万行业分类变动历史、行业市盈率
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Spinner,
-  Center,
-  Button,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Badge,
-  useToast,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  Select,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Heading, Input, InputGroup, NativeSelect, Spinner, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockIndustryClfHistSW,
@@ -36,7 +12,7 @@ import {
 } from '@/services/akshare/index';
 
 const IndustryClassificationPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState("行业市盈率");
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -48,7 +24,7 @@ const IndustryClassificationPage: React.FC = () => {
   const [peClassType, setPeClassType] = useState('国证行业分类');
   const [peDate, setPeDate] = useState('');
   
-  const toast = useToast();
+  ;
 
   // 获取申万行业分类变动历史
   const fetchIndustryClfHist = async () => {
@@ -56,15 +32,15 @@ const IndustryClassificationPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockIndustryClfHistSW();
       setIndustryClfData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条数据`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取申万行业分类变动历史失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -76,15 +52,15 @@ const IndustryClassificationPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockIndustryPERatio(peClassType, peDate || undefined);
       setPeRatioData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条数据`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取行业市盈率失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -96,10 +72,10 @@ const IndustryClassificationPage: React.FC = () => {
   }, []);
 
   // Tab 切换
-  const handleTabChange = (index: number) => {
-    setActiveTab(index);
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
     setSearchTerm('');
-    if (index === 1 && peRatioData.length === 0) {
+    if (value === "行业市净率" && peRatioData.length === 0) {
       fetchIndustryPERatio();
     }
   };
@@ -122,28 +98,28 @@ const IndustryClassificationPage: React.FC = () => {
     
     return (
       <Box overflowX="auto">
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>股票代码</Th>
-              <Th>计入日期</Th>
-              <Th>申万行业代码</Th>
-              <Th>更新日期</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>股票代码</Table.ColumnHeader>
+              <Table.ColumnHeader>计入日期</Table.ColumnHeader>
+              <Table.ColumnHeader>申万行业代码</Table.ColumnHeader>
+              <Table.ColumnHeader>更新日期</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {filteredData.slice(0, 100).map((item, index) => (
-              <Tr key={index}>
-                <Td fontWeight="bold">{item.symbol}</Td>
-                <Td>{item.start_date}</Td>
-                <Td>
-                  <Badge colorScheme="blue">{item.industry_code}</Badge>
-                </Td>
-                <Td>{item.update_time}</Td>
-              </Tr>
+              <Table.Row key={index}>
+                <Table.Cell fontWeight="bold">{item.symbol}</Table.Cell>
+                <Table.Cell>{item.start_date}</Table.Cell>
+                <Table.Cell>
+                  <Badge colorPalette="blue">{item.industry_code}</Badge>
+                </Table.Cell>
+                <Table.Cell>{item.update_time}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
         {filteredData.length > 100 && (
           <Text mt={4} fontSize="sm" color="gray.500">
             仅显示前 100 条，共 {filteredData.length} 条数据
@@ -159,42 +135,42 @@ const IndustryClassificationPage: React.FC = () => {
     
     return (
       <Box overflowX="auto">
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>变动日期</Th>
-              <Th>行业名称</Th>
-              <Th>行业编码</Th>
-              <Th isNumeric>行业层级</Th>
-              <Th isNumeric>公司数量</Th>
-              <Th isNumeric>纳入计算公司数量</Th>
-              <Th isNumeric>总市值 (亿元)</Th>
-              <Th isNumeric>净利润 (亿元)</Th>
-              <Th isNumeric>静态市盈率 - 加权平均</Th>
-              <Th isNumeric>静态市盈率 - 中位数</Th>
-              <Th isNumeric>静态市盈率 - 算术平均</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>变动日期</Table.ColumnHeader>
+              <Table.ColumnHeader>行业名称</Table.ColumnHeader>
+              <Table.ColumnHeader>行业编码</Table.ColumnHeader>
+              <Table.ColumnHeader >行业层级</Table.ColumnHeader>
+              <Table.ColumnHeader >公司数量</Table.ColumnHeader>
+              <Table.ColumnHeader >纳入计算公司数量</Table.ColumnHeader>
+              <Table.ColumnHeader >总市值 (亿元)</Table.ColumnHeader>
+              <Table.ColumnHeader >净利润 (亿元)</Table.ColumnHeader>
+              <Table.ColumnHeader >静态市盈率 - 加权平均</Table.ColumnHeader>
+              <Table.ColumnHeader >静态市盈率 - 中位数</Table.ColumnHeader>
+              <Table.ColumnHeader >静态市盈率 - 算术平均</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {filteredData.slice(0, 100).map((item, index) => (
-              <Tr key={index}>
-                <Td>{item.change_date}</Td>
-                <Td fontWeight="bold">{item.industry_name}</Td>
-                <Td>
-                  <Badge colorScheme="green">{item.industry_code}</Badge>
-                </Td>
-                <Td isNumeric>{item.industry_level}</Td>
-                <Td isNumeric>{item.company_count?.toFixed(0) || '-'}</Td>
-                <Td isNumeric>{item.calc_company_count?.toFixed(0) || '-'}</Td>
-                <Td isNumeric>{item.total_market_cap?.toFixed(2) || '-'}</Td>
-                <Td isNumeric>{item.net_profit?.toFixed(2) || '-'}</Td>
-                <Td isNumeric>{item.pe_static_weighted?.toFixed(2) || '-'}</Td>
-                <Td isNumeric>{item.pe_static_median?.toFixed(2) || '-'}</Td>
-                <Td isNumeric>{item.pe_static_arithmetic?.toFixed(2) || '-'}</Td>
-              </Tr>
+              <Table.Row key={index}>
+                <Table.Cell>{item.change_date}</Table.Cell>
+                <Table.Cell fontWeight="bold">{item.industry_name}</Table.Cell>
+                <Table.Cell>
+                  <Badge colorPalette="green">{item.industry_code}</Badge>
+                </Table.Cell>
+                <Table.Cell >{item.industry_level}</Table.Cell>
+                <Table.Cell >{item.company_count?.toFixed(0) || '-'}</Table.Cell>
+                <Table.Cell >{item.calc_company_count?.toFixed(0) || '-'}</Table.Cell>
+                <Table.Cell >{item.total_market_cap?.toFixed(2) || '-'}</Table.Cell>
+                <Table.Cell >{item.net_profit?.toFixed(2) || '-'}</Table.Cell>
+                <Table.Cell >{item.pe_static_weighted?.toFixed(2) || '-'}</Table.Cell>
+                <Table.Cell >{item.pe_static_median?.toFixed(2) || '-'}</Table.Cell>
+                <Table.Cell >{item.pe_static_arithmetic?.toFixed(2) || '-'}</Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
         {filteredData.length > 100 && (
           <Text mt={4} fontSize="sm" color="gray.500">
             仅显示前 100 条，共 {filteredData.length} 条数据
@@ -210,36 +186,34 @@ const IndustryClassificationPage: React.FC = () => {
 
       {/* 搜索栏 */}
       <Flex gap={4} mb={6} align="center" flexWrap="wrap">
-        <InputGroup width={{ base: "100%", md: "300px" }}>
-          <InputLeftAddon>搜索</InputLeftAddon>
-          <Input
+        <InputGroup width={{ base: "100%", md: "300px" }} startAddon="搜索">
+  <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="输入股票代码、行业名称或代码搜索"
           />
-        </InputGroup>
+</InputGroup>
         
-        {activeTab === 1 && (
+        {activeTab === "行业市净率" && (
           <>
-            <Select 
+            <NativeSelect.Root size="sm"><NativeSelect.Field 
               width={{ base: "100%", md: "200px" }} 
               value={peClassType} 
               onChange={(e) => setPeClassType(e.target.value)}
             >
               <option value="证监会行业分类">证监会行业分类</option>
               <option value="国证行业分类">国证行业分类</option>
-            </Select>
+            </NativeSelect.Field></NativeSelect.Root>
             
-            <InputGroup width={{ base: "100%", md: "200px" }}>
-              <InputLeftAddon>日期</InputLeftAddon>
-              <Input
+            <InputGroup width={{ base: "100%", md: "200px" }} startAddon="日期">
+  <Input
                 value={peDate}
                 onChange={(e) => setPeDate(e.target.value)}
                 placeholder="YYYYMMDD"
               />
-            </InputGroup>
+</InputGroup>
             
-            <Button onClick={fetchIndustryPERatio} colorScheme="blue" isLoading={loading}>
+            <Button onClick={fetchIndustryPERatio} colorPalette="blue" loading={loading}>
               查询
             </Button>
           </>
@@ -252,15 +226,15 @@ const IndustryClassificationPage: React.FC = () => {
         </Center>
       ) : (
         <>
-          <Tabs onChange={handleTabChange} colorScheme="blue" isFitted>
-            <TabList mb={4}>
-              <Tab>申万行业分类变动历史</Tab>
-              <Tab>行业市盈率</Tab>
-            </TabList>
+          <Tabs.Root onValueChange={(e) => handleTabChange(e.value)} colorPalette="blue">
+            <Tabs.List mb={4}>
+              <Tabs.Trigger value="申万行业分类变动历史">申万行业分类变动历史</Tabs.Trigger>
+              <Tabs.Trigger value="行业市盈率">行业市盈率</Tabs.Trigger>
+            </Tabs.List>
 
-            <TabPanels>
+            <Tabs.ContentGroup>
               {/* 申万行业分类变动历史 */}
-              <TabPanel p={0}>
+              <Tabs.Content value="行业市盈率" p={0}>
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md">申万行业分类变动历史</Heading>
                   <Text fontSize="sm" color="gray.500">
@@ -268,20 +242,20 @@ const IndustryClassificationPage: React.FC = () => {
                   </Text>
                 </Flex>
                 {renderIndustryClfTable()}
-              </TabPanel>
+              </Tabs.Content>
               
               {/* 行业市盈率 */}
-              <TabPanel p={0}>
+              <Tabs.Content value="行业市盈率" p={0}>
                 <Flex justify="space-between" align="center" mb={4}>
                   <Heading size="md">行业市盈率</Heading>
-                  <Text fontSize="sm" color="gray.500">
+                    <Text fontSize="sm" color="gray.500">
                     共 {peRatioData.length} 条数据
                   </Text>
                 </Flex>
                 {renderIndustryPERatioTable()}
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
+              </Tabs.Content>
+            </Tabs.ContentGroup>
+          </Tabs.Root>
         </>
       )}
 

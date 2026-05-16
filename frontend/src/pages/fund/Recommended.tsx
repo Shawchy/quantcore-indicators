@@ -4,30 +4,9 @@
  * 展示精选优质基金推荐
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Card,
-  CardBody,
-  Heading,
-  Text,
-  HStack,
-  VStack,
-  SimpleGrid,
-  Badge,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  Icon,
-  useColorModeValue,
-} from '@chakra-ui/react';
-import {
-  StarIcon,
-  WarningIcon,
-  CheckCircleIcon,
-  InfoOutlineIcon,
-} from '@chakra-ui/icons';
+import { Badge, Box, Card, HStack, Heading, Icon, SimpleGrid, Tabs, Text, VStack } from '@chakra-ui/react'
+import { useColorModeValue } from '../../components/ui/color-mode'
+import { FiAlertTriangle, FiCheckCircle, FiInfo, FiStar } from 'react-icons/fi'
 import FundCard from '@/components/fund/FundCard';
 import { FundInfo } from '@/services/fund';
 
@@ -125,7 +104,7 @@ const FundRecommended: React.FC = () => {
 
   // 渲染基金卡片
   const renderFundCards = (funds: RecommendedFund[]) => (
-    <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
+    <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} gap={4}>
       {funds.map((fund) => (
         <VStack key={fund.code} align="stretch">
           <FundCard
@@ -134,18 +113,18 @@ const FundRecommended: React.FC = () => {
             showActions={true}
             compact={false}
           />
-          <Card
+          <Card.Root
             size="sm"
             borderTopWidth="4px"
             borderTopColor="blue.500"
           >
-            <CardBody>
-              <VStack spacing={2} align="stretch">
+            <Card.Body>
+              <VStack gap={2} align="stretch">
                 <HStack>
                   {[...Array(5)].map((_, i) => (
                     <Icon
                       key={i}
-                      as={StarIcon}
+                      as={FiStar}
                       color={i < fund.rating ? 'yellow.400' : 'gray.300'}
                       fill={i < fund.rating ? 'yellow.400' : 'none'}
                       w={4}
@@ -158,14 +137,14 @@ const FundRecommended: React.FC = () => {
                 </Text>
                 <HStack wrap="wrap">
                   {fund.tags.map((tag, idx) => (
-                    <Badge key={idx} colorScheme="blue" fontSize="xs">
+                    <Badge key={idx} colorPalette="blue" fontSize="xs">
                       {tag}
                     </Badge>
                   ))}
                 </HStack>
               </VStack>
-            </CardBody>
-          </Card>
+            </Card.Body>
+          </Card.Root>
         </VStack>
       ))}
     </SimpleGrid>
@@ -173,7 +152,7 @@ const FundRecommended: React.FC = () => {
 
   return (
     <Box p={6}>
-      <VStack spacing={8} align="stretch">
+      <VStack gap={8} align="stretch">
         {/* 标题 */}
         <Box>
           <Heading size="xl" mb={2}>
@@ -185,104 +164,104 @@ const FundRecommended: React.FC = () => {
         </Box>
 
         {/* 分类说明卡片 */}
-        <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={4}>
-          <Card _hover={{ bg: cardHoverBg }}>
-            <CardBody>
-              <VStack spacing={2}>
+        <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} gap={4}>
+          <Card.Root _hover={{ bg: cardHoverBg }}>
+            <Card.Body>
+              <VStack gap={2}>
                 <HStack>
-                  <Icon as={WarningIcon} w={6} h={6} color="yellow.500" />
+                  <Icon as={FiAlertTriangle} w={6} h={6} color="yellow.500" />
                   <Heading size="sm">明星基金</Heading>
                 </HStack>
                 <Text fontSize="xs" color="gray.500">
                   长期业绩优秀，市场公认的优质基金
                 </Text>
               </VStack>
-            </CardBody>
-          </Card>
-          <Card _hover={{ bg: cardHoverBg }}>
-            <CardBody>
-              <VStack spacing={2}>
+            </Card.Body>
+          </Card.Root>
+          <Card.Root _hover={{ bg: cardHoverBg }}>
+            <Card.Body>
+              <VStack gap={2}>
                 <HStack>
-                  <Icon as={CheckCircleIcon} w={6} h={6} color="green.500" />
+                  <Icon as={FiCheckCircle} w={6} h={6} color="green.500" />
                   <Heading size="sm">稳健增长</Heading>
                 </HStack>
                 <Text fontSize="xs" color="gray.500">
                   波动小，稳定增长，适合风险偏好较低的投资者
                 </Text>
               </VStack>
-            </CardBody>
-          </Card>
-          <Card _hover={{ bg: cardHoverBg }}>
-            <CardBody>
-              <VStack spacing={2}>
+            </Card.Body>
+          </Card.Root>
+          <Card.Root _hover={{ bg: cardHoverBg }}>
+            <Card.Body>
+              <VStack gap={2}>
                 <HStack>
-                  <Icon as={InfoOutlineIcon} w={6} h={6} color="blue.500" />
+                  <Icon as={FiInfo} w={6} h={6} color="blue.500" />
                   <Heading size="sm">高弹性</Heading>
                 </HStack>
                 <Text fontSize="xs" color="gray.500">
                   高收益、高波动，适合风险偏好较高的投资者
                 </Text>
               </VStack>
-            </CardBody>
-          </Card>
-          <Card _hover={{ bg: cardHoverBg }}>
-            <CardBody>
-              <VStack spacing={2}>
+            </Card.Body>
+          </Card.Root>
+          <Card.Root _hover={{ bg: cardHoverBg }}>
+            <Card.Body>
+              <VStack gap={2}>
                 <HStack>
-                  <Icon as={StarIcon} w={6} h={6} color="purple.500" />
+                  <Icon as={FiStar} w={6} h={6} color="purple.500" />
                   <Heading size="sm">价值投资</Heading>
                 </HStack>
                 <Text fontSize="xs" color="gray.500">
                   专注低估值价值股，安全边际高
                 </Text>
               </VStack>
-            </CardBody>
-          </Card>
+            </Card.Body>
+          </Card.Root>
         </SimpleGrid>
 
         {/* Tab 切换 */}
-        <Tabs variant="enclosed">
-          <TabList>
-            <Tab>
+        <Tabs.Root variant="enclosed" defaultValue="star">
+          <Tabs.List>
+            <Tabs.Trigger value="star">
               <HStack>
-                <Icon as={WarningIcon} />
+                <Icon as={FiAlertTriangle} />
                 <span>明星基金</span>
               </HStack>
-            </Tab>
-            <Tab>
+            </Tabs.Trigger>
+            <Tabs.Trigger value="steady">
               <HStack>
-                <Icon as={CheckCircleIcon} />
+                <Icon as={FiCheckCircle} />
                 <span>稳健增长</span>
               </HStack>
-            </Tab>
-            <Tab>
+            </Tabs.Trigger>
+            <Tabs.Trigger value="elastic">
               <HStack>
-                <Icon as={InfoOutlineIcon} />
+                <Icon as={FiInfo} />
                 <span>高弹性</span>
               </HStack>
-            </Tab>
-            <Tab>
+            </Tabs.Trigger>
+            <Tabs.Trigger value="value">
               <HStack>
-                <Icon as={StarIcon} />
+                <Icon as={FiStar} />
                 <span>价值投资</span>
               </HStack>
-            </Tab>
-          </TabList>
-          <TabPanels>
-            <TabPanel>
+            </Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.ContentGroup>
+            <Tabs.Content value="star">
               {renderFundCards(starFunds)}
-            </TabPanel>
-            <TabPanel>
+            </Tabs.Content>
+            <Tabs.Content value="steady">
               {renderFundCards(steadyFunds)}
-            </TabPanel>
-            <TabPanel>
+            </Tabs.Content>
+            <Tabs.Content value="elastic">
               {renderFundCards(highElasticFunds)}
-            </TabPanel>
-            <TabPanel>
+            </Tabs.Content>
+            <Tabs.Content value="value">
               {renderFundCards(valueFunds)}
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
+            </Tabs.Content>
+          </Tabs.ContentGroup>
+        </Tabs.Root>
       </VStack>
     </Box>
   );

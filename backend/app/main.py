@@ -235,7 +235,7 @@ def create_app() -> FastAPI:
 
 **技术栈**:
 - Backend: FastAPI + Python 3.12
-- Frontend: React + TypeScript + Redux
+- Frontend: React + TypeScript + Zustand
 - Database: SQLite + Parquet
 - Cache: LRU Async Cache
         """,

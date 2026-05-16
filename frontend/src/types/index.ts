@@ -94,6 +94,31 @@ export interface Strategy {
   updated_at?: string
 }
 
+export interface StrategyCreateRequest {
+  name: string
+  strategy_type: string
+  config: Record<string, unknown>
+}
+
+export interface StrategyUpdateRequest {
+  name?: string
+  config?: Record<string, unknown>
+  is_active?: boolean
+}
+
+export interface StrategyOptimizeRequest {
+  param_ranges: Record<string, { min: number; max: number; step?: number }>
+  method?: 'bayesian' | 'grid' | 'random'
+}
+
+export interface BacktestRunRequest {
+  strategy_id: string
+  start_date: string
+  end_date: string
+  initial_capital: number
+  config?: Record<string, unknown>
+}
+
 export interface BacktestRecord {
   backtest_id: string
   strategy_id: string

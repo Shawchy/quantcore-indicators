@@ -3,34 +3,8 @@
  * 包含：大盘拥挤度、股债利差、巴菲特指标
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Button,
-
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  useToast,
-  Badge,
-  Flex,
-  Spacer,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-  SimpleGrid,
-  Text,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, Heading, SimpleGrid, Spacer, Stat, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockAConestionLG,
@@ -39,7 +13,7 @@ import {
 } from '@/services/akshare/index';
 
 const LeguleGuMarketIndicatorsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0); // 0=大盘拥挤度，1=股债利差，2=巴菲特指标
+  const [activeTab, setActiveTab] = useState("大盘拥挤度"); // 0=大盘拥挤度，1=股债利差，2=巴菲特指标
   const [loading, setLoading] = useState(false);
   
   // 大盘拥挤度数据
@@ -51,7 +25,7 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
   // 巴菲特指标数据
   const [buffettData, setBuffettData] = useState<StockBuffettIndexLG[]>([]);
   
-  const toast = useToast();
+  ;
 
   // 获取大盘拥挤度
   const fetchCongestionData = async () => {
@@ -59,15 +33,15 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockAConestionLG();
       setCongestionData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取大盘拥挤度失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -79,15 +53,15 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockEBSLG();
       setEbsData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取股债利差失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -99,15 +73,15 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockBuffettIndexLG();
       setBuffettData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取巴菲特指标失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -120,11 +94,11 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
 
   // 切换 Tab 时加载对应数据
   useEffect(() => {
-    if (activeTab === 0 && congestionData.length === 0) {
+    if (activeTab === "大盘拥挤度" && congestionData.length === 0) {
       fetchCongestionData();
-    } else if (activeTab === 1 && ebsData.length === 0) {
+    } else if (activeTab === "股债利差" && ebsData.length === 0) {
       fetchEBSData();
-    } else if (activeTab === 2 && buffettData.length === 0) {
+    } else if (activeTab === "巴菲特指标" && buffettData.length === 0) {
       fetchBuffettData();
     }
   }, [activeTab]);
@@ -154,7 +128,7 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     }
     
     return (
-      <Badge colorScheme={colorScheme}>
+      <Badge colorPalette={colorScheme}>
         {congestion.toFixed(4)} ({level})
       </Badge>
     );
@@ -179,7 +153,7 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     }
     
     return (
-      <Badge colorScheme={colorScheme}>
+      <Badge colorPalette={colorScheme}>
         {(decile * 100).toFixed(2)}% ({description})
       </Badge>
     );
@@ -189,82 +163,82 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
     <Box p={8}>
       <Heading mb={6}>乐咕乐股市场指标</Heading>
       
-      <Tabs index={activeTab} onChange={setActiveTab} mb={6}>
-        <TabList>
-          <Tab>大盘拥挤度</Tab>
-          <Tab>股债利差</Tab>
-          <Tab>巴菲特指标</Tab>
-        </TabList>
-      </Tabs>
+      <Tabs.Root value={activeTab} onValueChange={(e) => setActiveTab(e.value)} mb={6}>
+        <Tabs.List>
+          <Tabs.Trigger value="大盘拥挤度">大盘拥挤度</Tabs.Trigger>
+          <Tabs.Trigger value="股债利差">股债利差</Tabs.Trigger>
+          <Tabs.Trigger value="巴菲特指标">巴菲特指标</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs.Root>
 
-      <TabPanels>
+      <Tabs.ContentGroup>
         {/* 大盘拥挤度 */}
-        <TabPanel>
+        <Tabs.Content value="股债利差">
           <Box>
             <Flex mb={4} align="center">
               <Heading size="md">大盘拥挤度</Heading>
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchCongestionData}
-                isLoading={loading && activeTab === 0}
+                loading={loading && activeTab === "大盘拥挤度"}
               >
                 刷新数据
               </Button>
             </Flex>
             
             {congestionData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(congestionData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>最新收盘价</StatLabel>
-                  <StatNumber>{congestionData[0]?.close?.toFixed(2) || '-'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>最新拥挤度</StatLabel>
-                  <StatNumber>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(congestionData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>最新收盘价</Stat.Label>
+                  <Stat.ValueText>{congestionData[0]?.close?.toFixed(2) || '-'}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>最新拥挤度</Stat.Label>
+                  <Stat.ValueText>
                     {congestionData[0]?.congestion !== null 
                       ? (congestionData[0]!.congestion! * 100).toFixed(2) + '%' 
                       : '-'}
-                  </StatNumber>
-                  <StatHelpText>
+                  </Stat.ValueText>
+                  <Stat.HelpText>
                     {congestionData[0]?.congestion !== null 
                       ? congestionData[0]!.congestion! > 0.5 ? '偏高' : '偏低'
                       : '-'}
-                  </StatHelpText>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th isNumeric>收盘价</Th>
-                    <Th isNumeric>拥挤度</Th>
-                    <Th>拥挤度级别</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >收盘价</Table.ColumnHeader>
+                    <Table.ColumnHeader >拥挤度</Table.ColumnHeader>
+                    <Table.ColumnHeader>拥挤度级别</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {congestionData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.name || index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td isNumeric>{item.close?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>
+                    <Table.Row key={item.code || item.name || index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell >{item.close?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >
                         {item.congestion !== null 
                           ? (item.congestion * 100).toFixed(2) + '%' 
                           : '-'}
-                      </Td>
-                      <Td>{renderCongestionLevel(item.congestion)}</Td>
-                    </Tr>
+                      </Table.Cell>
+                      <Table.Cell>{renderCongestionLevel(item.congestion)}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {congestionData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -272,82 +246,82 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 股债利差 */}
-        <TabPanel>
+        <Tabs.Content value="巴菲特指标">
           <Box>
             <Flex mb={4} align="center">
               <Heading size="md">股债利差</Heading>
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchEBSData}
-                isLoading={loading && activeTab === 1}
+                loading={loading && activeTab === "股债利差"}
               >
                 刷新数据
               </Button>
             </Flex>
             
             {ebsData.length > 0 && (
-              <SimpleGrid columns={4} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(ebsData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>沪深 300 指数</StatLabel>
-                  <StatNumber>{ebsData[0]?.hs300_index?.toFixed(2) || '-'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>股债利差</StatLabel>
-                  <StatNumber>
+              <SimpleGrid columns={4} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(ebsData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>沪深 300 指数</Stat.Label>
+                  <Stat.ValueText>{ebsData[0]?.hs300_index?.toFixed(2) || '-'}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>股债利差</Stat.Label>
+                  <Stat.ValueText>
                     {ebsData[0]?.ebs !== null 
                       ? (ebsData[0]!.ebs! * 100).toFixed(2) + '%' 
                       : '-'}
-                  </StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>股债利差均线</StatLabel>
-                  <StatNumber>
+                  </Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>股债利差均线</Stat.Label>
+                  <Stat.ValueText>
                     {ebsData[0]?.ebs_ma !== null 
                       ? (ebsData[0]!.ebs_ma! * 100).toFixed(2) + '%' 
                       : '-'}
-                  </StatNumber>
-                </Stat>
+                  </Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th isNumeric>沪深 300 指数</Th>
-                    <Th isNumeric>股债利差</Th>
-                    <Th isNumeric>股债利差均线</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >沪深 300 指数</Table.ColumnHeader>
+                    <Table.ColumnHeader >股债利差</Table.ColumnHeader>
+                    <Table.ColumnHeader >股债利差均线</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {ebsData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.name || index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td isNumeric>{item.hs300_index?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>
+                    <Table.Row key={item.code || item.name || index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell >{item.hs300_index?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >
                         {item.ebs !== null 
                           ? (item.ebs * 100).toFixed(2) + '%' 
                           : '-'}
-                      </Td>
-                      <Td isNumeric>
+                      </Table.Cell>
+                      <Table.Cell >
                         {item.ebs_ma !== null 
                           ? (item.ebs_ma * 100).toFixed(2) + '%' 
                           : '-'}
-                      </Td>
-                    </Tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {ebsData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -355,104 +329,104 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 巴菲特指标 */}
-        <TabPanel>
+        <Tabs.Content value="大盘拥挤度">
           <Box>
             <Flex mb={4} align="center">
               <Heading size="md">巴菲特指标</Heading>
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchBuffettData}
-                isLoading={loading && activeTab === 2}
+                loading={loading && activeTab === "巴菲特指标"}
               >
                 刷新数据
               </Button>
             </Flex>
             
             {buffettData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(buffettData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>最新收盘价</StatLabel>
-                  <StatNumber>{buffettData[0]?.close?.toFixed(2) || '-'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>总市值/GDP</StatLabel>
-                  <StatNumber>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(buffettData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>最新收盘价</Stat.Label>
+                  <Stat.ValueText>{buffettData[0]?.close?.toFixed(2) || '-'}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>总市值/GDP</Stat.Label>
+                  <Stat.ValueText>
                     {buffettData[0]?.total_market_cap !== null && buffettData[0]?.gdp !== null
                       ? ((buffettData[0]!.total_market_cap! / buffettData[0]!.gdp!) * 100).toFixed(2) + '%'
                       : '-'}
-                  </StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>近十年分位数</StatLabel>
-                  <StatNumber>
+                  </Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>近十年分位数</Stat.Label>
+                  <Stat.ValueText>
                     {buffettData[0]?.decile_10y !== null 
                       ? (buffettData[0]!.decile_10y! * 100).toFixed(2) + '%' 
                       : '-'}
-                  </StatNumber>
-                  <StatHelpText>
+                  </Stat.ValueText>
+                  <Stat.HelpText>
                     {buffettData[0]?.decile_10y !== null
                       ? buffettData[0]!.decile_10y! > 0.5 ? '偏高' : '偏低'
                       : '-'}
-                  </StatHelpText>
-                </Stat>
-                <Stat>
-                  <StatLabel>总历史分位数</StatLabel>
-                  <StatNumber>
+                  </Stat.HelpText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>总历史分位数</Stat.Label>
+                  <Stat.ValueText>
                     {buffettData[0]?.decile_all !== null 
                       ? (buffettData[0]!.decile_all! * 100).toFixed(2) + '%' 
                       : '-'}
-                  </StatNumber>
-                  <StatHelpText>
+                  </Stat.ValueText>
+                  <Stat.HelpText>
                     {buffettData[0]?.decile_all !== null
                       ? buffettData[0]!.decile_all! > 0.5 ? '偏高' : '偏低'
                       : '-'}
-                  </StatHelpText>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th isNumeric>收盘价</Th>
-                    <Th isNumeric>总市值 (亿元)</Th>
-                    <Th isNumeric>GDP(亿元)</Th>
-                    <Th isNumeric>近十年分位数</Th>
-                    <Th isNumeric>总历史分位数</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >收盘价</Table.ColumnHeader>
+                    <Table.ColumnHeader >总市值 (亿元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >GDP(亿元)</Table.ColumnHeader>
+                    <Table.ColumnHeader >近十年分位数</Table.ColumnHeader>
+                    <Table.ColumnHeader >总历史分位数</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {buffettData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.name || index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td isNumeric>{item.close?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.total_market_cap?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.gdp?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>
+                    <Table.Row key={item.code || item.name || index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell >{item.close?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.total_market_cap?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.gdp?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >
                         {item.decile_10y !== null 
                           ? renderDecile(item.decile_10y)
                           : '-'}
-                      </Td>
-                      <Td isNumeric>
+                      </Table.Cell>
+                      <Table.Cell >
                         {item.decile_all !== null 
                           ? renderDecile(item.decile_all)
                           : '-'}
-                      </Td>
-                    </Tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {buffettData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -460,8 +434,8 @@ const LeguleGuMarketIndicatorsPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
-      </TabPanels>
+        </Tabs.Content>
+      </Tabs.ContentGroup>
     </Box>
   );
 };

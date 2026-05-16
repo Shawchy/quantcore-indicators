@@ -3,10 +3,8 @@
  * 显示涨幅榜、跌幅榜、成交额榜等
  */
 import React, { useMemo, memo } from 'react'
-import { 
-  Box, Table, Thead, Tbody, Tr, Th, Td, TableContainer, 
-  Badge, Text, useColorModeValue 
-} from '@chakra-ui/react'
+import { Badge, Box, Table, Text } from '@chakra-ui/react'
+import { useColorModeValue } from './ui/color-mode'
 import type { StockRankingItem } from '../types'
 
 interface StockRankingTableProps {
@@ -86,41 +84,41 @@ const StockRankingTable: React.FC<StockRankingTableProps> = memo(({
         </Text>
       </Box>
       
-      <TableContainer>
-        <Table size="sm" variant="simple">
-          <Thead bg="gray.50">
-            <Tr>
+      <Box>
+        <Table.Root size="sm" >
+          <Table.Header bg="gray.50">
+            <Table.Row>
               {showRank && (
-                <Th width="60px" textAlign="center">排名</Th>
+                <Table.ColumnHeader width="60px" textAlign="center">排名</Table.ColumnHeader>
               )}
-              <Th>代码</Th>
-              <Th>名称</Th>
-              <Th isNumeric>现价</Th>
+              <Table.ColumnHeader>代码</Table.ColumnHeader>
+              <Table.ColumnHeader>名称</Table.ColumnHeader>
+              <Table.ColumnHeader >现价</Table.ColumnHeader>
               {type !== 'amount' && type !== 'turnover' && (
-                <Th isNumeric>涨跌幅</Th>
+                <Table.ColumnHeader >涨跌幅</Table.ColumnHeader>
               )}
               {type !== 'turnover' && (
-                <Th isNumeric>成交量</Th>
+                <Table.ColumnHeader >成交量</Table.ColumnHeader>
               )}
               {(type === 'amount' || type === 'turnover') && (
-                <Th isNumeric>成交额</Th>
+                <Table.ColumnHeader >成交额</Table.ColumnHeader>
               )}
               {type === 'turnover' && (
-                <Th isNumeric>换手率</Th>
+                <Table.ColumnHeader >换手率</Table.ColumnHeader>
               )}
-            </Tr>
-          </Thead>
-          <Tbody>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {displayData.map((item, index) => (
-              <Tr 
+              <Table.Row 
                 key={item.ts_code} 
                 _hover={{ bg: hoverBg }}
                 cursor="pointer"
               >
                 {showRank && (
-                  <Td textAlign="center">
+                  <Table.Cell textAlign="center">
                     <Badge 
-                      colorScheme={colorHelpers.getRankBadgeColor(index + 1)}
+                      colorPalette={colorHelpers.getRankBadgeColor(index + 1)}
                       minWidth="24px"
                       textAlign="center"
                       fontSize="xs"
@@ -130,48 +128,47 @@ const StockRankingTable: React.FC<StockRankingTableProps> = memo(({
                     >
                       {index + 1}
                     </Badge>
-                  </Td>
+                  </Table.Cell>
                 )}
-                <Td>
+                <Table.Cell>
                   <Text fontSize="xs" color="gray.600" fontFamily="mono">
                     {item.ts_code}
                   </Text>
-                </Td>
-                <Td fontWeight="medium" color="gray.700">
+                </Table.Cell>
+                <Table.Cell fontWeight="medium" color="gray.700">
                   {item.name}
-                </Td>
-                <Td isNumeric fontWeight="bold" color="gray.700">
+                </Table.Cell>
+                <Table.Cell fontWeight="bold" color="gray.700">
                   {item.price?.toFixed(2) || '-'}
-                </Td>
+                </Table.Cell>
                 {type !== 'amount' && type !== 'turnover' && (
-                  <Td 
-                    isNumeric 
+                  <Table.Cell 
                     fontWeight="bold"
                     color={colorHelpers.getPctChangeColor(item.pct_change)}
                   >
                     {formatters.formatPctChange(item.pct_change)}
-                  </Td>
+                  </Table.Cell>
                 )}
                 {type !== 'turnover' && (
-                  <Td isNumeric fontSize="xs" color="gray.600">
+                  <Table.Cell fontSize="xs" color="gray.600">
                     {formatters.formatVolume(item.volume)}
-                  </Td>
+                  </Table.Cell>
                 )}
                 {(type === 'amount' || type === 'turnover') && (
-                  <Td isNumeric fontSize="xs" color="gray.600">
+                  <Table.Cell fontSize="xs" color="gray.600">
                     {formatters.formatAmount(item.amount)}
-                  </Td>
+                  </Table.Cell>
                 )}
                 {type === 'turnover' && (
-                  <Td isNumeric fontSize="xs" color="gray.600">
+                  <Table.Cell fontSize="xs" color="gray.600">
                     {item.turnover_rate?.toFixed(2) || '-'}%
-                  </Td>
+                  </Table.Cell>
                 )}
-              </Tr>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
-      </TableContainer>
+          </Table.Body>
+        </Table.Root>
+      </Box>
       
       {data.length > maxItems && (
         <Box px={4} py={2} bg="gray.50" borderTop="1px" borderColor="gray.200">

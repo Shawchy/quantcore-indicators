@@ -3,22 +3,7 @@
  * 显示实时分笔成交数据
  */
 import React from 'react'
-import { 
-  Box,
-  Flex,
-  Text,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Badge,
-  Spinner,
-  Alert,
-  AlertIcon,
-} from '@chakra-ui/react'
+import { Alert, Badge, Box, Flex, Spinner, Table, Text } from '@chakra-ui/react'
 import type { TickData } from '../types'
 
 interface TickDataProps {
@@ -65,10 +50,10 @@ const TickDataTable: React.FC<TickDataProps> = ({ data, loading, error }) => {
 
   if (error) {
     return (
-      <Alert status="error" size="sm" borderRadius="md">
-        <AlertIcon boxSize={3} />
+      <Alert.Root status="error" size="sm" borderRadius="md">
+        <Alert.Indicator boxSize={3} />
         <Text fontSize="xs">{error}</Text>
-      </Alert>
+      </Alert.Root>
     )
   }
 
@@ -84,26 +69,26 @@ const TickDataTable: React.FC<TickDataProps> = ({ data, loading, error }) => {
     <Box>
       {/* 统计信息 */}
       <Flex gap={3} mb={4} flexWrap="wrap">
-        <Badge colorScheme="red" fontSize="xs" px={3} py={2} borderRadius="full">
+        <Badge colorPalette="red" fontSize="xs" px={3} py={2} borderRadius="full">
           买盘：{data.stats.buy_count}笔 ({data.stats.buy_ratio}%)
         </Badge>
-        <Badge colorScheme="green" fontSize="xs" px={3} py={2} borderRadius="full">
+        <Badge colorPalette="green" fontSize="xs" px={3} py={2} borderRadius="full">
           卖盘：{data.stats.sell_count}笔 ({data.stats.sell_ratio}%)
         </Badge>
-        <Badge colorScheme="gray" fontSize="xs" px={3} py={2} borderRadius="full">
+        <Badge colorPalette="gray" fontSize="xs" px={3} py={2} borderRadius="full">
           中性：{data.stats.neutral_count}笔
         </Badge>
-        <Badge colorScheme="blue" fontSize="xs" px={3} py={2} borderRadius="full">
+        <Badge colorPalette="blue" fontSize="xs" px={3} py={2} borderRadius="full">
           总笔数：{data.total_records}
         </Badge>
       </Flex>
 
       {/* 成交明细表格 */}
-      <TableContainer maxH="400px" overflowY="auto">
-        <Table size="sm" variant="simple">
-          <Thead position="sticky" top={0} bg="white" zIndex={1}>
-            <Tr>
-              <Th 
+      <Box maxH="400px" overflowY="auto">
+        <Table.Root size="sm" >
+          <Table.Header position="sticky" top={0} bg="white" zIndex={1}>
+            <Table.Row>
+              <Table.ColumnHeader 
                 fontSize="xs" 
                 color="gray.600" 
                 fontWeight="medium"
@@ -111,56 +96,52 @@ const TickDataTable: React.FC<TickDataProps> = ({ data, loading, error }) => {
                 px={3}
               >
                 时间
-              </Th>
-              <Th 
+              </Table.ColumnHeader>
+              <Table.ColumnHeader 
                 fontSize="xs" 
                 color="gray.600" 
                 fontWeight="medium"
-                isNumeric
                 py={2}
                 px={3}
               >
                 价格
-              </Th>
-              <Th 
+              </Table.ColumnHeader>
+              <Table.ColumnHeader 
                 fontSize="xs" 
                 color="gray.600" 
                 fontWeight="medium"
-                isNumeric
                 py={2}
                 px={3}
               >
                 成交量
-              </Th>
-              <Th 
+              </Table.ColumnHeader>
+              <Table.ColumnHeader 
                 fontSize="xs" 
                 color="gray.600" 
                 fontWeight="medium"
-                isNumeric
                 py={2}
                 px={3}
               >
                 成交额
-              </Th>
-              <Th 
+              </Table.ColumnHeader>
+              <Table.ColumnHeader 
                 fontSize="xs" 
                 color="gray.600" 
                 fontWeight="medium"
-                isNumeric
                 py={2}
                 px={3}
               >
                 类型
-              </Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+              </Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {data.tick_data.slice(-50).reverse().map((tick, index) => (
-              <Tr 
+              <Table.Row 
                 key={index}
                 _hover={{ bg: 'gray.50' }}
               >
-                <Td 
+                <Table.Cell 
                   fontSize="xs" 
                   color="gray.700"
                   fontFamily="mono"
@@ -168,41 +149,38 @@ const TickDataTable: React.FC<TickDataProps> = ({ data, loading, error }) => {
                   px={3}
                 >
                   {formatTime(tick.time)}
-                </Td>
-                <Td 
+                </Table.Cell>
+                <Table.Cell 
                   fontSize="xs" 
                   fontWeight="bold"
                   color={tick.type === '买盘' ? 'red.500' : tick.type === '卖盘' ? 'green.500' : 'gray.500'}
                   fontFamily="mono"
-                  isNumeric
                   py={2}
                   px={3}
                 >
                   {formatPrice(tick.price)}
-                </Td>
-                <Td 
+                </Table.Cell>
+                <Table.Cell 
                   fontSize="xs" 
                   color="gray.700"
                   fontFamily="mono"
-                  isNumeric
                   py={2}
                   px={3}
                 >
                   {formatVolume(tick.volume)}
-                </Td>
-                <Td 
+                </Table.Cell>
+                <Table.Cell 
                   fontSize="xs" 
                   color="gray.600"
                   fontFamily="mono"
-                  isNumeric
                   py={2}
                   px={3}
                 >
                   {tick.amount ? `${(tick.amount / 10000).toFixed(1)}万` : '-'}
-                </Td>
-                <Td isNumeric py={2} px={3}>
+                </Table.Cell>
+                <Table.Cell py={2} px={3}>
                   <Badge 
-                    colorScheme={getTypeColor(tick.type)} 
+                    colorPalette={getTypeColor(tick.type)} 
                     fontSize="xs" 
                     px={2} 
                     py={1}
@@ -210,12 +188,12 @@ const TickDataTable: React.FC<TickDataProps> = ({ data, loading, error }) => {
                   >
                     {tick.type}
                   </Badge>
-                </Td>
-              </Tr>
+                </Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
-      </TableContainer>
+          </Table.Body>
+        </Table.Root>
+      </Box>
 
       {/* 数据说明 */}
       <Text fontSize="xs" color="gray.500" textAlign="center" mt={3}>

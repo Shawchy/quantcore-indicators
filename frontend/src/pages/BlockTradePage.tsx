@@ -3,39 +3,8 @@
  * 包含：市场统计、每日明细
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Button,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  useToast,
-  Badge,
-  Flex,
-  Spacer,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-  SimpleGrid,
-  Text,
-  Select,
-  FormControl,
-  FormLabel,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Field, Flex, Heading, Input, InputGroup, NativeSelect, SimpleGrid, Spacer, Stat, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockDzjySctj,
@@ -43,7 +12,7 @@ import {
 } from '@/services/akshare/index';
 
 const BlockTradePage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0); // 0=市场统计，1=每日明细
+  const [activeTab, setActiveTab] = useState("市场统计");
   const [loading, setLoading] = useState(false);
   
   // 输入参数
@@ -57,7 +26,7 @@ const BlockTradePage: React.FC = () => {
   // 每日明细数据
   const [mrmxData, setMrmxData] = useState<StockDzjyMrmx[]>([]);
   
-  const toast = useToast();
+  ;
 
   const symbols = [
     { value: 'A 股', label: 'A 股' },
@@ -72,15 +41,15 @@ const BlockTradePage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockDzjySctj();
       setSctjData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取大宗交易市场统计数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -92,15 +61,15 @@ const BlockTradePage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockDzjyMrmx(symbol, startDate, endDate);
       setMrmxData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取大宗交易每日明细数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -113,9 +82,9 @@ const BlockTradePage: React.FC = () => {
 
   // 切换 Tab 时加载对应数据
   useEffect(() => {
-    if (activeTab === 0 && sctjData.length === 0) {
+    if (activeTab === "市场统计" && sctjData.length === 0) {
       fetchSctjData();
-    } else if (activeTab === 1 && mrmxData.length === 0) {
+    } else if (activeTab === "每日明细" && mrmxData.length === 0) {
       fetchMrmxData();
     }
   }, [activeTab]);
@@ -141,7 +110,7 @@ const BlockTradePage: React.FC = () => {
     if (ratio === null) return '-';
     const colorScheme = ratio > 0 ? 'red' : ratio < 0 ? 'green' : 'gray';
     return (
-      <Badge colorScheme={colorScheme}>
+      <Badge colorPalette={colorScheme}>
         {ratio.toFixed(2)}%
       </Badge>
     );
@@ -152,7 +121,7 @@ const BlockTradePage: React.FC = () => {
     if (pct === null) return '-';
     const colorScheme = pct > 0 ? 'red' : pct < 0 ? 'green' : 'gray';
     return (
-      <Badge colorScheme={colorScheme}>
+      <Badge colorPalette={colorScheme}>
         {pct.toFixed(2)}%
       </Badge>
     );
@@ -162,106 +131,106 @@ const BlockTradePage: React.FC = () => {
     <Box p={8}>
       <Heading mb={6}>大宗交易</Heading>
       
-      <Tabs index={activeTab} onChange={setActiveTab} mb={6}>
-        <TabList>
-          <Tab>市场统计</Tab>
-          <Tab>每日明细</Tab>
-        </TabList>
-      </Tabs>
+      <Tabs.Root value={activeTab} onValueChange={(e) => setActiveTab(e.value)} mb={6}>
+        <Tabs.List>
+          <Tabs.Trigger value="市场统计">市场统计</Tabs.Trigger>
+          <Tabs.Trigger value="每日明细">每日明细</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs.Root>
 
-      <TabPanels>
+      <Tabs.ContentGroup>
         {/* 市场统计 */}
-        <TabPanel>
+        <Tabs.Content value="每日明细">
           <Box>
             <Flex mb={4} align="center" gap={4}>
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchSctjData}
-                isLoading={loading && activeTab === 0}
+                loading={loading && activeTab === "市场统计"}
               >
                 刷新数据
               </Button>
             </Flex>
             
             {sctjData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(sctjData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>上证指数</StatLabel>
-                  <StatNumber>{sctjData[0]?.sh_index?.toFixed(2) || '-'}</StatNumber>
-                  <StatHelpText>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(sctjData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>上证指数</Stat.Label>
+                  <Stat.ValueText>{sctjData[0]?.sh_index?.toFixed(2) || '-'}</Stat.ValueText>
+                  <Stat.HelpText>
                     {sctjData[0]?.sh_change_pct !== null 
                       ? `${sctjData[0]!.sh_change_pct! > 0 ? '+' : ''}${sctjData[0]!.sh_change_pct!.toFixed(2)}%`
                       : '-'}
-                  </StatHelpText>
-                </Stat>
-                <Stat>
-                  <StatLabel>成交总额</StatLabel>
-                  <StatNumber>{formatAmount(sctjData[0]?.total_amount, '亿')}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>溢价成交额</StatLabel>
-                  <StatNumber>{formatAmount(sctjData[0]?.premium_amount, '亿')}</StatNumber>
-                  <StatHelpText>
+                  </Stat.HelpText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>成交总额</Stat.Label>
+                  <Stat.ValueText>{formatAmount(sctjData[0]?.total_amount, '亿')}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>溢价成交额</Stat.Label>
+                  <Stat.ValueText>{formatAmount(sctjData[0]?.premium_amount, '亿')}</Stat.ValueText>
+                  <Stat.HelpText>
                     占比{sctjData[0]?.premium_ratio?.toFixed(2)}%
-                  </StatHelpText>
-                </Stat>
-                <Stat>
-                  <StatLabel>折价成交额</StatLabel>
-                  <StatNumber>{formatAmount(sctjData[0]?.discount_amount, '亿')}</StatNumber>
-                  <StatHelpText>
+                  </Stat.HelpText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>折价成交额</Stat.Label>
+                  <Stat.ValueText>{formatAmount(sctjData[0]?.discount_amount, '亿')}</Stat.ValueText>
+                  <Stat.HelpText>
                     占比{sctjData[0]?.discount_ratio?.toFixed(2)}%
-                  </StatHelpText>
-                </Stat>
-                <Stat>
-                  <StatLabel>数据条数</StatLabel>
-                  <StatNumber>{sctjData.length}</StatNumber>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>数据条数</Stat.Label>
+                  <Stat.ValueText>{sctjData.length}</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th isNumeric>上证指数</Th>
-                    <Th isNumeric>涨跌幅</Th>
-                    <Th isNumeric>成交总额</Th>
-                    <Th isNumeric>溢价成交额</Th>
-                    <Th isNumeric>溢价占比</Th>
-                    <Th isNumeric>折价成交额</Th>
-                    <Th isNumeric>折价占比</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >上证指数</Table.ColumnHeader>
+                    <Table.ColumnHeader >涨跌幅</Table.ColumnHeader>
+                    <Table.ColumnHeader >成交总额</Table.ColumnHeader>
+                    <Table.ColumnHeader >溢价成交额</Table.ColumnHeader>
+                    <Table.ColumnHeader >溢价占比</Table.ColumnHeader>
+                    <Table.ColumnHeader >折价成交额</Table.ColumnHeader>
+                    <Table.ColumnHeader >折价占比</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {sctjData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td isNumeric>{item.sh_index?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell >{item.sh_index?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >
                         {item.sh_change_pct !== null 
                           ? (
-                            <Badge colorScheme={item.sh_change_pct > 0 ? 'red' : 'green'}>
+                            <Badge colorPalette={item.sh_change_pct > 0 ? 'red' : 'green'}>
                               {item.sh_change_pct.toFixed(2)}%
                             </Badge>
                           )
                           : '-'}
-                      </Td>
-                      <Td isNumeric>{formatAmount(item.total_amount, '亿')}</Td>
-                      <Td isNumeric>{formatAmount(item.premium_amount, '万')}</Td>
-                      <Td isNumeric>{item.premium_ratio?.toFixed(2)}%</Td>
-                      <Td isNumeric>{formatAmount(item.discount_amount, '万')}</Td>
-                      <Td isNumeric>{item.discount_ratio?.toFixed(2)}%</Td>
-                    </Tr>
+                      </Table.Cell>
+                      <Table.Cell >{formatAmount(item.total_amount, '亿')}</Table.Cell>
+                      <Table.Cell >{formatAmount(item.premium_amount, '万')}</Table.Cell>
+                      <Table.Cell >{item.premium_ratio?.toFixed(2)}%</Table.Cell>
+                      <Table.Cell >{formatAmount(item.discount_amount, '万')}</Table.Cell>
+                      <Table.Cell >{item.discount_ratio?.toFixed(2)}%</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {sctjData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -269,114 +238,112 @@ const BlockTradePage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 每日明细 */}
-        <TabPanel>
+        <Tabs.Content value="市场统计">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <FormControl w="150px">
-                <FormLabel mb={1} fontSize="sm">证券类型</FormLabel>
-                <Select
-                  size="sm"
+              <Field.Root w="150px">
+                <Field.Label mb={1} fontSize="sm">证券类型</Field.Label>
+                <NativeSelect.Root><NativeSelect.Field
+                  
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
                 >
                   {symbols.map((sym) => (
                     <option key={sym.value} value={sym.value}>{sym.label}</option>
                   ))}
-                </Select>
-              </FormControl>
+                </NativeSelect.Field></NativeSelect.Root>
+              </Field.Root>
               
-              <InputGroup size="sm" w="180px">
-                <InputLeftAddon fontSize="xs">开始日期</InputLeftAddon>
-                <Input
+              <InputGroup w="180px" startAddon="开始日期">
+  <Input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
-              <InputGroup size="sm" w="180px">
-                <InputLeftAddon fontSize="xs">结束日期</InputLeftAddon>
-                <Input
+              <InputGroup w="180px" startAddon="结束日期">
+  <Input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                 />
-              </InputGroup>
+</InputGroup>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchMrmxData}
-                isLoading={loading && activeTab === 1}
+                loading={loading && activeTab === "每日明细"}
               >
                 查询
               </Button>
             </Flex>
             
             {mrmxData.length > 0 && (
-              <SimpleGrid columns={4} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(mrmxData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>交易笔数</StatLabel>
-                  <StatNumber>{mrmxData.length}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>成交总额</StatLabel>
-                  <StatNumber>
+              <SimpleGrid columns={4} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(mrmxData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>交易笔数</Stat.Label>
+                  <Stat.ValueText>{mrmxData.length}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>成交总额</Stat.Label>
+                  <Stat.ValueText>
                     {formatAmount(mrmxData.reduce((sum, item) => sum + (item.amount || 0), 0), '亿')}
-                  </StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>平均折溢率</StatLabel>
-                  <StatNumber>
+                  </Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>平均折溢率</Stat.Label>
+                  <Stat.ValueText>
                     {mrmxData.reduce((sum, item) => sum + (item.premium_ratio || 0), 0) / mrmxData.length}%
-                  </StatNumber>
-                </Stat>
+                  </Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th>代码</Th>
-                    <Th>名称</Th>
-                    <Th isNumeric>涨跌幅</Th>
-                    <Th isNumeric>收盘价</Th>
-                    <Th isNumeric>成交价</Th>
-                    <Th isNumeric>折溢率</Th>
-                    <Th isNumeric>成交量 (万股)</Th>
-                    <Th isNumeric>成交额 (万元)</Th>
-                    <Th>买方营业部</Th>
-                    <Th>卖方营业部</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader>代码</Table.ColumnHeader>
+                    <Table.ColumnHeader>名称</Table.ColumnHeader>
+                    <Table.ColumnHeader >涨跌幅</Table.ColumnHeader>
+                    <Table.ColumnHeader >收盘价</Table.ColumnHeader>
+                    <Table.ColumnHeader >成交价</Table.ColumnHeader>
+                    <Table.ColumnHeader >折溢率</Table.ColumnHeader>
+                    <Table.ColumnHeader >成交量 (万股)</Table.ColumnHeader>
+                    <Table.ColumnHeader >成交额 (万元)</Table.ColumnHeader>
+                    <Table.ColumnHeader>买方营业部</Table.ColumnHeader>
+                    <Table.ColumnHeader>卖方营业部</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {mrmxData.slice(0, 100).map((item, index) => (
-                    <Tr key={item.code || item.trade_date || index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td>{item.stock_code}</Td>
-                      <Td>{item.stock_name}</Td>
-                      <Td isNumeric>{renderChangePct(item.change_pct)}</Td>
-                      <Td isNumeric>{item.close_price?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{item.deal_price?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{renderPremiumRatio(item.premium_ratio)}</Td>
-                      <Td isNumeric>{(item.volume || 0) / 10000}%</Td>
-                      <Td isNumeric>{formatAmount(item.amount, '万')}</Td>
-                      <Td>{item.buyer_dept || '-'}</Td>
-                      <Td>{item.seller_dept || '-'}</Td>
-                    </Tr>
+                    <Table.Row key={item.code || item.trade_date || index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell>{item.stock_code}</Table.Cell>
+                      <Table.Cell>{item.stock_name}</Table.Cell>
+                      <Table.Cell >{renderChangePct(item.change_pct)}</Table.Cell>
+                      <Table.Cell >{item.close_price?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{item.deal_price?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{renderPremiumRatio(item.premium_ratio)}</Table.Cell>
+                      <Table.Cell >{(item.volume || 0) / 10000}%</Table.Cell>
+                      <Table.Cell >{formatAmount(item.amount, '万')}</Table.Cell>
+                      <Table.Cell>{item.buyer_dept || '-'}</Table.Cell>
+                      <Table.Cell>{item.seller_dept || '-'}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {mrmxData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -384,8 +351,8 @@ const BlockTradePage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
-      </TabPanels>
+        </Tabs.Content>
+      </Tabs.ContentGroup>
     </Box>
   );
 };

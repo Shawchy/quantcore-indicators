@@ -3,35 +3,7 @@
  * 包含：涨停股池、昨日涨停、强势股、次新股
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Badge,
-  Spinner,
-  Center,
-  Button,
-  Grid,
-  Stat,
-  StatLabel,
-  StatNumber,
-  Input,
-  InputGroup,
-  InputRightAddon,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Grid, Heading, Input, InputGroup, Spinner, Stat, Table, Tabs, Text } from '@chakra-ui/react'
 import {
   eastMoneyApi,
   type StockZtPool,
@@ -47,7 +19,7 @@ const EastMoneyZtBoardPage: React.FC = () => {
   const [ztStrong, setZtStrong] = useState<StockZtStrong[]>([]);
   const [ztSubNew, setZtSubNew] = useState<StockZtSubNew[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0].replace(/-/g, ''));
-  const [, setActiveTab] = useState(0);
+  const [, setActiveTab] = useState("涨停股池");
 
   // 获取涨停股池数据
   const fetchZtPool = async (selectedDate: string) => {
@@ -164,48 +136,47 @@ const EastMoneyZtBoardPage: React.FC = () => {
       <Flex justify="space-between" align="center" mb={6}>
         <Heading size="lg">东方财富涨停板行情</Heading>
         <Flex gap={4} align="center">
-          <InputGroup width="200px">
+          <InputGroup width="200px" endAddon="日期">
             <Input
               type="date"
               value={date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')}
               onChange={handleDateChange}
             />
-            <InputRightAddon>日期</InputRightAddon>
           </InputGroup>
-          <Button onClick={handleRefresh} colorScheme="blue" isLoading={loading}>
+          <Button onClick={handleRefresh} colorPalette="blue" loading={loading}>
             刷新
           </Button>
         </Flex>
       </Flex>
 
-      <Tabs onChange={(index) => setActiveTab(index)} colorScheme="blue">
-        <TabList>
-          <Tab>涨停股池</Tab>
-          <Tab>昨日涨停</Tab>
-          <Tab>强势股</Tab>
-          <Tab>次新股</Tab>
-        </TabList>
+      <Tabs.Root onValueChange={(e) => setActiveTab(e.value)} colorPalette="blue">
+        <Tabs.List>
+          <Tabs.Trigger value="涨停股池">涨停股池</Tabs.Trigger>
+          <Tabs.Trigger value="昨日涨停">昨日涨停</Tabs.Trigger>
+          <Tabs.Trigger value="强势股">强势股</Tabs.Trigger>
+          <Tabs.Trigger value="次新股">次新股</Tabs.Trigger>
+        </Tabs.List>
 
-        <TabPanels>
+        <Tabs.ContentGroup>
           {/* 涨停股池 */}
-          <TabPanel>
+          <Tabs.Content value="昨日涨停">
             <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
-              <Stat>
-                <StatLabel>涨停总数</StatLabel>
-                <StatNumber color="red.500">{ztPoolStats.total}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>首板</StatLabel>
-                <StatNumber>{ztPoolStats.firstBoard}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>连板</StatLabel>
-                <StatNumber color="orange.500">{ztPoolStats.continuous}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>最高连板</StatLabel>
-                <StatNumber color="purple.500">{ztPoolStats.maxContinuous}</StatNumber>
-              </Stat>
+              <Stat.Root>
+                <Stat.Label>涨停总数</Stat.Label>
+                <Stat.ValueText color="red.500">{ztPoolStats.total}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>首板</Stat.Label>
+                <Stat.ValueText>{ztPoolStats.firstBoard}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>连板</Stat.Label>
+                <Stat.ValueText color="orange.500">{ztPoolStats.continuous}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>最高连板</Stat.Label>
+                <Stat.ValueText color="purple.500">{ztPoolStats.maxContinuous}</Stat.ValueText>
+              </Stat.Root>
             </Grid>
 
             {loading ? (
@@ -214,62 +185,62 @@ const EastMoneyZtBoardPage: React.FC = () => {
               </Center>
             ) : (
               <Box overflowX="auto">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>序号</Th>
-                      <Th>代码</Th>
-                      <Th>名称</Th>
-                      <Th>涨跌幅</Th>
-                      <Th>最新价</Th>
-                      <Th>换手率</Th>
-                      <Th>流通市值</Th>
-                      <Th>总市值</Th>
-                      <Th>封板资金</Th>
-                      <Th>首次封板</Th>
-                      <Th>最后封板</Th>
-                      <Th>炸板次数</Th>
-                      <Th>连板数</Th>
-                      <Th>涨停统计</Th>
-                      <Th>所属行业</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
+                <Table.Root  size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader>序号</Table.ColumnHeader>
+                      <Table.ColumnHeader>代码</Table.ColumnHeader>
+                      <Table.ColumnHeader>名称</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨跌幅</Table.ColumnHeader>
+                      <Table.ColumnHeader>最新价</Table.ColumnHeader>
+                      <Table.ColumnHeader>换手率</Table.ColumnHeader>
+                      <Table.ColumnHeader>流通市值</Table.ColumnHeader>
+                      <Table.ColumnHeader>总市值</Table.ColumnHeader>
+                      <Table.ColumnHeader>封板资金</Table.ColumnHeader>
+                      <Table.ColumnHeader>首次封板</Table.ColumnHeader>
+                      <Table.ColumnHeader>最后封板</Table.ColumnHeader>
+                      <Table.ColumnHeader>炸板次数</Table.ColumnHeader>
+                      <Table.ColumnHeader>连板数</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨停统计</Table.ColumnHeader>
+                      <Table.ColumnHeader>所属行业</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {ztPool.map((stock) => (
-                      <Tr key={stock.serial_no}>
-                        <Td>{stock.serial_no}</Td>
-                        <Td>
+                      <Table.Row key={stock.serial_no}>
+                        <Table.Cell>{stock.serial_no}</Table.Cell>
+                        <Table.Cell>
                           <Text fontWeight="bold">{stock.code}</Text>
-                        </Td>
-                        <Td>{stock.name}</Td>
-                        <Td color="red.500">{stock.change_pct.toFixed(2)}%</Td>
-                        <Td>{stock.latest_price.toFixed(2)}</Td>
-                        <Td>{stock.turnover_rate.toFixed(2)}%</Td>
-                        <Td>{(stock.float_mv / 10000).toFixed(2)}亿</Td>
-                        <Td>{(stock.total_mv / 10000).toFixed(2)}亿</Td>
-                        <Td color="red.500">{(stock.seal_fund / 10000).toFixed(0)}万</Td>
-                        <Td>{stock.first_seal_time}</Td>
-                        <Td>{stock.last_seal_time}</Td>
-                        <Td>
+                        </Table.Cell>
+                        <Table.Cell>{stock.name}</Table.Cell>
+                        <Table.Cell color="red.500">{stock.change_pct.toFixed(2)}%</Table.Cell>
+                        <Table.Cell>{stock.latest_price.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{stock.turnover_rate.toFixed(2)}%</Table.Cell>
+                        <Table.Cell>{(stock.float_mv / 10000).toFixed(2)}亿</Table.Cell>
+                        <Table.Cell>{(stock.total_mv / 10000).toFixed(2)}亿</Table.Cell>
+                        <Table.Cell color="red.500">{(stock.seal_fund / 10000).toFixed(0)}万</Table.Cell>
+                        <Table.Cell>{stock.first_seal_time}</Table.Cell>
+                        <Table.Cell>{stock.last_seal_time}</Table.Cell>
+                        <Table.Cell>
                           {stock.open_count > 0 ? (
-                            <Badge colorScheme="orange">{stock.open_count}次</Badge>
+                            <Badge colorPalette="orange">{stock.open_count}次</Badge>
                           ) : (
                             <Text>-</Text>
                           )}
-                        </Td>
-                        <Td>
-                          <Badge colorScheme={stock.continuous_count > 1 ? 'purple' : 'blue'}>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette={stock.continuous_count > 1 ? 'purple' : 'blue'}>
                             {stock.continuous_count}连板
                           </Badge>
-                        </Td>
-                        <Td>{stock.zt_stats}</Td>
-                        <Td>
-                          <Badge colorScheme="green">{stock.industry}</Badge>
-                        </Td>
-                      </Tr>
+                        </Table.Cell>
+                        <Table.Cell>{stock.zt_stats}</Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette="green">{stock.industry}</Badge>
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </Tbody>
-                </Table>
+                  </Table.Body>
+                </Table.Root>
                 {ztPool.length === 0 && (
                   <Center h="200px">
                     <Text color="gray.500">暂无数据</Text>
@@ -277,29 +248,29 @@ const EastMoneyZtBoardPage: React.FC = () => {
                 )}
               </Box>
             )}
-          </TabPanel>
+          </Tabs.Content>
 
           {/* 昨日涨停 */}
-          <TabPanel>
+          <Tabs.Content value="强势股">
             <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
-              <Stat>
-                <StatLabel>股票总数</StatLabel>
-                <StatNumber color="blue.500">{ztPreviousStats.total}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>上涨</StatLabel>
-                <StatNumber color="red.500">{ztPreviousStats.up}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>下跌</StatLabel>
-                <StatNumber color="green.500">{ztPreviousStats.down}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>平均涨幅</StatLabel>
-                <StatNumber color={ztPreviousStats.avgChange > 0 ? 'red.500' : 'green.500'}>
+              <Stat.Root>
+                <Stat.Label>股票总数</Stat.Label>
+                <Stat.ValueText color="blue.500">{ztPreviousStats.total}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>上涨</Stat.Label>
+                <Stat.ValueText color="red.500">{ztPreviousStats.up}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>下跌</Stat.Label>
+                <Stat.ValueText color="green.500">{ztPreviousStats.down}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>平均涨幅</Stat.Label>
+                <Stat.ValueText color={ztPreviousStats.avgChange > 0 ? 'red.500' : 'green.500'}>
                   {ztPreviousStats.avgChange.toFixed(2)}%
-                </StatNumber>
-              </Stat>
+                </Stat.ValueText>
+              </Stat.Root>
             </Grid>
 
             {loading ? (
@@ -308,56 +279,56 @@ const EastMoneyZtBoardPage: React.FC = () => {
               </Center>
             ) : (
               <Box overflowX="auto">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>序号</Th>
-                      <Th>代码</Th>
-                      <Th>名称</Th>
-                      <Th>涨跌幅</Th>
-                      <Th>最新价</Th>
-                      <Th>涨停价</Th>
-                      <Th>换手率</Th>
-                      <Th>涨速</Th>
-                      <Th>振幅</Th>
-                      <Th>昨日封板</Th>
-                      <Th>昨日连板</Th>
-                      <Th>涨停统计</Th>
-                      <Th>所属行业</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
+                <Table.Root  size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader>序号</Table.ColumnHeader>
+                      <Table.ColumnHeader>代码</Table.ColumnHeader>
+                      <Table.ColumnHeader>名称</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨跌幅</Table.ColumnHeader>
+                      <Table.ColumnHeader>最新价</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨停价</Table.ColumnHeader>
+                      <Table.ColumnHeader>换手率</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨速</Table.ColumnHeader>
+                      <Table.ColumnHeader>振幅</Table.ColumnHeader>
+                      <Table.ColumnHeader>昨日封板</Table.ColumnHeader>
+                      <Table.ColumnHeader>昨日连板</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨停统计</Table.ColumnHeader>
+                      <Table.ColumnHeader>所属行业</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {ztPrevious.map((stock) => (
-                      <Tr key={stock.serial_no}>
-                        <Td>{stock.serial_no}</Td>
-                        <Td>
+                      <Table.Row key={stock.serial_no}>
+                        <Table.Cell>{stock.serial_no}</Table.Cell>
+                        <Table.Cell>
                           <Text fontWeight="bold">{stock.code}</Text>
-                        </Td>
-                        <Td>{stock.name}</Td>
-                        <Td color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
+                        </Table.Cell>
+                        <Table.Cell>{stock.name}</Table.Cell>
+                        <Table.Cell color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
                           {stock.change_pct.toFixed(2)}%
-                        </Td>
-                        <Td>{stock.latest_price.toFixed(2)}</Td>
-                        <Td>{stock.limit_up_price.toFixed(2)}</Td>
-                        <Td>{stock.turnover_rate.toFixed(2)}%</Td>
-                        <Td color={stock.speed_pct > 0 ? 'red.500' : 'green.500'}>
+                        </Table.Cell>
+                        <Table.Cell>{stock.latest_price.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{stock.limit_up_price.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{stock.turnover_rate.toFixed(2)}%</Table.Cell>
+                        <Table.Cell color={stock.speed_pct > 0 ? 'red.500' : 'green.500'}>
                           {stock.speed_pct.toFixed(2)}%
-                        </Td>
-                        <Td>{stock.amplitude.toFixed(2)}%</Td>
-                        <Td>{stock.yesterday_seal_time}</Td>
-                        <Td>
-                          <Badge colorScheme={stock.yesterday_continuous > 1 ? 'purple' : 'blue'}>
+                        </Table.Cell>
+                        <Table.Cell>{stock.amplitude.toFixed(2)}%</Table.Cell>
+                        <Table.Cell>{stock.yesterday_seal_time}</Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette={stock.yesterday_continuous > 1 ? 'purple' : 'blue'}>
                             {stock.yesterday_continuous}连板
                           </Badge>
-                        </Td>
-                        <Td>{stock.zt_stats}</Td>
-                        <Td>
-                          <Badge colorScheme="green">{stock.industry}</Badge>
-                        </Td>
-                      </Tr>
+                        </Table.Cell>
+                        <Table.Cell>{stock.zt_stats}</Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette="green">{stock.industry}</Badge>
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </Tbody>
-                </Table>
+                  </Table.Body>
+                </Table.Root>
                 {ztPrevious.length === 0 && (
                   <Center h="200px">
                     <Text color="gray.500">暂无数据</Text>
@@ -365,27 +336,27 @@ const EastMoneyZtBoardPage: React.FC = () => {
                 )}
               </Box>
             )}
-          </TabPanel>
+          </Tabs.Content>
 
           {/* 强势股 */}
-          <TabPanel>
+          <Tabs.Content value="次新股">
             <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
-              <Stat>
-                <StatLabel>股票总数</StatLabel>
-                <StatNumber color="blue.500">{ztStrongStats.total}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>创新高</StatLabel>
-                <StatNumber color="red.500">{ztStrongStats.newHigh}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>上涨</StatLabel>
-                <StatNumber color="red.500">{ztStrongStats.positive}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>平均量比</StatLabel>
-                <StatNumber color="orange.500">{ztStrongStats.avgVolumeRatio.toFixed(2)}</StatNumber>
-              </Stat>
+              <Stat.Root>
+                <Stat.Label>股票总数</Stat.Label>
+                <Stat.ValueText color="blue.500">{ztStrongStats.total}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>创新高</Stat.Label>
+                <Stat.ValueText color="red.500">{ztStrongStats.newHigh}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>上涨</Stat.Label>
+                <Stat.ValueText color="red.500">{ztStrongStats.positive}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>平均量比</Stat.Label>
+                <Stat.ValueText color="orange.500">{ztStrongStats.avgVolumeRatio.toFixed(2)}</Stat.ValueText>
+              </Stat.Root>
             </Grid>
 
             {loading ? (
@@ -394,62 +365,62 @@ const EastMoneyZtBoardPage: React.FC = () => {
               </Center>
             ) : (
               <Box overflowX="auto">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>序号</Th>
-                      <Th>代码</Th>
-                      <Th>名称</Th>
-                      <Th>涨跌幅</Th>
-                      <Th>最新价</Th>
-                      <Th>涨停价</Th>
-                      <Th>换手率</Th>
-                      <Th>涨速</Th>
-                      <Th>量比</Th>
-                      <Th>是否新高</Th>
-                      <Th>涨停统计</Th>
-                      <Th>入选理由</Th>
-                      <Th>所属行业</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
+                <Table.Root  size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader>序号</Table.ColumnHeader>
+                      <Table.ColumnHeader>代码</Table.ColumnHeader>
+                      <Table.ColumnHeader>名称</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨跌幅</Table.ColumnHeader>
+                      <Table.ColumnHeader>最新价</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨停价</Table.ColumnHeader>
+                      <Table.ColumnHeader>换手率</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨速</Table.ColumnHeader>
+                      <Table.ColumnHeader>量比</Table.ColumnHeader>
+                      <Table.ColumnHeader>是否新高</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨停统计</Table.ColumnHeader>
+                      <Table.ColumnHeader>入选理由</Table.ColumnHeader>
+                      <Table.ColumnHeader>所属行业</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {ztStrong.map((stock) => (
-                      <Tr key={stock.serial_no}>
-                        <Td>{stock.serial_no}</Td>
-                        <Td>
+                      <Table.Row key={stock.serial_no}>
+                        <Table.Cell>{stock.serial_no}</Table.Cell>
+                        <Table.Cell>
                           <Text fontWeight="bold">{stock.code}</Text>
-                        </Td>
-                        <Td>{stock.name}</Td>
-                        <Td color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
+                        </Table.Cell>
+                        <Table.Cell>{stock.name}</Table.Cell>
+                        <Table.Cell color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
                           {stock.change_pct.toFixed(2)}%
-                        </Td>
-                        <Td>{stock.latest_price.toFixed(2)}</Td>
-                        <Td>{stock.limit_up_price.toFixed(2)}</Td>
-                        <Td>{stock.turnover_rate.toFixed(2)}%</Td>
-                        <Td color={stock.speed_pct > 0 ? 'red.500' : 'green.500'}>
+                        </Table.Cell>
+                        <Table.Cell>{stock.latest_price.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{stock.limit_up_price.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{stock.turnover_rate.toFixed(2)}%</Table.Cell>
+                        <Table.Cell color={stock.speed_pct > 0 ? 'red.500' : 'green.500'}>
                           {stock.speed_pct.toFixed(2)}%
-                        </Td>
-                        <Td color={stock.volume_ratio > 1 ? 'red.500' : 'green.500'}>
+                        </Table.Cell>
+                        <Table.Cell color={stock.volume_ratio > 1 ? 'red.500' : 'green.500'}>
                           {stock.volume_ratio.toFixed(2)}
-                        </Td>
-                        <Td>
+                        </Table.Cell>
+                        <Table.Cell>
                           {stock.is_new_high === '是' ? (
-                            <Badge colorScheme="red">是</Badge>
+                            <Badge colorPalette="red">是</Badge>
                           ) : (
                             <Text>-</Text>
                           )}
-                        </Td>
-                        <Td>{stock.zt_stats}</Td>
-                        <Td>
-                          <Badge colorScheme="purple">{stock.reason}</Badge>
-                        </Td>
-                        <Td>
-                          <Badge colorScheme="green">{stock.industry}</Badge>
-                        </Td>
-                      </Tr>
+                        </Table.Cell>
+                        <Table.Cell>{stock.zt_stats}</Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette="purple">{stock.reason}</Badge>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette="green">{stock.industry}</Badge>
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </Tbody>
-                </Table>
+                  </Table.Body>
+                </Table.Root>
                 {ztStrong.length === 0 && (
                   <Center h="200px">
                     <Text color="gray.500">暂无数据</Text>
@@ -457,27 +428,27 @@ const EastMoneyZtBoardPage: React.FC = () => {
                 )}
               </Box>
             )}
-          </TabPanel>
+          </Tabs.Content>
 
           {/* 次新股 */}
-          <TabPanel>
+          <Tabs.Content value="涨停股池">
             <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
-              <Stat>
-                <StatLabel>股票总数</StatLabel>
-                <StatNumber color="blue.500">{ztSubNewStats.total}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>上涨</StatLabel>
-                <StatNumber color="red.500">{ztSubNewStats.positive}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>下跌</StatLabel>
-                <StatNumber color="green.500">{ztSubNewStats.negative}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel>平均换手</StatLabel>
-                <StatNumber color="orange.500">{ztSubNewStats.avgTurnover.toFixed(2)}%</StatNumber>
-              </Stat>
+              <Stat.Root>
+                <Stat.Label>股票总数</Stat.Label>
+                <Stat.ValueText color="blue.500">{ztSubNewStats.total}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>上涨</Stat.Label>
+                <Stat.ValueText color="red.500">{ztSubNewStats.positive}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>下跌</Stat.Label>
+                <Stat.ValueText color="green.500">{ztSubNewStats.negative}</Stat.ValueText>
+              </Stat.Root>
+              <Stat.Root>
+                <Stat.Label>平均换手</Stat.Label>
+                <Stat.ValueText color="orange.500">{ztSubNewStats.avgTurnover.toFixed(2)}%</Stat.ValueText>
+              </Stat.Root>
             </Grid>
 
             {loading ? (
@@ -486,58 +457,58 @@ const EastMoneyZtBoardPage: React.FC = () => {
               </Center>
             ) : (
               <Box overflowX="auto">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>序号</Th>
-                      <Th>代码</Th>
-                      <Th>名称</Th>
-                      <Th>涨跌幅</Th>
-                      <Th>最新价</Th>
-                      <Th>涨停价</Th>
-                      <Th>换手率</Th>
-                      <Th>开板几日</Th>
-                      <Th>开板日期</Th>
-                      <Th>上市日期</Th>
-                      <Th>是否新高</Th>
-                      <Th>涨停统计</Th>
-                      <Th>所属行业</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
+                <Table.Root  size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader>序号</Table.ColumnHeader>
+                      <Table.ColumnHeader>代码</Table.ColumnHeader>
+                      <Table.ColumnHeader>名称</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨跌幅</Table.ColumnHeader>
+                      <Table.ColumnHeader>最新价</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨停价</Table.ColumnHeader>
+                      <Table.ColumnHeader>换手率</Table.ColumnHeader>
+                      <Table.ColumnHeader>开板几日</Table.ColumnHeader>
+                      <Table.ColumnHeader>开板日期</Table.ColumnHeader>
+                      <Table.ColumnHeader>上市日期</Table.ColumnHeader>
+                      <Table.ColumnHeader>是否新高</Table.ColumnHeader>
+                      <Table.ColumnHeader>涨停统计</Table.ColumnHeader>
+                      <Table.ColumnHeader>所属行业</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {ztSubNew.map((stock) => (
-                      <Tr key={stock.serial_no}>
-                        <Td>{stock.serial_no}</Td>
-                        <Td>
+                      <Table.Row key={stock.serial_no}>
+                        <Table.Cell>{stock.serial_no}</Table.Cell>
+                        <Table.Cell>
                           <Text fontWeight="bold">{stock.code}</Text>
-                        </Td>
-                        <Td>{stock.name}</Td>
-                        <Td color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
+                        </Table.Cell>
+                        <Table.Cell>{stock.name}</Table.Cell>
+                        <Table.Cell color={stock.change_pct > 0 ? 'red.500' : 'green.500'}>
                           {stock.change_pct.toFixed(2)}%
-                        </Td>
-                        <Td>{stock.latest_price.toFixed(2)}</Td>
-                        <Td>{stock.limit_up_price.toFixed(2)}</Td>
-                        <Td color={stock.turnover_rate > 10 ? 'red.500' : 'green.500'}>
+                        </Table.Cell>
+                        <Table.Cell>{stock.latest_price.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{stock.limit_up_price.toFixed(2)}</Table.Cell>
+                        <Table.Cell color={stock.turnover_rate > 10 ? 'red.500' : 'green.500'}>
                           {stock.turnover_rate.toFixed(2)}%
-                        </Td>
-                        <Td>{stock.open_days}天</Td>
-                        <Td>{stock.open_date}</Td>
-                        <Td>{stock.list_date}</Td>
-                        <Td>
+                        </Table.Cell>
+                        <Table.Cell>{stock.open_days}天</Table.Cell>
+                        <Table.Cell>{stock.open_date}</Table.Cell>
+                        <Table.Cell>{stock.list_date}</Table.Cell>
+                        <Table.Cell>
                           {stock.is_new_high === '是' ? (
-                            <Badge colorScheme="red">是</Badge>
+                            <Badge colorPalette="red">是</Badge>
                           ) : (
                             <Text>-</Text>
                           )}
-                        </Td>
-                        <Td>{stock.zt_stats}</Td>
-                        <Td>
-                          <Badge colorScheme="green">{stock.industry}</Badge>
-                        </Td>
-                      </Tr>
+                        </Table.Cell>
+                        <Table.Cell>{stock.zt_stats}</Table.Cell>
+                        <Table.Cell>
+                          <Badge colorPalette="green">{stock.industry}</Badge>
+                        </Table.Cell>
+                      </Table.Row>
                     ))}
-                  </Tbody>
-                </Table>
+                  </Table.Body>
+                </Table.Root>
                 {ztSubNew.length === 0 && (
                   <Center h="200px">
                     <Text color="gray.500">暂无数据</Text>
@@ -545,9 +516,9 @@ const EastMoneyZtBoardPage: React.FC = () => {
                 )}
               </Box>
             )}
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
+          </Tabs.Content>
+        </Tabs.ContentGroup>
+      </Tabs.Root>
     </Box>
   );
 };

@@ -1,14 +1,12 @@
-﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Box, ColorModeScript, Spinner, Flex } from '@chakra-ui/react'
+﻿﻿﻿﻿import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Box, Flex, Spinner } from '@chakra-ui/react'
 import { Suspense, lazy } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import ProtectedRoute from './components/ProtectedRoute'
 import { PageErrorBoundary } from './components/PageErrorBoundary'
-// 基金数据管理
 import { FundDataManager } from './hooks/useFundDataManagement'
 import fundStorage from './services/fundStorage'
-import theme from './theme'
 
 // 懒加载页面组件
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -51,7 +49,7 @@ const FundDetail = lazy(() => import('./pages/fund/detail/[code]'))
 // Loading 组件
 const PageLoading = () => (
   <Flex justify="center" align="center" h="100vh" w="100%">
-    <Spinner size="xl" color="brand.500" thickness="4px" />
+    <Spinner size="xl" color="brand.500" borderWidth="4px" />
   </Flex>
 )
 
@@ -72,7 +70,6 @@ function App() {
         }}
       />
       
-      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
       <BrowserRouter>
         <Routes>
           {/* 公开路由 */}

@@ -4,7 +4,7 @@ import DataSourceControl from '../components/DataSourceControl'
 const Settings: React.FC = () => {
   return (
     <Container maxW="container.xl" py={6}>
-      <VStack spacing={6} align="stretch">
+      <VStack gap={6} align="stretch">
         <Heading size="lg">系统设置</Heading>
         <DataSourceControl />
       </VStack>

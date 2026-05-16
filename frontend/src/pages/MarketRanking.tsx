@@ -3,11 +3,7 @@
  * 显示实时涨跌幅排名、市场情绪等
  */
 import React, { useState } from 'react'
-import {
-  Box, Flex, Grid, GridItem, Text, Select, Button, Spinner,
-  Alert, AlertIcon, AlertTitle, Badge, HStack, Stat, StatLabel, StatNumber, StatHelpText
-} from '@chakra-ui/react'
-import { RepeatIcon } from '@chakra-ui/icons'
+import { Alert, Badge, Box, Button, Flex, Grid, HStack, NativeSelect, Spinner, Stat, Text, GridItem } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { marketApi } from '../services/api'
 import MarketQuotes from './MarketQuotes'
@@ -63,7 +59,7 @@ const MarketRankingPage: React.FC = () => {
   if (loading && !marketData) {
     return (
       <Flex justify="center" align="center" h="400px">
-        <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
+        <Spinner size="xl" borderWidth="4px"  color="blue.500" />
       </Flex>
     )
   }
@@ -71,14 +67,14 @@ const MarketRankingPage: React.FC = () => {
   // 渲染错误状态
   if (rankingError && !marketData) {
     return (
-      <Alert status="error" borderRadius="lg" p={6}>
-        <AlertIcon />
-        <AlertTitle mr={2}>获取数据失败</AlertTitle>
+      <Alert.Root status="error" borderRadius="lg" p={6}>
+        <Alert.Indicator />
+        <Alert.Title mr={2}>获取数据失败</Alert.Title>
         {rankingError instanceof Error ? rankingError.message : '未知错误'}
-        <Button size="sm" colorScheme="red" ml={4} onClick={handleRefresh}>
+        <Button size="sm" colorPalette="red" ml={4} onClick={handleRefresh}>
           重试
         </Button>
-      </Alert>
+      </Alert.Root>
     )
   }
 
@@ -90,39 +86,34 @@ const MarketRankingPage: React.FC = () => {
           <Text fontWeight="bold" fontSize="xl" color="gray.700">
             📊 市场排行榜
           </Text>
-          <Badge colorScheme="blue" fontSize="xs" px={2} py={1}>
+          <Badge colorPalette="blue" fontSize="xs" px={2} py={1}>
             最后更新：{lastUpdateTime || '--:--:--'}
           </Badge>
         </Flex>
         
         <Flex align="center" gap={3}>
-          <Select
+          <NativeSelect.Root size="sm"><NativeSelect.Field
             value={dataSource}
             onChange={(e) => setDataSource(e.target.value)}
-            size="sm"
-            width="150px"
           >
             <option value="sina">新浪数据源</option>
             <option value="dc">东方财富 (备用)</option>
-          </Select>
+          </NativeSelect.Field></NativeSelect.Root>
           
-          <Select
+          <NativeSelect.Root size="sm"><NativeSelect.Field
             value={topN}
             onChange={(e) => setTopN(Number(e.target.value))}
-            size="sm"
-            width="120px"
           >
             <option value={20}>前 20</option>
             <option value={50}>前 50</option>
             <option value={100}>前 100</option>
-          </Select>
+          </NativeSelect.Field></NativeSelect.Root>
           
           <Button
             size="sm"
-            colorScheme="blue"
-            leftIcon={<RepeatIcon />}
+            colorPalette="blue"
             onClick={handleRefresh}
-            isLoading={loading}
+            loading={loading}
           >
             刷新
           </Button>
@@ -142,58 +133,58 @@ const MarketRankingPage: React.FC = () => {
                 📈 市场概览
               </Text>
               <Grid templateColumns="repeat(3, 1fr)" gap={4}>
-                <Stat>
-                  <StatLabel fontSize="sm" color="gray.600">平均涨跌幅</StatLabel>
-                  <StatNumber 
+                <Stat.Root>
+                  <Stat.Label fontSize="sm" color="gray.600">平均涨跌幅</Stat.Label>
+                  <Stat.ValueText 
                     fontSize="2xl" 
                     fontWeight="bold"
                     color={overview.statistics.avg_pct_change > 0 ? 'red.500' : 'green.500'}
                   >
                     {overview.statistics.avg_pct_change > 0 ? '+' : ''}
                     {overview.statistics.avg_pct_change.toFixed(2)}%
-                  </StatNumber>
-                  <StatHelpText mb={0} fontSize="xs" color="gray.500">
+                  </Stat.ValueText>
+                  <Stat.HelpText mb={0} fontSize="xs" color="gray.500">
                     中位数：{overview.statistics.median_pct_change.toFixed(2)}%
-                  </StatHelpText>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
                 
-                <Stat>
-                  <StatLabel fontSize="sm" color="gray.600">总成交额</StatLabel>
-                  <StatNumber fontSize="2xl" fontWeight="bold" color="blue.500">
+                <Stat.Root>
+                  <Stat.Label fontSize="sm" color="gray.600">总成交额</Stat.Label>
+                  <Stat.ValueText fontSize="2xl" fontWeight="bold" color="blue.500">
                     {overview.statistics.total_amount.toFixed(2)}亿
-                  </StatNumber>
-                  <StatHelpText mb={0} fontSize="xs" color="gray.500">
+                  </Stat.ValueText>
+                  <Stat.HelpText mb={0} fontSize="xs" color="gray.500">
                     平均：{overview.statistics.avg_amount.toFixed(2)}百万
-                  </StatHelpText>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
                 
-                <Stat>
-                  <StatLabel fontSize="sm" color="gray.600">股票数量</StatLabel>
-                  <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
+                <Stat.Root>
+                  <Stat.Label fontSize="sm" color="gray.600">股票数量</Stat.Label>
+                  <Stat.ValueText fontSize="2xl" fontWeight="bold" color="gray.700">
                     {overview.total_stocks.toLocaleString()}
-                  </StatNumber>
-                  <StatHelpText mb={0} fontSize="xs" color="gray.500">
+                  </Stat.ValueText>
+                  <Stat.HelpText mb={0} fontSize="xs" color="gray.500">
                     全市场
-                  </StatHelpText>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
               </Grid>
               
               <Box mt={4} pt={4} borderTop="1px" borderColor="gray.200">
                 <Text fontSize="xs" color="gray.600" mb={2}>涨跌幅分布:</Text>
-                <HStack spacing={2} flexWrap="wrap">
-                  <Badge colorScheme="red" fontSize="xs" px={2} py={1}>
+                <HStack gap={2} flexWrap="wrap">
+                  <Badge colorPalette="red" fontSize="xs" px={2} py={1}>
                     &gt;5%: {overview.distribution.pct_5_plus}家
                   </Badge>
-                  <Badge colorScheme="orange" fontSize="xs" px={2} py={1}>
+                  <Badge colorPalette="orange" fontSize="xs" px={2} py={1}>
                     3-5%: {overview.distribution.pct_3_to_5}家
                   </Badge>
-                  <Badge colorScheme="gray" fontSize="xs" px={2} py={1}>
+                  <Badge colorPalette="gray" fontSize="xs" px={2} py={1}>
                     -3~3%: {overview.distribution.pct_minus_3_to_3}家
                   </Badge>
-                  <Badge colorScheme="orange" fontSize="xs" px={2} py={1}>
+                  <Badge colorPalette="orange" fontSize="xs" px={2} py={1}>
                     -5~-3%: {overview.distribution.pct_minus_5_to_minus_3}家
                   </Badge>
-                  <Badge colorScheme="green" fontSize="xs" px={2} py={1}>
+                  <Badge colorPalette="green" fontSize="xs" px={2} py={1}>
                     &lt;-5%: {overview.distribution.pct_minus_5}家
                   </Badge>
                 </HStack>

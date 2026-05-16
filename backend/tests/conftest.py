@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 # 设置测试环境变量
-os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
+os.environ.setdefault("SECRET_KEY", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2")
 os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("LOG_LEVEL", "ERROR")
 

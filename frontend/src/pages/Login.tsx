@@ -4,26 +4,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuthStore } from '../store/authStore'
-import {
-  Box,
-  Button,
-  Container,
-  FormControl,
-  FormLabel,
-  FormErrorMessage,
-  Input,
-  Heading,
-  Text,
-  Alert,
-  AlertIcon,
-  AlertDescription,
-  VStack,
-  InputGroup,
-  InputRightElement,
-  IconButton,
-  useColorModeValue,
-  useToast,
-} from '@chakra-ui/react'
+import { Alert, Box, Button, Container, Field, Heading, IconButton, Input, InputGroup, Text, VStack } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
+import { useColorModeValue } from '../components/ui/color-mode'
 import { FiEye, FiEyeOff } from 'react-icons/fi'
 import { useState } from 'react'
 
@@ -49,7 +32,7 @@ const Login = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const navigate = useNavigate()
   const location = useLocation()
-  const toast = useToast()
+  
 
   const {
     register,
@@ -77,12 +60,12 @@ const Login = () => {
       await getCurrentUser()
       navigate(from, { replace: true })
     } catch {
-      toast({
+      toaster.create({
         title: '登录失败',
         description: error || '请检查用户名和密码',
-        status: 'error',
+        type: 'error',
         duration: 3000,
-        isClosable: true,
+        closable: true,
       })
     }
   }
@@ -106,7 +89,7 @@ const Login = () => {
         border="1px solid"
         borderColor={borderColor}
       >
-        <VStack spacing={2} mb={8}>
+        <VStack gap={2} mb={8}>
           <Heading size="xl" color="brand.500">
             量化分析系统
           </Heading>
@@ -116,15 +99,15 @@ const Login = () => {
         </VStack>
 
         {error && (
-          <Alert status="error" mb={6} borderRadius="lg" variant="left-accent">
-            <AlertIcon />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <Alert.Root status="error" mb={6} borderRadius="lg" variant="subtle">
+            <Alert.Indicator />
+            <Alert.Description>{error}</Alert.Description>
+          </Alert.Root>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)}>
-          <FormControl mb={5} isInvalid={!!errors.username}>
-            <FormLabel fontWeight="medium">用户名</FormLabel>
+          <Field.Root mb={5} invalid={!!errors.username}>
+            <Field.Label fontWeight="medium">用户名</Field.Label>
             <Input
               {...register('username')}
               placeholder="请输入用户名（admin 或 user）"
@@ -132,12 +115,12 @@ const Login = () => {
               borderRadius="lg"
               autoComplete="username"
             />
-            <FormErrorMessage>{errors.username?.message}</FormErrorMessage>
-          </FormControl>
+            <Field.ErrorText>{errors.username?.message}</Field.ErrorText>
+          </Field.Root>
 
-          <FormControl mb={6} isInvalid={!!errors.password}>
-            <FormLabel fontWeight="medium">密码</FormLabel>
-            <InputGroup size="lg">
+          <Field.Root mb={6} invalid={!!errors.password}>
+            <Field.Label fontWeight="medium">密码</Field.Label>
+            <InputGroup endElement={<IconButton size="sm" variant="ghost" aria-label={showPassword ? '隐藏密码' : '显示密码'} onClick={handleTogglePassword} tabIndex={-1}>{showPassword ? <FiEyeOff /> : <FiEye />}</IconButton>}>
               <Input
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
@@ -145,27 +128,17 @@ const Login = () => {
                 borderRadius="lg"
                 autoComplete="current-password"
               />
-              <InputRightElement>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                  icon={showPassword ? <FiEyeOff /> : <FiEye />}
-                  onClick={handleTogglePassword}
-                  tabIndex={-1}
-                />
-              </InputRightElement>
             </InputGroup>
-            <FormErrorMessage>{errors.password?.message}</FormErrorMessage>
-          </FormControl>
+            <Field.ErrorText>{errors.password?.message}</Field.ErrorText>
+          </Field.Root>
 
           <Button
             type="submit"
-            colorScheme="blue"
+            colorPalette="blue"
             width="full"
             size="lg"
             borderRadius="lg"
-            isLoading={isLoading}
+            loading={isLoading}
             loadingText="登录中..."
             _hover={{
               transform: 'translateY(-1px)',
@@ -181,7 +154,7 @@ const Login = () => {
           <Text fontWeight="medium" mb={2}>
             测试账户：
           </Text>
-          <VStack align="start" spacing={1} fontSize="xs" color="gray.600">
+          <VStack align="start" gap={1} fontSize="xs" color="gray.600">
             <Text>• 管理员：admin / admin123</Text>
             <Text>• 普通用户：user / user123</Text>
           </VStack>

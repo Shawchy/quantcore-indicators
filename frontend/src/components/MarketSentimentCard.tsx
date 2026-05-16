@@ -3,8 +3,8 @@
  * 显示市场情绪状态和涨跌统计
  */
 import React, { useMemo, memo } from 'react'
-import { Box, Stat, StatLabel, StatNumber, StatHelpText, Flex, Badge, Icon } from '@chakra-ui/react'
-import { ArrowUpIcon, ArrowDownIcon } from '@chakra-ui/icons'
+import { Badge, Box, Flex, Icon, Stat } from '@chakra-ui/react'
+import { FiArrowDown, FiArrowUp } from 'react-icons/fi'
 import type { MarketStats, MarketSentiment } from '../types'
 
 interface MarketSentimentCardProps {
@@ -48,67 +48,67 @@ const MarketSentimentCard: React.FC<MarketSentimentCardProps> = memo(({ stats, s
       borderColor={`${sentimentColor}.200`}
     >
       <Flex justify="space-between" align="center" mb={4}>
-        <Stat>
-          <StatLabel fontSize="lg" fontWeight="bold" color="gray.600">
+        <Stat.Root>
+          <Stat.Label fontSize="lg" fontWeight="bold" color="gray.600">
             市场情绪
-          </StatLabel>
+          </Stat.Label>
           <Flex align="center" gap={2}>
-            <StatNumber fontSize="2xl" fontWeight="bold" color={`${sentimentColor}.500`}>
+            <Stat.ValueText fontSize="2xl" fontWeight="bold" color={`${sentimentColor}.500`}>
               {sentimentEmoji} {sentiment.text}
-            </StatNumber>
-            <Badge colorScheme={sentimentColor} fontSize="sm" px={2} py={1}>
+            </Stat.ValueText>
+            <Badge colorPalette={sentimentColor} fontSize="sm" px={2} py={1}>
               强弱度：{sentiment.score}/5
             </Badge>
           </Flex>
-          <StatHelpText mb={0}>
+          <Stat.HelpText mb={0}>
             涨跌比：{sentiment.up_down_ratio.toFixed(2)}
-          </StatHelpText>
-        </Stat>
+          </Stat.HelpText>
+        </Stat.Root>
       </Flex>
 
       <Flex gap={4} mt={4}>
-        <Stat flex={1} bg={`${sentimentColor}.50`} p={3} borderRadius="md">
+        <Stat.Root flex={1} bg={`${sentimentColor}.50`} p={3} borderRadius="md">
           <Flex align="center" gap={2}>
-            <Icon as={ArrowUpIcon} color={`${sentimentColor}.500`} />
-            <StatLabel color={`${sentimentColor}.700`} fontWeight="medium">上涨</StatLabel>
+            <Icon as={FiArrowUp} color={`${sentimentColor}.500`} />
+            <Stat.Label color={`${sentimentColor}.700`} fontWeight="medium">上涨</Stat.Label>
           </Flex>
-          <StatNumber fontSize="2xl" fontWeight="bold" color={`${sentimentColor}.600`}>
+          <Stat.ValueText fontSize="2xl" fontWeight="bold" color={`${sentimentColor}.600`}>
             {stats.up_count.toLocaleString()}
-          </StatNumber>
-          <StatHelpText mb={0} fontSize="sm" color={`${sentimentColor}.600`}>
+          </Stat.ValueText>
+          <Stat.HelpText mb={0} fontSize="sm" color={`${sentimentColor}.600`}>
             {stats.up_ratio.toFixed(1)}%
-          </StatHelpText>
-        </Stat>
+          </Stat.HelpText>
+        </Stat.Root>
 
-        <Stat flex={1} bg="red.50" p={3} borderRadius="md">
+        <Stat.Root flex={1} bg="red.50" p={3} borderRadius="md">
           <Flex align="center" gap={2}>
-            <Icon as={ArrowDownIcon} color="red.500" />
-            <StatLabel color="red.700" fontWeight="medium">下跌</StatLabel>
+            <Icon as={FiArrowDown} color="red.500" />
+            <Stat.Label color="red.700" fontWeight="medium">下跌</Stat.Label>
           </Flex>
-          <StatNumber fontSize="2xl" fontWeight="bold" color="red.600">
+          <Stat.ValueText fontSize="2xl" fontWeight="bold" color="red.600">
             {stats.down_count.toLocaleString()}
-          </StatNumber>
-          <StatHelpText mb={0} fontSize="sm" color="red.600">
+          </Stat.ValueText>
+          <Stat.HelpText mb={0} fontSize="sm" color="red.600">
             {stats.down_ratio.toFixed(1)}%
-          </StatHelpText>
-        </Stat>
+          </Stat.HelpText>
+        </Stat.Root>
 
-        <Stat flex={1} bg="gray.50" p={3} borderRadius="md">
-          <StatLabel color="gray.700" fontWeight="medium">平盘</StatLabel>
-          <StatNumber fontSize="2xl" fontWeight="bold" color="gray.600">
+        <Stat.Root flex={1} bg="gray.50" p={3} borderRadius="md">
+          <Stat.Label color="gray.700" fontWeight="medium">平盘</Stat.Label>
+          <Stat.ValueText fontSize="2xl" fontWeight="bold" color="gray.600">
             {stats.flat_count.toLocaleString()}
-          </StatNumber>
-          <StatHelpText mb={0} fontSize="sm" color="gray.600">
+          </Stat.ValueText>
+          <Stat.HelpText mb={0} fontSize="sm" color="gray.600">
             总计：{totalStocks.toLocaleString()}
-          </StatHelpText>
-        </Stat>
+          </Stat.HelpText>
+        </Stat.Root>
       </Flex>
 
       <Flex gap={3} mt={4} justify="center">
-        <Badge colorScheme="red" fontSize="xs" px={3} py={2} borderRadius="full">
+        <Badge colorPalette="red" fontSize="xs" px={3} py={2} borderRadius="full">
           涨停：{stats.limit_up_count}家
         </Badge>
-        <Badge colorScheme="green" fontSize="xs" px={3} py={2} borderRadius="full">
+        <Badge colorPalette="green" fontSize="xs" px={3} py={2} borderRadius="full">
           跌停：{stats.limit_down_count}家
         </Badge>
       </Flex>

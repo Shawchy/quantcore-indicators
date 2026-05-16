@@ -1,30 +1,8 @@
-import {
-  Card,
-  CardBody,
-  CardHeader,
-  Heading,
-  VStack,
-  Text,
-  Badge,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Spinner,
-  Slider,
-  SliderTrack,
-  SliderFilledTrack,
-  SliderThumb,
-  Box,
-  SimpleGrid,
-  Flex,
-} from '@chakra-ui/react'
+import { Badge, Box, Card, Flex, Heading, SimpleGrid, Slider, Spinner, Table, Text, VStack } from '@chakra-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import ReactECharts from 'echarts-for-react'
+import EChartsReactCore from 'echarts-for-react/lib/core'
+import echarts from '../lib/echarts'
 import { chipApi } from '../services/api'
 import { StatCard } from '../components/StatCard'
 import { RankBadge } from '../components/RankBadge'
@@ -95,12 +73,12 @@ const ChipSelection = () => {
   }
 
   return (
-    <VStack spacing={6} align="stretch">
+    <VStack gap={6} align="stretch">
       <Heading size="lg" color="light.text">
         筹码选股
       </Heading>
 
-      <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+      <SimpleGrid columns={{ base: 1, md: 3 }} gap={4}>
         <StatCard
           label="高控盘股票数"
           value={screened.length}
@@ -123,140 +101,140 @@ const ChipSelection = () => {
         />
       </SimpleGrid>
 
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
-        <Card>
-          <CardHeader pb={2}>
+      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
+        <Card.Root>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">控盘度分布</Heading>
-          </CardHeader>
-          <CardBody pt={2}>
-            <ReactECharts option={getDistributionOption()} style={{ height: '300px' }} />
-          </CardBody>
-        </Card>
+          </Card.Header>
+          <Card.Body pt={2}>
+            <EChartsReactCore echarts={echarts} option={getDistributionOption()} style={{ height: '300px' }} />
+          </Card.Body>
+        </Card.Root>
 
-        <Card>
-          <CardHeader pb={2}>
+        <Card.Root>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">筛选条件</Heading>
-          </CardHeader>
-          <CardBody pt={4}>
-            <VStack spacing={8} align="stretch">
+          </Card.Header>
+          <Card.Body pt={4}>
+            <VStack gap={8} align="stretch">
               <Box>
                 <Flex justify="space-between" mb={2}>
                   <Text color="light.textSecondary" fontSize="sm">最小控盘度</Text>
                   <Text color="brand.400" fontSize="sm" fontWeight="bold">{(minControl * 100).toFixed(0)}%</Text>
                 </Flex>
-                <Slider value={minControl * 100} onChange={(v) => setMinControl(v / 100)} min={0} max={100}>
-                  <SliderTrack bg="light.bgSecondary">
-                    <SliderFilledTrack bg="brand.400" />
-                  </SliderTrack>
-                  <SliderThumb boxSize={4} bg="brand.400" />
-                </Slider>
+                <Slider.Root value={[minControl * 100]} onValueChange={(e) => setMinControl(e.value[0] / 100)} min={0} max={100}>
+                  <Slider.Track bg="light.bgSecondary">
+                    <Slider.Range bg="brand.400" />
+                  </Slider.Track>
+                  <Slider.Thumb index={0} boxSize={4} bg="brand.400" />
+                </Slider.Root>
               </Box>
               <Box>
                 <Flex justify="space-between" mb={2}>
                   <Text color="light.textSecondary" fontSize="sm">最大控盘度</Text>
                   <Text color="brand.400" fontSize="sm" fontWeight="bold">{(maxControl * 100).toFixed(0)}%</Text>
                 </Flex>
-                <Slider value={maxControl * 100} onChange={(v) => setMaxControl(v / 100)} min={0} max={100}>
-                  <SliderTrack bg="light.bgSecondary">
-                    <SliderFilledTrack bg="brand.400" />
-                  </SliderTrack>
-                  <SliderThumb boxSize={4} bg="brand.400" />
-                </Slider>
+              <Slider.Root value={[maxControl * 100]} onValueChange={(e) => setMaxControl(e.value[0] / 100)} min={0} max={100}>
+                  <Slider.Track bg="light.bgSecondary">
+                    <Slider.Range bg="brand.400" />
+                  </Slider.Track>
+                  <Slider.Thumb index={0} boxSize={4} bg="brand.400" />
+                </Slider.Root>
               </Box>
             </VStack>
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       </SimpleGrid>
 
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Heading size="sm" color="light.text">高控盘股票列表</Heading>
-        </CardHeader>
-        <CardBody>
+        </Card.Header>
+        <Card.Body>
           {screenLoading ? (
             <Flex justify="center" align="center" h="200px">
               <Spinner color="brand.400" />
             </Flex>
           ) : (
-            <TableContainer>
-              <Table size="sm" variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th borderColor="light.border" color="light.textSecondary">代码</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">名称</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>控盘度</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>股东人数</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">统计日期</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root size="sm" >
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">代码</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">名称</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >控盘度</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >股东人数</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">统计日期</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {screened.map((stock: ChipRankingItem) => (
-                    <Tr key={stock.code} _hover={{ bg: 'light.bgSecondary' }}>
-                      <Td borderColor="light.border" fontWeight="medium" color="light.text">{stock.code}</Td>
-                      <Td borderColor="light.border" color="light.textSecondary">{stock.name}</Td>
-                      <Td borderColor="light.border" isNumeric>
-                        <Badge variant={stock.control_degree && stock.control_degree >= 0.7 ? 'up' : 'subtle'}>
+                    <Table.Row key={stock.code} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Table.Cell borderColor="light.border" fontWeight="medium" color="light.text">{stock.code}</Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">{stock.name}</Table.Cell>
+                      <Table.Cell borderColor="light.border" >
+                        <Badge variant={stock.control_degree && stock.control_degree >= 0.7 ? 'solid' : 'subtle'}>
                           {(stock.control_degree ? stock.control_degree * 100 : 0).toFixed(1)}%
                         </Badge>
-                      </Td>
-                      <Td borderColor="light.border" isNumeric color="light.textSecondary">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">
                         {stock.shareholder_count?.toLocaleString() || '--'}
-                      </Td>
-                      <Td borderColor="light.border" color="light.textSecondary">{stock.date || '--'}</Td>
-                    </Tr>
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">{stock.date || '--'}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
           )}
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
-      <Card>
-        <CardHeader pb={2}>
+      <Card.Root>
+        <Card.Header pb={2}>
           <Heading size="sm" color="light.text">控盘度排行</Heading>
-        </CardHeader>
-        <CardBody>
+        </Card.Header>
+        <Card.Body>
           {rankingLoading ? (
             <Flex justify="center" align="center" h="200px">
               <Spinner color="brand.400" />
             </Flex>
           ) : (
-            <TableContainer maxH="400px" overflowY="auto">
-              <Table size="sm" variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th borderColor="light.border" color="light.textSecondary">排名</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">代码</Th>
-                    <Th borderColor="light.border" color="light.textSecondary">名称</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>控盘度</Th>
-                    <Th borderColor="light.border" color="light.textSecondary" isNumeric>股东人数</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box maxH="400px" overflowY="auto">
+              <Table.Root size="sm" >
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">排名</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">代码</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">名称</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >控盘度</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >股东人数</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {ranking.map((stock: ChipRankingItem, index: number) => (
-                    <Tr key={stock.code} _hover={{ bg: 'light.bgSecondary' }}>
-                      <Td borderColor="light.border">
+                    <Table.Row key={stock.code} _hover={{ bg: 'light.bgSecondary' }}>
+                      <Table.Cell borderColor="light.border">
                         <RankBadge rank={index + 1} />
-                      </Td>
-                      <Td borderColor="light.border" fontWeight="medium" color="light.text">{stock.code}</Td>
-                      <Td borderColor="light.border" color="light.textSecondary">{stock.name}</Td>
-                      <Td borderColor="light.border" isNumeric>
-                        <Badge variant={stock.control_degree && stock.control_degree >= 0.7 ? 'up' : stock.control_degree && stock.control_degree >= 0.5 ? 'subtle' : 'subtle'}>
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" fontWeight="medium" color="light.text">{stock.code}</Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">{stock.name}</Table.Cell>
+                      <Table.Cell borderColor="light.border" >
+                        <Badge variant={stock.control_degree && stock.control_degree >= 0.7 ? 'solid' : stock.control_degree && stock.control_degree >= 0.5 ? 'subtle' : 'subtle'}>
                           {(stock.control_degree ? stock.control_degree * 100 : 0).toFixed(1)}%
                         </Badge>
-                      </Td>
-                      <Td borderColor="light.border" isNumeric color="light.textSecondary">
+                      </Table.Cell>
+                      <Table.Cell borderColor="light.border" color="light.textSecondary">
                         {stock.shareholder_count?.toLocaleString() || '--'}
-                      </Td>
-                    </Tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
           )}
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     </VStack>
   )
 }

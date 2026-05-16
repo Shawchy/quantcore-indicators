@@ -3,31 +3,8 @@
  * 展示股东人数变化和持股集中度分析
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Flex,
-  Text,
-  Spinner,
-  Center,
-  Button,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Badge,
-  useToast,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-  SimpleGrid,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Heading, Input, InputGroup, SimpleGrid, Spinner, Stat, Table, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockHoldNumCNInfo,
@@ -39,27 +16,27 @@ const StockHolderPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [holderData, setHolderData] = useState<StockHoldNumCNInfo[]>([]);
   
-  const toast = useToast();
+  ;
 
   // 获取股东人数数据
   const fetchHolderData = async (date: string) => {
     if (!date) {
-      toast({ title: '请选择报告期', status: 'warning', duration: 2000, isClosable: true });
+      toaster.create({ title: '请选择报告期', type: 'warning', duration: 2000, closable: true });
       return;
     }
     setLoading(true);
     try {
       const result = await eastMoneyApi.getStockHoldNumCNInfo(date);
       setHolderData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条数据`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取股东人数数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -124,31 +101,31 @@ const StockHolderPage: React.FC = () => {
 
     return (
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={4} mb={6}>
-        <Stat>
-          <StatLabel>平均股东人数</StatLabel>
-          <StatNumber>{formatNumber(stats.avgHolderCount, '人')}</StatNumber>
-          <StatHelpText>所有股票平均值</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>平均股东人数</Stat.Label>
+          <Stat.ValueText>{formatNumber(stats.avgHolderCount, '人')}</Stat.ValueText>
+          <Stat.HelpText>所有股票平均值</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>平均增幅</StatLabel>
-          <StatNumber color={parseFloat(stats.avgGrowth) > 0 ? 'red' : 'green'}>
+        <Stat.Root>
+          <Stat.Label>平均增幅</Stat.Label>
+          <Stat.ValueText color={parseFloat(stats.avgGrowth) > 0 ? 'red' : 'green'}>
             {formatPercent(parseFloat(stats.avgGrowth))}
-          </StatNumber>
-          <StatHelpText>股东人数平均变化</StatHelpText>
-        </Stat>
+          </Stat.ValueText>
+          <Stat.HelpText>股东人数平均变化</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>股东增加</StatLabel>
-          <StatNumber color="red">{formatNumber(stats.increaseCount, '家')}</StatNumber>
-          <StatHelpText>股东户数增加的公司</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>股东增加</Stat.Label>
+          <Stat.ValueText color="red">{formatNumber(stats.increaseCount, '家')}</Stat.ValueText>
+          <Stat.HelpText>股东户数增加的公司</Stat.HelpText>
+        </Stat.Root>
         
-        <Stat>
-          <StatLabel>股东减少</StatLabel>
-          <StatNumber color="green">{formatNumber(stats.decreaseCount, '家')}</StatNumber>
-          <StatHelpText>股东户数减少的公司</StatHelpText>
-        </Stat>
+        <Stat.Root>
+          <Stat.Label>股东减少</Stat.Label>
+          <Stat.ValueText color="green">{formatNumber(stats.decreaseCount, '家')}</Stat.ValueText>
+          <Stat.HelpText>股东户数减少的公司</Stat.HelpText>
+        </Stat.Root>
       </SimpleGrid>
     );
   };
@@ -159,44 +136,44 @@ const StockHolderPage: React.FC = () => {
 
     return (
       <Box overflowX="auto">
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>证券代码</Th>
-              <Th>证券简称</Th>
-              <Th>变动日期</Th>
-              <Th isNumeric>本期股东人数</Th>
-              <Th isNumeric>上期股东人数</Th>
-              <Th isNumeric>股东人数增幅</Th>
-              <Th isNumeric>本期人均持股</Th>
-              <Th isNumeric>上期人均持股</Th>
-              <Th isNumeric>人均持股增幅</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root  size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>证券代码</Table.ColumnHeader>
+              <Table.ColumnHeader>证券简称</Table.ColumnHeader>
+              <Table.ColumnHeader>变动日期</Table.ColumnHeader>
+              <Table.ColumnHeader >本期股东人数</Table.ColumnHeader>
+              <Table.ColumnHeader >上期股东人数</Table.ColumnHeader>
+              <Table.ColumnHeader >股东人数增幅</Table.ColumnHeader>
+              <Table.ColumnHeader >本期人均持股</Table.ColumnHeader>
+              <Table.ColumnHeader >上期人均持股</Table.ColumnHeader>
+              <Table.ColumnHeader >人均持股增幅</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {filteredData.slice(0, 100).map((item, index) => (
-              <Tr key={index}>
-                <Td fontWeight="bold">{item.security_code}</Td>
-                <Td>{item.security_abbr}</Td>
-                <Td>{item.change_date}</Td>
-                <Td isNumeric>{formatNumber(item.current_holder_count, '人')}</Td>
-                <Td isNumeric>{formatNumber(item.previous_holder_count, '人')}</Td>
-                <Td isNumeric>
-                  <Badge colorScheme={item.holder_count_growth && item.holder_count_growth > 0 ? 'red' : 'green'}>
+              <Table.Row key={index}>
+                <Table.Cell fontWeight="bold">{item.security_code}</Table.Cell>
+                <Table.Cell>{item.security_abbr}</Table.Cell>
+                <Table.Cell>{item.change_date}</Table.Cell>
+                <Table.Cell >{formatNumber(item.current_holder_count, '人')}</Table.Cell>
+                <Table.Cell >{formatNumber(item.previous_holder_count, '人')}</Table.Cell>
+                <Table.Cell >
+                  <Badge colorPalette={item.holder_count_growth && item.holder_count_growth > 0 ? 'red' : 'green'}>
                     {formatPercent(item.holder_count_growth)}
                   </Badge>
-                </Td>
-                <Td isNumeric>{formatNumber(item.current_avg_shares, '万股')}</Td>
-                <Td isNumeric>{formatNumber(item.previous_avg_shares, '万股')}</Td>
-                <Td isNumeric>
-                  <Badge colorScheme={item.avg_shares_growth && item.avg_shares_growth > 0 ? 'green' : 'red'}>
+                </Table.Cell>
+                <Table.Cell >{formatNumber(item.current_avg_shares, '万股')}</Table.Cell>
+                <Table.Cell >{formatNumber(item.previous_avg_shares, '万股')}</Table.Cell>
+                <Table.Cell >
+                  <Badge colorPalette={item.avg_shares_growth && item.avg_shares_growth > 0 ? 'green' : 'red'}>
                     {formatPercent(item.avg_shares_growth)}
                   </Badge>
-                </Td>
-              </Tr>
+                </Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
         {filteredData.length > 100 && (
           <Text mt={4} fontSize="sm" color="gray.500">
             仅显示前 100 条，共 {filteredData.length} 条数据
@@ -212,30 +189,28 @@ const StockHolderPage: React.FC = () => {
 
       {/* 搜索栏 */}
       <Flex gap={4} mb={6} align="center" flexWrap="wrap">
-        <InputGroup width={{ base: "100%", md: "250px" }}>
-          <InputLeftAddon>报告期</InputLeftAddon>
-          <Input
+        <InputGroup width={{ base: "100%", md: "250px" }} startAddon="报告期">
+  <Input
             value={reportDate}
             onChange={(e) => setReportDate(e.target.value)}
             placeholder="YYYYMMDD"
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           />
-        </InputGroup>
+</InputGroup>
         
-        <Button onClick={handleSearch} colorScheme="blue" isLoading={loading}>
+        <Button onClick={handleSearch} colorPalette="blue" loading={loading}>
           查询
         </Button>
         
-        <InputGroup width={{ base: "100%", md: "300px" }}>
-          <InputLeftAddon>搜索</InputLeftAddon>
-          <Input
+        <InputGroup width={{ base: "100%", md: "300px" }} startAddon="搜索">
+  <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="输入股票代码或简称搜索"
           />
-        </InputGroup>
+</InputGroup>
         
-        <Badge colorScheme="blue" fontSize="0.8em">
+        <Badge colorPalette="blue" fontSize="0.8em">
           示例：20210630（2021 年中报）
         </Badge>
       </Flex>

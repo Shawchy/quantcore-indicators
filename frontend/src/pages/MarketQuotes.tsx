@@ -1,36 +1,7 @@
 import React, { useState } from 'react'
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Text,
-  Badge,
-  Button,
-  HStack,
-  VStack,
-  Spinner,
-  Alert,
-  AlertIcon,
-  useColorModeValue,
-  Select,
-  Input,
-  InputGroup,
-  InputLeftElement,
-  Flex,
-  SimpleGrid,
-  Card,
-  CardBody,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-} from '@chakra-ui/react'
-import { SearchIcon, RepeatIcon } from '@chakra-ui/icons'
+import { Alert, Badge, Box, Button, Card, Flex, HStack, Heading, Input, InputGroup, NativeSelect, SimpleGrid, Spinner, Stat, Table, Text, VStack } from '@chakra-ui/react'
+import { useColorModeValue } from '../components/ui/color-mode'
+import { FiSearch } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
 
 interface MarketQuote {
@@ -175,16 +146,15 @@ const MarketQuotes: React.FC = () => {
 
   return (
     <Box p={6} bg={bgColor} borderRadius="lg" shadow="md">
-      <VStack spacing={6} align="stretch">
+      <VStack gap={6} align="stretch">
         {/* 标题和刷新按钮 */}
         <Flex justify="space-between" align="center" w="100%">
           <Heading size="lg">📊 市场实时行情</Heading>
           <Button
             size="sm"
-            colorScheme="blue"
-            leftIcon={<RepeatIcon />}
+            colorPalette="blue"
             onClick={handleRefresh}
-            isLoading={loading}
+            loading={loading}
           >
             刷新
           </Button>
@@ -193,79 +163,78 @@ const MarketQuotes: React.FC = () => {
         {/* 市场统计卡片 */}
         {stats && (
           <SimpleGrid columns={{ base: 2, md: 4 }} gap={4}>
-            <Card bg={cardBg}>
-              <CardBody>
-                <Stat>
-                  <StatLabel fontSize="sm" color="gray.600">股票总数</StatLabel>
-                  <StatNumber fontSize="2xl" fontWeight="bold">{stats.total}</StatNumber>
-                  <StatHelpText mb={0} fontSize="xs" color="gray.500">
+            <Card.Root bg={cardBg}>
+              <Card.Body>
+                <Stat.Root>
+                  <Stat.Label fontSize="sm" color="gray.600">股票总数</Stat.Label>
+                  <Stat.ValueText fontSize="2xl" fontWeight="bold">{stats.total}</Stat.ValueText>
+                  <Stat.HelpText mb={0} fontSize="xs" color="gray.500">
                     {currentTypeName}
-                  </StatHelpText>
-                </Stat>
-              </CardBody>
-            </Card>
+                  </Stat.HelpText>
+                </Stat.Root>
+              </Card.Body>
+            </Card.Root>
             
-            <Card bg={cardBg}>
-              <CardBody>
-                <Stat>
-                  <StatLabel fontSize="sm" color="gray.600">上涨家数</StatLabel>
-                  <StatNumber fontSize="2xl" fontWeight="bold" color="red.500">
+            <Card.Root bg={cardBg}>
+              <Card.Body>
+                <Stat.Root>
+                  <Stat.Label fontSize="sm" color="gray.600">上涨家数</Stat.Label>
+                  <Stat.ValueText fontSize="2xl" fontWeight="bold" color="red.500">
                     {stats.up}
-                  </StatNumber>
-                  <StatHelpText mb={0} fontSize="xs" color="gray.500">
+                  </Stat.ValueText>
+                  <Stat.HelpText mb={0} fontSize="xs" color="gray.500">
                     占比 {stats.upRatio}%
-                  </StatHelpText>
-                </Stat>
-              </CardBody>
-            </Card>
+                  </Stat.HelpText>
+                </Stat.Root>
+              </Card.Body>
+            </Card.Root>
             
-            <Card bg={cardBg}>
-              <CardBody>
-                <Stat>
-                  <StatLabel fontSize="sm" color="gray.600">下跌家数</StatLabel>
-                  <StatNumber fontSize="2xl" fontWeight="bold" color="green.500">
+            <Card.Root bg={cardBg}>
+              <Card.Body>
+                <Stat.Root>
+                  <Stat.Label fontSize="sm" color="gray.600">下跌家数</Stat.Label>
+                  <Stat.ValueText fontSize="2xl" fontWeight="bold" color="green.500">
                     {stats.down}
-                  </StatNumber>
-                  <StatHelpText mb={0} fontSize="xs" color="gray.500">
+                  </Stat.ValueText>
+                  <Stat.HelpText mb={0} fontSize="xs" color="gray.500">
                     占比 {stats.downRatio}%
-                  </StatHelpText>
-                </Stat>
-              </CardBody>
-            </Card>
+                  </Stat.HelpText>
+                </Stat.Root>
+              </Card.Body>
+            </Card.Root>
             
-            <Card bg={cardBg}>
-              <CardBody>
-                <Stat>
-                  <StatLabel fontSize="sm" color="gray.600">平均涨跌幅</StatLabel>
-                  <StatNumber 
+            <Card.Root bg={cardBg}>
+              <Card.Body>
+                <Stat.Root>
+                  <Stat.Label fontSize="sm" color="gray.600">平均涨跌幅</Stat.Label>
+                  <Stat.ValueText 
                     fontSize="2xl" 
                     fontWeight="bold"
                     color={parseFloat(stats.avgPct) > 0 ? 'red.500' : 'green.500'}
                   >
                     {parseFloat(stats.avgPct) > 0 ? '+' : ''}{stats.avgPct}%
-                  </StatNumber>
-                  <StatHelpText mb={0} fontSize="xs" color="gray.500">
+                  </Stat.ValueText>
+                  <Stat.HelpText mb={0} fontSize="xs" color="gray.500">
                     平盘 {stats.flat}家
-                  </StatHelpText>
-                </Stat>
-              </CardBody>
-            </Card>
+                  </Stat.HelpText>
+                </Stat.Root>
+              </Card.Body>
+            </Card.Root>
           </SimpleGrid>
         )}
 
         {/* 市场类型选择和搜索 */}
-        <HStack spacing={4} wrap="wrap">
+        <HStack gap={4} wrap="wrap">
           {/* 市场类型下拉框 */}
           <Box>
             <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.600">
               市场类型：
             </Text>
-            <Select
+            <NativeSelect.Root><NativeSelect.Field
               value={selectedType}
               onChange={handleTypeChange}
-              w="200px"
-              size="md"
-              colorScheme="blue"
+              
+              colorPalette="blue"
             >
               {MARKET_TYPES.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -275,7 +244,7 @@ const MarketQuotes: React.FC = () => {
                   {type.stability === 3 && ' ⭐⭐⭐'}
                 </option>
               ))}
-            </Select>
+            </NativeSelect.Field></NativeSelect.Root>
           </Box>
 
           {/* 显示数量选择 */}
@@ -283,18 +252,16 @@ const MarketQuotes: React.FC = () => {
             <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.600">
               显示数量：
             </Text>
-            <Select
+            <NativeSelect.Root size="md"><NativeSelect.Field
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
-              w="120px"
-              size="md"
             >
               <option value={50}>50 条</option>
               <option value={100}>100 条</option>
               <option value={200}>200 条</option>
               <option value={500}>500 条</option>
               <option value={1000}>1000 条</option>
-            </Select>
+            </NativeSelect.Field></NativeSelect.Root>
           </Box>
 
           {/* 搜索框 */}
@@ -302,10 +269,7 @@ const MarketQuotes: React.FC = () => {
             <Text fontSize="sm" fontWeight="bold" mb={2} color="gray.600">
               搜索：
             </Text>
-            <InputGroup>
-              <InputLeftElement pointerEvents="none">
-                <SearchIcon color="gray.400" />
-              </InputLeftElement>
+            <InputGroup startElement={<FiSearch color="gray.400" />}>
               <Input
                 placeholder="输入代码或名称"
                 value={searchTerm}
@@ -319,105 +283,105 @@ const MarketQuotes: React.FC = () => {
         {/* 加载状态 */}
         {loading && (
           <Box display="flex" justifyContent="center" py={10}>
-            <Spinner size="xl" thickness="4px" speed="0.65s" color="blue.500" />
+            <Spinner size="xl" borderWidth="4px"  color="blue.500" />
           </Box>
         )}
 
         {/* 错误提示 */}
         {queryError && (
-          <Alert status="error" borderRadius="lg">
-            <AlertIcon />
+          <Alert.Root status="error" borderRadius="lg">
+            <Alert.Indicator />
             获取数据失败：{(queryError as Error).message}
             <Button
               size="sm"
-              colorScheme="red"
+              colorPalette="red"
               ml={4}
               onClick={handleRefresh}
             >
               重试
             </Button>
-          </Alert>
+          </Alert.Root>
         )}
 
         {/* 空数据提示 */}
         {!loading && !queryError && (!marketData || marketData.length === 0) && (
-          <Alert status="info" borderRadius="lg">
-            <AlertIcon />
+          <Alert.Root status="info" borderRadius="lg">
+            <Alert.Indicator />
             暂无市场实时行情数据，请尝试切换市场类型或刷新
-          </Alert>
+          </Alert.Root>
         )}
 
         {/* 数据表格 */}
         {!loading && filteredData.length > 0 && (
           <Box overflowX="auto" borderRadius="lg" boxShadow="md">
-            <Table variant="simple" size="sm">
-              <Thead bg="gray.50">
-                <Tr>
-                  <Th>代码</Th>
-                  <Th>名称</Th>
-                  <Th isNumeric>最新价</Th>
-                  <Th isNumeric>涨跌幅</Th>
-                  <Th isNumeric>涨跌额</Th>
-                  <Th isNumeric>最高</Th>
-                  <Th isNumeric>最低</Th>
-                  <Th isNumeric>今开</Th>
-                  <Th isNumeric>昨收</Th>
-                  <Th isNumeric>成交量</Th>
-                  <Th isNumeric>成交额</Th>
-                  <Th isNumeric>换手率</Th>
-                  <Th isNumeric>量比</Th>
-                  <Th isNumeric>市盈率</Th>
-                  <Th isNumeric>总市值</Th>
-                  <Th isNumeric>流通市值</Th>
-                  <Th>市场类型</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
+            <Table.Root  size="sm">
+              <Table.Header bg="gray.50">
+                <Table.Row>
+                  <Table.ColumnHeader>代码</Table.ColumnHeader>
+                  <Table.ColumnHeader>名称</Table.ColumnHeader>
+                  <Table.ColumnHeader >最新价</Table.ColumnHeader>
+                  <Table.ColumnHeader >涨跌幅</Table.ColumnHeader>
+                  <Table.ColumnHeader >涨跌额</Table.ColumnHeader>
+                  <Table.ColumnHeader >最高</Table.ColumnHeader>
+                  <Table.ColumnHeader >最低</Table.ColumnHeader>
+                  <Table.ColumnHeader >今开</Table.ColumnHeader>
+                  <Table.ColumnHeader >昨收</Table.ColumnHeader>
+                  <Table.ColumnHeader >成交量</Table.ColumnHeader>
+                  <Table.ColumnHeader >成交额</Table.ColumnHeader>
+                  <Table.ColumnHeader >换手率</Table.ColumnHeader>
+                  <Table.ColumnHeader >量比</Table.ColumnHeader>
+                  <Table.ColumnHeader >市盈率</Table.ColumnHeader>
+                  <Table.ColumnHeader >总市值</Table.ColumnHeader>
+                  <Table.ColumnHeader >流通市值</Table.ColumnHeader>
+                  <Table.ColumnHeader>市场类型</Table.ColumnHeader>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {filteredData.map((item, index) => (
-                  <Tr key={`${item.code}-${index}`} _hover={{ bg: hoverBg }}>
-                    <Td fontWeight="medium">{item.code}</Td>
-                    <Td>{item.name}</Td>
-                    <Td isNumeric>{formatNumber(item.price)}</Td>
-                    <Td isNumeric>
+                  <Table.Row key={`${item.code}-${index}`} _hover={{ bg: hoverBg }}>
+                    <Table.Cell fontWeight="medium">{item.code}</Table.Cell>
+                    <Table.Cell>{item.name}</Table.Cell>
+                    <Table.Cell >{formatNumber(item.price)}</Table.Cell>
+                    <Table.Cell >
                       <Badge 
-                        colorScheme={getChangePctColor(item.change_pct)} 
+                        colorPalette={getChangePctColor(item.change_pct)} 
                         fontSize="xs"
                         px={2}
                         py={1}
                       >
                         {formatNumber(item.change_pct)}%
                       </Badge>
-                    </Td>
-                    <Td isNumeric>
+                    </Table.Cell>
+                    <Table.Cell >
                       <Badge 
-                        colorScheme={item.change && item.change > 0 ? 'red' : 'green'}
+                        colorPalette={item.change && item.change > 0 ? 'red' : 'green'}
                         fontSize="xs"
                         px={2}
                         py={1}
                       >
                         {formatNumber(item.change)}
                       </Badge>
-                    </Td>
-                    <Td isNumeric>{formatNumber(item.high)}</Td>
-                    <Td isNumeric>{formatNumber(item.low)}</Td>
-                    <Td isNumeric>{formatNumber(item.open)}</Td>
-                    <Td isNumeric>{formatNumber(item.prev_close)}</Td>
-                    <Td isNumeric>{formatAmount(item.volume)}</Td>
-                    <Td isNumeric>{formatAmount(item.amount)}</Td>
-                    <Td isNumeric>{formatNumber(item.turnover_rate)}%</Td>
-                    <Td isNumeric>{formatNumber(item.volume_ratio)}</Td>
-                    <Td isNumeric>{formatNumber(item.pe_ratio)}</Td>
-                    <Td isNumeric>{formatMarketCap(item.total_market_cap)}</Td>
-                    <Td isNumeric>{formatMarketCap(item.float_market_cap)}</Td>
-                    <Td>
-                      <Badge colorScheme="blue" fontSize="xs">
+                    </Table.Cell>
+                    <Table.Cell >{formatNumber(item.high)}</Table.Cell>
+                    <Table.Cell >{formatNumber(item.low)}</Table.Cell>
+                    <Table.Cell >{formatNumber(item.open)}</Table.Cell>
+                    <Table.Cell >{formatNumber(item.prev_close)}</Table.Cell>
+                    <Table.Cell >{formatAmount(item.volume)}</Table.Cell>
+                    <Table.Cell >{formatAmount(item.amount)}</Table.Cell>
+                    <Table.Cell >{formatNumber(item.turnover_rate)}%</Table.Cell>
+                    <Table.Cell >{formatNumber(item.volume_ratio)}</Table.Cell>
+                    <Table.Cell >{formatNumber(item.pe_ratio)}</Table.Cell>
+                    <Table.Cell >{formatMarketCap(item.total_market_cap)}</Table.Cell>
+                    <Table.Cell >{formatMarketCap(item.float_market_cap)}</Table.Cell>
+                    <Table.Cell>
+                      <Badge colorPalette="blue" fontSize="xs">
                         {item.market_type || '-'}
                       </Badge>
-                    </Td>
-                  </Tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ))}
-              </Tbody>
-            </Table>
+              </Table.Body>
+            </Table.Root>
           </Box>
         )}
 

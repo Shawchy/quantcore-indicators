@@ -3,11 +3,7 @@
  * 显示买一卖一、五档盘口等实时数据
  */
 import React from 'react'
-import { 
-  Box, Flex, Text, Table, Tbody, Tr, Td, 
-  TableContainer, Stat, StatNumber, StatHelpText,
-  Spinner, Alert, AlertIcon
-} from '@chakra-ui/react'
+import { Alert, Box, Flex, Spinner, Stat, Table, Text } from '@chakra-ui/react'
 import type { RealtimeQuoteData } from '../types'
 
 interface RealtimeQuoteProps {
@@ -38,8 +34,8 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
     const bgColor = type === 'bid' ? 'red.50' : 'green.50'
     
     return (
-      <Tr key={item.code || index} bg={bgColor}>
-        <Td 
+      <Table.Row key={index} bg={bgColor}>
+        <Table.Cell 
           color={color} 
           fontWeight="bold" 
           fontFamily="mono"
@@ -48,8 +44,8 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
           px={3}
         >
           {item && formatPrice(item.price)}
-        </Td>
-        <Td 
+        </Table.Cell>
+        <Table.Cell 
           color="gray.600" 
           fontFamily="mono"
           textAlign="right"
@@ -57,8 +53,8 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
           px={3}
         >
           {item && formatVolume(item.volume)}
-        </Td>
-      </Tr>
+        </Table.Cell>
+      </Table.Row>
     )
   }
 
@@ -72,10 +68,10 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
 
   if (error) {
     return (
-      <Alert status="error" size="sm" borderRadius="md">
-        <AlertIcon boxSize={3} />
+      <Alert.Root status="error" size="sm" borderRadius="md">
+        <Alert.Indicator boxSize={3} />
         <Text fontSize="xs">{error}</Text>
-      </Alert>
+      </Alert.Root>
     )
   }
 
@@ -95,16 +91,16 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
       <Flex justify="space-between" align="center" mb={4} pb={4} borderBottom="1px" borderColor="gray.200">
         <Box>
           <Text fontSize="xs" color="gray.600" mb={1}>实时价格</Text>
-          <Stat>
-            <StatNumber 
+          <Stat.Root>
+            <Stat.ValueText 
               fontSize="3xl" 
               fontWeight="bold" 
               color={quote?.change_pct >= 0 ? 'red.500' : 'green.500'}
               fontFamily="mono"
             >
               {formatPrice(quote?.price)}
-            </StatNumber>
-            <StatHelpText 
+            </Stat.ValueText>
+            <Stat.HelpText 
               mb={0} 
               fontSize="sm" 
               fontWeight="bold"
@@ -114,8 +110,8 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
               {quote?.change_pct != null ? quote.change_pct.toFixed(2) : '-'}% 
               ({quote?.change != null ? (quote.change >= 0 ? '+' : '') : ''}
               {quote?.change != null ? quote.change.toFixed(2) : '-'})
-            </StatHelpText>
-          </Stat>
+            </Stat.HelpText>
+          </Stat.Root>
         </Box>
 
         <Box textAlign="right">
@@ -137,7 +133,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
           { label: '成交额', value: quote?.amount != null ? (quote.amount >= 100000000 ? `${(quote.amount / 100000000).toFixed(2)}亿` : `${(quote.amount / 10000).toFixed(0)}万`) : '-' },
         ].map((item, index) => (
           <Box 
-            key={item.code || index} 
+            key={index} 
             flex="1" 
             minW="80px"
             bg="gray.50" 
@@ -166,15 +162,15 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
             <Text fontSize="xs" fontWeight="bold" color="red.600" mb={2} textAlign="center">
               买盘
             </Text>
-            <TableContainer>
-              <Table size="sm" variant="unstyled">
-                <Tbody>
+            <Box>
+              <Table.Root size="sm" variant="outline">
+                <Table.Body>
                   {bid_ask.bid.slice(0, 5).map((item, index) => (
                     renderBidAskRow(item, index, 'bid')
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
           </Box>
 
           {/* 卖盘 */}
@@ -182,15 +178,15 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
             <Text fontSize="xs" fontWeight="bold" color="green.600" mb={2} textAlign="center">
               卖盘
             </Text>
-            <TableContainer>
-              <Table size="sm" variant="unstyled">
-                <Tbody>
+            <Box>
+              <Table.Root size="sm" variant="outline">
+                <Table.Body>
                   {bid_ask.ask.slice(0, 5).map((item, index) => (
                     renderBidAskRow(item, index, 'ask')
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
           </Box>
         </Flex>
       )}

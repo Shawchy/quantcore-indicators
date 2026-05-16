@@ -22,15 +22,15 @@ class TestDataSourceType:
 
     def test_enum_values(self):
         """测试枚举值"""
-        assert DataSourceType.TUSHARE.value == "tushare"
         assert DataSourceType.AKSHARE.value == "akshare"
         assert DataSourceType.BAOSTOCK.value == "baostock"
         assert DataSourceType.YFINANCE.value == "yfinance"
+        assert DataSourceType.EFINANCE.value == "efinance"
 
     def test_enum_comparison(self):
         """测试枚举比较"""
-        assert DataSourceType.TUSHARE == DataSourceType("tushare")
-        assert DataSourceType.AKSHARE != DataSourceType.TUSHARE
+        assert DataSourceType.AKSHARE == DataSourceType("akshare")
+        assert DataSourceType.AKSHARE != DataSourceType.BAOSTOCK
 
 
 class TestStockBasicInfo:
@@ -163,7 +163,7 @@ class TestBaseDataAdapter:
         class MockAdapter(BaseDataAdapter):
             def __init__(self):
                 self._initialized = False
-                self._source_type = DataSourceType.TUSHARE
+                self._source_type = DataSourceType.AKSHARE
             
             @property
             def source_type(self):
@@ -233,4 +233,4 @@ class TestBaseDataAdapter:
 
     def test_source_type(self, mock_adapter):
         """测试数据源类型"""
-        assert mock_adapter.source_type == DataSourceType.TUSHARE
+        assert mock_adapter.source_type == DataSourceType.AKSHARE

@@ -3,26 +3,15 @@
  * 展示全市场 A 股的日线 K 线数据和行情信息
  */
 import React, { useState } from 'react'
-import {
-  Box,
-  Flex,
-  Text,
-  Input,
-  InputGroup,
-  InputLeftElement,
-  VStack,
-  useToast,
-  Card,
-  CardBody,
-  Badge,
-} from '@chakra-ui/react'
-import { SearchIcon } from '@chakra-ui/icons'
+import { Badge, Box, Card, Flex, Input, InputGroup, Text, VStack } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
+import { FiSearch } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
 import { stockApi } from '../services/api'
 import DailyKLine from '../components/DailyKLine'
 
 const DailyMarketPage: React.FC = () => {
-  const toast = useToast()
+  
   const [searchCode, setSearchCode] = useState('')
   const [currentCode, setCurrentCode] = useState('000001') // 默认平安银行
 
@@ -61,10 +50,10 @@ const DailyMarketPage: React.FC = () => {
   const handleSearch = () => {
     const code = searchCode.trim()
     if (!/^\d{6}$/.test(code)) {
-      toast({
+      toaster.create({
         title: '请输入正确的股票代码',
         description: '股票代码为 6 位数字',
-        status: 'warning',
+        type: 'warning',
         duration: 3000,
       })
       return
@@ -91,18 +80,15 @@ const DailyMarketPage: React.FC = () => {
   return (
     <Box>
       {/* 顶部搜索栏 */}
-      <Card mb={4}>
-        <CardBody>
-          <VStack align="stretch" spacing={4}>
+      <Card.Root mb={4}>
+        <Card.Body>
+          <VStack align="stretch" gap={4}>
             <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
               <Text fontWeight="bold" fontSize="xl">
                 📈 A 股日线行情
               </Text>
 
-              <InputGroup width={{ base: '100%', md: '400px' }}>
-                <InputLeftElement pointerEvents="none">
-                  <SearchIcon color="gray.400" />
-                </InputLeftElement>
+              <InputGroup width={{ base: '100%', md: '400px' }} startElement={<FiSearch color="gray.400" />}>
                 <Input
                   placeholder="输入股票代码（6 位数字）"
                   value={searchCode}
@@ -110,7 +96,7 @@ const DailyMarketPage: React.FC = () => {
                   onKeyPress={handleKeyPress}
                   size="md"
                 />
-              </InputGroup>
+</InputGroup>
             </Flex>
 
             {/* 快速选择 */}
@@ -123,7 +109,7 @@ const DailyMarketPage: React.FC = () => {
                   key={stock.code}
                   role="button"
                   tabIndex={0}
-                  colorScheme={currentCode === stock.code ? 'blue' : 'gray'}
+                  colorPalette={currentCode === stock.code ? 'blue' : 'gray'}
                   fontSize="sm"
                   px={3}
                   py={2}
@@ -140,24 +126,24 @@ const DailyMarketPage: React.FC = () => {
               ))}
             </Flex>
           </VStack>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
 
       {/* 错误提示 */}
       {error && (
-        <Card mb={4} bg="red.50" borderColor="red.200" borderWidth="1px">
-          <CardBody>
+        <Card.Root mb={4} bg="red.50" borderColor="red.200" borderWidth="1px">
+          <Card.Body>
             <Text color="red.600">
               ❌ 加载失败：{(error as Error).message}
             </Text>
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       )}
 
       {/* 日线行情组件 */}
       {data && (
-        <Card>
-          <CardBody>
+        <Card.Root>
+          <Card.Body>
             <DailyKLine
               data={data.data?.data || []}
               loading={isLoading}
@@ -169,13 +155,13 @@ const DailyMarketPage: React.FC = () => {
                 console.log('导出数据:', exportedData)
               }}
             />
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       )}
 
       {/* 使用说明 */}
-      <Card mt={4} bg="blue.50" borderLeft="4px" borderColor="blue.500">
-        <CardBody>
+      <Card.Root mt={4} bg="blue.50" borderLeft="4px" borderColor="blue.500">
+        <Card.Body>
           <Text fontSize="sm" color="blue.800">
             <strong>💡 使用说明：</strong>
             <br />
@@ -189,8 +175,8 @@ const DailyMarketPage: React.FC = () => {
             <br />
             • 数据源：Tushare/AkShare（前复权）
           </Text>
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     </Box>
   )
 }

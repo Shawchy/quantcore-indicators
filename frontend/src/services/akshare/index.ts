@@ -259,6 +259,8 @@ export interface StockCashFlowSheet {
 
 /** 新浪财经财务指标数据 */
 export interface StockFinancialIndicator {
+  code?: string;
+  name?: string;
   date: string | null;
   diluted_eps: number | null;
   weighted_eps: number | null;
@@ -440,6 +442,8 @@ export interface StockPriceJS {
 
 /** 乐咕乐股 - 大盘拥挤度 */
 export interface StockAConestionLG {
+  code?: string;
+  name?: string;
   date: string;
   close: number | null;
   congestion: number | null;
@@ -448,6 +452,8 @@ export interface StockAConestionLG {
 
 /** 乐咕乐股 - 股债利差 */
 export interface StockEBSLG {
+  code?: string;
+  name?: string;
   date: string;
   hs300_index: number | null;
   ebs: number | null;
@@ -457,6 +463,8 @@ export interface StockEBSLG {
 
 /** 乐咕乐股 - 巴菲特指标 */
 export interface StockBuffettIndexLG {
+  code?: string;
+  name?: string;
   date: string;
   close: number | null;
   total_market_cap: number | null;
@@ -468,6 +476,8 @@ export interface StockBuffettIndexLG {
 
 /** 百度股市通-A 股估值数据 */
 export interface StockZhValuationBaidu {
+  code?: string;
+  name?: string;
   date: string;
   value: number | null;
   extra_fields?: Record<string, any>;
@@ -475,6 +485,8 @@ export interface StockZhValuationBaidu {
 
 /** 东方财富网 - 个股估值数据 */
 export interface StockValueEM {
+  code?: string;
+  name?: string;
   report_date: string;
   close_price: number | null;
   change_pct: number | null;
@@ -493,6 +505,8 @@ export interface StockValueEM {
 
 /** 百度股市通 - 涨跌投票数据 */
 export interface StockZhVoteBaidu {
+  code?: string;
+  name?: string;
   period: string;
   vote_up: number | null;
   vote_down: number | null;
@@ -525,6 +539,9 @@ export interface StockABelowNetAssetStatistics {
 
 /** 东方财富网 - 大宗交易市场统计 */
 export interface StockDzjySctj {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   index: number | null;
   date: string;
   sh_index: number | null;
@@ -539,6 +556,9 @@ export interface StockDzjySctj {
 
 /** 东方财富网 - 大宗交易每日明细 */
 export interface StockDzjyMrmx {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   index: number | null;
   date: string;
   stock_code: string;
@@ -557,6 +577,9 @@ export interface StockDzjyMrmx {
 
 /** 平安证券 - 融资融券标的证券及保证金比例 */
 export interface StockMarginRatioPa {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   stock_code: string;
   stock_name: string;
   margin_ratio: number | null;
@@ -566,6 +589,9 @@ export interface StockMarginRatioPa {
 
 /** 东方财富网 - 融资融券账户统计 */
 export interface StockMarginAccountInfo {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   date: string;
   margin_balance: number | null;
   short_balance: number | null;
@@ -584,6 +610,9 @@ export interface StockMarginAccountInfo {
 
 /** 上海证券交易所 - 融资融券汇总 */
 export interface StockMarginSse {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   credit_trade_date: string;
   margin_balance: number | null;
   margin_buy: number | null;
@@ -596,6 +625,9 @@ export interface StockMarginSse {
 
 /** 上海证券交易所 - 融资融券明细 */
 export interface StockMarginDetailSse {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   credit_trade_date: string;
   stock_code: string;
   stock_name: string;
@@ -610,6 +642,9 @@ export interface StockMarginDetailSse {
 
 /** 深圳证券交易所 - 融资融券汇总 */
 export interface StockMarginSzse {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   margin_buy: number | null;
   margin_balance: number | null;
   short_sell: number | null;
@@ -621,6 +656,9 @@ export interface StockMarginSzse {
 
 /** 深圳证券交易所 - 融资融券明细 */
 export interface StockMarginDetailSzse {
+  code?: string;
+  name?: string;
+  trade_date?: string;
   stock_code: string;
   stock_name: string;
   margin_buy: number | null;

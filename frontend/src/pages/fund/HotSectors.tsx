@@ -4,32 +4,7 @@
  * 展示涨幅领先、资金流入、估值低位等热门板块
  */
 import React from 'react';
-import {
-  Box,
-  Card,
-  CardBody,
-  Heading,
-  Text,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Badge,
-  HStack,
-  VStack,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
-} from '@chakra-ui/react';
+import { Alert, Badge, Box, Card, HStack, Heading, Table, Tabs, Text, VStack } from '@chakra-ui/react'
 import {
   FiTrendingUp,
   FiDollarSign,
@@ -132,35 +107,35 @@ const HotSectors: React.FC = () => {
 
   // 板块表格列
   const renderSectorTable = (sectors: SectorInfo[]) => (
-    <TableContainer>
-      <Table variant="simple" size="sm">
-        <Thead>
-          <Tr>
-            <Th w="150px">板块名称</Th>
-            <Th w="120px" isNumeric>涨跌幅</Th>
-            <Th w="100px" isNumeric>基金数量</Th>
-            <Th w="120px" isNumeric>平均规模 (亿)</Th>
-            <Th>代表基金</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
+    <Box>
+      <Table.Root  size="sm">
+        <Table.Header>
+          <Table.Row>
+            <Table.ColumnHeader w="150px">板块名称</Table.ColumnHeader>
+            <Table.ColumnHeader w="120px" >涨跌幅</Table.ColumnHeader>
+            <Table.ColumnHeader w="100px" >基金数量</Table.ColumnHeader>
+            <Table.ColumnHeader w="120px" >平均规模 (亿)</Table.ColumnHeader>
+            <Table.ColumnHeader>代表基金</Table.ColumnHeader>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
           {sectors.map((sector) => (
-            <Tr key={sector.key}>
-              <Td>
+            <Table.Row key={sector.key}>
+              <Table.Cell>
                 <Text fontWeight="bold">{sector.name}</Text>
-              </Td>
-              <Td>
+              </Table.Cell>
+              <Table.Cell>
                 <Text fontWeight="bold" color={getReturnColor(sector.change_pct)}>
                   {getReturnText(sector.change_pct)}
                 </Text>
-              </Td>
-              <Td isNumeric>{sector.fund_count}只</Td>
-              <Td isNumeric>{sector.avg_scale.toFixed(2)}</Td>
-              <Td>
-                <VStack align="start" spacing={2}>
+              </Table.Cell>
+              <Table.Cell >{sector.fund_count}只</Table.Cell>
+              <Table.Cell >{sector.avg_scale.toFixed(2)}</Table.Cell>
+              <Table.Cell>
+                <VStack align="start" gap={2}>
                   {sector.top_funds.slice(0, 2).map((fund, idx) => (
                     <HStack key={idx} wrap="wrap">
-                      <Badge colorScheme="blue" fontSize="xs">{fund.code}</Badge>
+                      <Badge colorPalette="blue" fontSize="xs">{fund.code}</Badge>
                       <Text fontSize="sm">{fund.name}</Text>
                       <Text fontSize="sm" fontWeight="bold" color={getReturnColor(fund.return_rate)}>
                         {getReturnText(fund.return_rate)}
@@ -168,17 +143,17 @@ const HotSectors: React.FC = () => {
                     </HStack>
                   ))}
                 </VStack>
-              </Td>
-            </Tr>
+              </Table.Cell>
+            </Table.Row>
           ))}
-        </Tbody>
-      </Table>
-    </TableContainer>
+        </Table.Body>
+      </Table.Root>
+    </Box>
   );
 
   return (
     <Box p={6}>
-      <VStack spacing={8} align="stretch">
+      <VStack gap={8} align="stretch">
         {/* 标题 */}
         <Box>
           <Heading size="xl" mb={2}>
@@ -190,77 +165,77 @@ const HotSectors: React.FC = () => {
         </Box>
 
         {/* Tab 切换 */}
-        <Tabs variant="enclosed">
-          <TabList>
-            <Tab>
+        <Tabs.Root variant="enclosed" defaultValue="rise">
+          <Tabs.List>
+            <Tabs.Trigger value="rise">
               <HStack>
                 <FiTrendingUp size={20} />
                 <span>涨幅领先</span>
               </HStack>
-            </Tab>
-            <Tab>
+            </Tabs.Trigger>
+            <Tabs.Trigger value="capital">
               <HStack>
                 <FiDollarSign size={20} />
                 <span>资金流入</span>
               </HStack>
-            </Tab>
-            <Tab>
+            </Tabs.Trigger>
+            <Tabs.Trigger value="valuation">
               <HStack>
                 <FiBarChart size={20} />
                 <span>估值低位</span>
               </HStack>
-            </Tab>
-          </TabList>
-          <TabPanels>
+            </Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.ContentGroup>
             {/* 涨幅领先 */}
-            <TabPanel>
-              <Card>
-                <CardBody>
-                  <Alert status="success" mb={4} borderRadius="md">
-                    <AlertIcon />
-                    <AlertTitle mr={2}>涨幅领先板块</AlertTitle>
-                    <AlertDescription>
+            <Tabs.Content value="rise">
+              <Card.Root>
+                <Card.Body>
+                  <Alert.Root status="success" mb={4} borderRadius="md">
+                    <Alert.Indicator />
+                    <Alert.Title mr={2}>涨幅领先板块</Alert.Title>
+                    <Alert.Description>
                       展示近期涨幅最大的行业板块
-                    </AlertDescription>
-                  </Alert>
+                    </Alert.Description>
+                  </Alert.Root>
                   {renderSectorTable(riseLeadingSectors)}
-                </CardBody>
-              </Card>
-            </TabPanel>
+                </Card.Body>
+              </Card.Root>
+            </Tabs.Content>
 
             {/* 资金流入 */}
-            <TabPanel>
-              <Card>
-                <CardBody>
-                  <Alert status="info" mb={4} borderRadius="md">
-                    <AlertIcon />
-                    <AlertTitle mr={2}>资金流入板块</AlertTitle>
-                    <AlertDescription>
+            <Tabs.Content value="capital">
+              <Card.Root>
+                <Card.Body>
+                  <Alert.Root status="info" mb={4} borderRadius="md">
+                    <Alert.Indicator />
+                    <Alert.Title mr={2}>资金流入板块</Alert.Title>
+                    <Alert.Description>
                       展示主力资金净流入的行业板块
-                    </AlertDescription>
-                  </Alert>
+                    </Alert.Description>
+                  </Alert.Root>
                   {renderSectorTable(capitalInflowSectors)}
-                </CardBody>
-              </Card>
-            </TabPanel>
+                </Card.Body>
+              </Card.Root>
+            </Tabs.Content>
 
             {/* 估值低位 */}
-            <TabPanel>
-              <Card>
-                <CardBody>
-                  <Alert status="warning" mb={4} borderRadius="md">
-                    <AlertIcon />
-                    <AlertTitle mr={2}>估值低位板块</AlertTitle>
-                    <AlertDescription>
+            <Tabs.Content value="valuation">
+              <Card.Root>
+                <Card.Body>
+                  <Alert.Root status="warning" mb={4} borderRadius="md">
+                    <Alert.Indicator />
+                    <Alert.Title mr={2}>估值低位板块</Alert.Title>
+                    <Alert.Description>
                       展示估值处于历史低位的行业板块
-                    </AlertDescription>
-                  </Alert>
+                    </Alert.Description>
+                  </Alert.Root>
                   {renderSectorTable(lowValuationSectors)}
-                </CardBody>
-              </Card>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
+                </Card.Body>
+              </Card.Root>
+            </Tabs.Content>
+          </Tabs.ContentGroup>
+        </Tabs.Root>
       </VStack>
     </Box>
   );

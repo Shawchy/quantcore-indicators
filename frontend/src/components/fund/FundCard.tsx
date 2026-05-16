@@ -4,24 +4,9 @@
  * 用于展示单个基金的摘要信息，适用于卡片式布局
  */
 import React from 'react';
-import {
-  Card,
-  CardBody,
-  Heading,
-  Text,
-  HStack,
-  VStack,
-  Badge,
-  Button,
-  Stat,
-  StatLabel,
-  StatNumber,
-  SimpleGrid,
-  Divider,
-  useColorModeValue,
-  Icon,
-} from '@chakra-ui/react';
-import { StarIcon } from '@chakra-ui/icons';
+import { Badge, Button, Card, HStack, Heading, Icon, Separator, SimpleGrid, Stat, Text, VStack } from '@chakra-ui/react'
+import { useColorModeValue } from '../ui/color-mode'
+import { FiStar } from 'react-icons/fi'
 import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
 import { FundInfo } from '@/services/fund';
 
@@ -70,24 +55,24 @@ const FundCard: React.FC<FundCardProps> = ({
       'mix': { color: 'purple', text: '混合型' },
     };
     const config = fund.type ? typeMap[fund.type] : { color: 'gray', text: '未知' };
-    return <Badge colorScheme={config.color as any}>{config.text}</Badge>;
+    return <Badge colorPalette={config.color as any}>{config.text}</Badge>;
   };
 
   return (
-    <Card
+    <Card.Root
       _hover={{ bg: hoverBg }}
       cursor="pointer"
       onClick={() => onViewDetail?.(fund.code)}
       height="100%"
     >
-      <CardBody>
-        <VStack spacing={3} align="stretch">
+      <Card.Body>
+        <VStack gap={3} align="stretch">
           {/* 基金基本信息 */}
           <HStack justify="space-between">
-            <VStack align="start" spacing={0}>
+            <VStack align="start" gap={0}>
               <HStack>
                 {showRank && fund.rank && (
-                  <Badge colorScheme="yellow">TOP {fund.rank}</Badge>
+                  <Badge colorPalette="yellow">TOP {fund.rank}</Badge>
                 )}
                 <Heading size="md">{fund.name}</Heading>
               </HStack>
@@ -105,7 +90,7 @@ const FundCard: React.FC<FundCardProps> = ({
                   }}
                 >
                   <Icon
-                    as={StarIcon}
+                    as={FiStar}
                     color={isFavorite ? 'yellow.500' : 'inherit'}
                     fill={isFavorite ? 'yellow.500' : 'none'}
                   />
@@ -114,19 +99,19 @@ const FundCard: React.FC<FundCardProps> = ({
             </HStack>
           </HStack>
 
-          <Divider />
+          <Separator />
 
           {/* 净值和涨跌幅 */}
-          <SimpleGrid columns={2} spacing={4}>
-            <Stat>
-              <StatLabel fontSize="sm">最新净值</StatLabel>
-              <StatNumber fontSize={compact ? 'lg' : 'xl'}>
+          <SimpleGrid columns={2} gap={4}>
+            <Stat.Root>
+              <Stat.Label fontSize="sm">最新净值</Stat.Label>
+              <Stat.ValueText fontSize={compact ? 'lg' : 'xl'}>
                 {fund.net_asset_value?.toFixed(4) || '--'}
-              </StatNumber>
-            </Stat>
-            <Stat>
-              <StatLabel fontSize="sm">日涨跌</StatLabel>
-              <StatNumber
+              </Stat.ValueText>
+            </Stat.Root>
+            <Stat.Root>
+              <Stat.Label fontSize="sm">日涨跌</Stat.Label>
+              <Stat.ValueText
                 fontSize={compact ? 'lg' : 'xl'}
                 color={getReturnColor(fund.change_pct)}
               >
@@ -135,15 +120,15 @@ const FundCard: React.FC<FundCardProps> = ({
                   {fund.change_pct && fund.change_pct < 0 && <FiTrendingDown />}
                   <span>{getReturnText(fund.change_pct)}</span>
                 </HStack>
-              </StatNumber>
-            </Stat>
+              </Stat.ValueText>
+            </Stat.Root>
           </SimpleGrid>
 
           {/* 阶段涨跌幅 - 非紧凑模式显示 */}
           {!compact && fund.performance && (
             <>
-              <Divider />
-              <SimpleGrid columns={3} spacing={2}>
+              <Separator />
+              <SimpleGrid columns={3} gap={2}>
                 <VStack>
                   <Text fontSize="xs" color="gray.500">近 1 周</Text>
                   <Text fontSize="sm" color={getReturnColor(fund.performance['1w'])}>
@@ -163,7 +148,7 @@ const FundCard: React.FC<FundCardProps> = ({
                   </Text>
                 </VStack>
               </SimpleGrid>
-              <SimpleGrid columns={3} spacing={2}>
+              <SimpleGrid columns={3} gap={2}>
                 <VStack>
                   <Text fontSize="xs" color="gray.500">近 6 月</Text>
                   <Text fontSize="sm" color={getReturnColor(fund.performance['6m'])}>
@@ -189,8 +174,8 @@ const FundCard: React.FC<FundCardProps> = ({
           {/* 基金公司 */}
           {!compact && fund.fund_company && (
             <>
-              <Divider />
-              <VStack align="start" spacing={1}>
+              <Separator />
+              <VStack align="start" gap={1}>
                 <Text fontSize="xs" color="gray.500">基金公司</Text>
                 <Text fontSize="sm">{fund.fund_company}</Text>
               </VStack>
@@ -199,13 +184,13 @@ const FundCard: React.FC<FundCardProps> = ({
 
           {/* 操作按钮 */}
           {showActions && (
-            <Button colorScheme="blue" width="full" onClick={() => onViewDetail?.(fund.code)}>
+            <Button colorPalette="blue" width="full" onClick={() => onViewDetail?.(fund.code)}>
               查看详情
             </Button>
           )}
         </VStack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 };
 

@@ -3,36 +3,8 @@
  * 包含：创新高/新低统计、破净股统计
  */
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  Button,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  useToast,
-  Badge,
-  Flex,
-  Spacer,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-  SimpleGrid,
-  Text,
-  Select,
-  FormControl,
-  FormLabel,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Field, Flex, Heading, NativeSelect, SimpleGrid, Spacer, Stat, Table, Tabs, Text } from '@chakra-ui/react'
+import { toaster } from '../components/ui/toaster'
 import {
   eastMoneyApi,
   type StockAHighLowStatistics,
@@ -40,7 +12,7 @@ import {
 } from '@/services/akshare/index';
 
 const MarketStatisticsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0); // 0=创新高/新低，1=破净股
+  const [activeTab, setActiveTab] = useState("市场估值"); // 0=创新高/新低，1=破净股
   const [loading, setLoading] = useState(false);
   
   // 输入参数
@@ -53,7 +25,7 @@ const MarketStatisticsPage: React.FC = () => {
   // 破净股数据
   const [belowNetAssetData, setBelowNetAssetData] = useState<StockABelowNetAssetStatistics[]>([]);
   
-  const toast = useToast();
+  ;
 
   const hlSymbols = [
     { value: 'all', label: '全部 A 股' },
@@ -75,15 +47,15 @@ const MarketStatisticsPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockAHighLowStatistics(hlSymbol);
       setHighLowData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取创新高/新低数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -95,15 +67,15 @@ const MarketStatisticsPage: React.FC = () => {
     try {
       const result = await eastMoneyApi.getStockABelowNetAssetStatistics(bnSymbol);
       setBelowNetAssetData(result.data || []);
-      toast({ 
+      toaster.create({ 
         title: `获取成功，共${result.data?.length || 0}条`, 
-        status: 'success', 
+        type: 'success', 
         duration: 2000, 
-        isClosable: true 
+        closable: true 
       });
     } catch (error) {
       console.error('获取破净股数据失败:', error);
-      toast({ title: '获取数据失败', status: 'error', duration: 2000, isClosable: true });
+      toaster.create({ title: '获取数据失败', type: 'error', duration: 2000, closable: true });
     } finally {
       setLoading(false);
     }
@@ -116,9 +88,9 @@ const MarketStatisticsPage: React.FC = () => {
 
   // 切换 Tab 时加载对应数据
   useEffect(() => {
-    if (activeTab === 0 && highLowData.length === 0) {
+    if (activeTab === "市场估值" && highLowData.length === 0) {
       fetchHighLowData();
-    } else if (activeTab === 1 && belowNetAssetData.length === 0) {
+    } else if (activeTab === "市场情绪" && belowNetAssetData.length === 0) {
       fetchBelowNetAssetData();
     }
   }, [activeTab]);
@@ -133,122 +105,122 @@ const MarketStatisticsPage: React.FC = () => {
   const renderHLNumber = (value: number | null, type: 'high' | 'low') => {
     if (value === null) return '-';
     const colorScheme = type === 'high' ? 'red' : 'green';
-    return <Badge colorScheme={colorScheme}>{value}</Badge>;
+    return <Badge colorPalette={colorScheme}>{value}</Badge>;
   };
 
   return (
     <Box p={8}>
       <Heading mb={6}>市场统计</Heading>
       
-      <Tabs index={activeTab} onChange={setActiveTab} mb={6}>
-        <TabList>
-          <Tab>创新高/新低统计</Tab>
-          <Tab>破净股统计</Tab>
-        </TabList>
-      </Tabs>
+      <Tabs.Root value={activeTab} onValueChange={(e) => setActiveTab(e.value)} mb={6}>
+        <Tabs.List>
+          <Tabs.Trigger value="创新高_新低统计">创新高/新低统计</Tabs.Trigger>
+          <Tabs.Trigger value="破净股统计">破净股统计</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs.Root>
 
-      <TabPanels>
+      <Tabs.ContentGroup>
         {/* 创新高/新低统计 */}
-        <TabPanel>
+        <Tabs.Content value="破净股统计">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <FormControl w="200px">
-                <FormLabel mb={1} fontSize="sm">市场类型</FormLabel>
-                <Select
-                  size="sm"
+              <Field.Root w="200px">
+                <Field.Label mb={1} fontSize="sm">市场类型</Field.Label>
+                <NativeSelect.Root><NativeSelect.Field
+                  
                   value={hlSymbol}
                   onChange={(e) => setHlSymbol(e.target.value)}
                 >
                   {hlSymbols.map((sym) => (
                     <option key={sym.value} value={sym.value}>{sym.label}</option>
                   ))}
-                </Select>
-              </FormControl>
+                </NativeSelect.Field></NativeSelect.Root>
+              </Field.Root>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchHighLowData}
-                isLoading={loading && activeTab === 0}
+                loading={loading && activeTab === "市场估值"}
               >
                 查询
               </Button>
             </Flex>
             
             {highLowData.length > 0 && (
-              <SimpleGrid columns={4} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(highLowData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>最新指数收盘</StatLabel>
-                  <StatNumber>{highLowData[0]?.close?.toFixed(2) || '-'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>20 日新高/新低</StatLabel>
-                  <StatNumber>
+              <SimpleGrid columns={4} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(highLowData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>最新指数收盘</Stat.Label>
+                  <Stat.ValueText>{highLowData[0]?.close?.toFixed(2) || '-'}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>20 日新高/新低</Stat.Label>
+                  <Stat.ValueText>
                     <Flex gap={2}>
                       {renderHLNumber(highLowData[0]?.high20, 'high')}
                       {renderHLNumber(highLowData[0]?.low20, 'low')}
                     </Flex>
-                  </StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>60 日新高/新低</StatLabel>
-                  <StatNumber>
+                  </Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>60 日新高/新低</Stat.Label>
+                  <Stat.ValueText>
                     <Flex gap={2}>
                       {renderHLNumber(highLowData[0]?.high60, 'high')}
                       {renderHLNumber(highLowData[0]?.low60, 'low')}
                     </Flex>
-                  </StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>120 日新高/新低</StatLabel>
-                  <StatNumber>
+                  </Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>120 日新高/新低</Stat.Label>
+                  <Stat.ValueText>
                     <Flex gap={2}>
                       {renderHLNumber(highLowData[0]?.high120, 'high')}
                       {renderHLNumber(highLowData[0]?.low120, 'low')}
                     </Flex>
-                  </StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>数据条数</StatLabel>
-                  <StatNumber>{highLowData.length}</StatNumber>
-                </Stat>
+                  </Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>数据条数</Stat.Label>
+                  <Stat.ValueText>{highLowData.length}</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th isNumeric>收盘价</Th>
-                    <Th isNumeric>20 日新高</Th>
-                    <Th isNumeric>20 日新低</Th>
-                    <Th isNumeric>60 日新高</Th>
-                    <Th isNumeric>60 日新低</Th>
-                    <Th isNumeric>120 日新高</Th>
-                    <Th isNumeric>120 日新低</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >收盘价</Table.ColumnHeader>
+                    <Table.ColumnHeader >20 日新高</Table.ColumnHeader>
+                    <Table.ColumnHeader >20 日新低</Table.ColumnHeader>
+                    <Table.ColumnHeader >60 日新高</Table.ColumnHeader>
+                    <Table.ColumnHeader >60 日新低</Table.ColumnHeader>
+                    <Table.ColumnHeader >120 日新高</Table.ColumnHeader>
+                    <Table.ColumnHeader >120 日新低</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {highLowData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td isNumeric>{item.close?.toFixed(2) || '-'}</Td>
-                      <Td isNumeric>{renderHLNumber(item.high20, 'high')}</Td>
-                      <Td isNumeric>{renderHLNumber(item.low20, 'low')}</Td>
-                      <Td isNumeric>{renderHLNumber(item.high60, 'high')}</Td>
-                      <Td isNumeric>{renderHLNumber(item.low60, 'low')}</Td>
-                      <Td isNumeric>{renderHLNumber(item.high120, 'high')}</Td>
-                      <Td isNumeric>{renderHLNumber(item.low120, 'low')}</Td>
-                    </Tr>
+                    <Table.Row key={index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell >{item.close?.toFixed(2) || '-'}</Table.Cell>
+                      <Table.Cell >{renderHLNumber(item.high20, 'high')}</Table.Cell>
+                      <Table.Cell >{renderHLNumber(item.low20, 'low')}</Table.Cell>
+                      <Table.Cell >{renderHLNumber(item.high60, 'high')}</Table.Cell>
+                      <Table.Cell >{renderHLNumber(item.low60, 'low')}</Table.Cell>
+                      <Table.Cell >{renderHLNumber(item.high120, 'high')}</Table.Cell>
+                      <Table.Cell >{renderHLNumber(item.low120, 'low')}</Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {highLowData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -256,99 +228,99 @@ const MarketStatisticsPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
+        </Tabs.Content>
 
         {/* 破净股统计 */}
-        <TabPanel>
+        <Tabs.Content value="创新高_新低统计">
           <Box>
             <Flex mb={4} align="center" gap={4}>
-              <FormControl w="200px">
-                <FormLabel mb={1} fontSize="sm">市场类型</FormLabel>
-                <Select
-                  size="sm"
+              <Field.Root w="200px">
+                <Field.Label mb={1} fontSize="sm">市场类型</Field.Label>
+                <NativeSelect.Root><NativeSelect.Field
+                  
                   value={bnSymbol}
                   onChange={(e) => setBnSymbol(e.target.value)}
                 >
                   {bnSymbols.map((sym) => (
                     <option key={sym.value} value={sym.value}>{sym.label}</option>
                   ))}
-                </Select>
-              </FormControl>
+                </NativeSelect.Field></NativeSelect.Root>
+              </Field.Root>
               
               <Spacer />
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={fetchBelowNetAssetData}
-                isLoading={loading && activeTab === 1}
+                loading={loading && activeTab === "市场情绪"}
               >
                 查询
               </Button>
             </Flex>
             
             {belowNetAssetData.length > 0 && (
-              <SimpleGrid columns={3} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel>最新日期</StatLabel>
-                  <StatNumber>{formatDate(belowNetAssetData[0]?.date)}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>破净股家数</StatLabel>
-                  <StatNumber>{belowNetAssetData[0]?.below_net_asset?.toLocaleString() || '-'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>总公司数</StatLabel>
-                  <StatNumber>{belowNetAssetData[0]?.total_company?.toLocaleString() || '-'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel>破净股比率</StatLabel>
-                  <StatNumber>
+              <SimpleGrid columns={3} gap={4} mb={4}>
+                <Stat.Root>
+                  <Stat.Label>最新日期</Stat.Label>
+                  <Stat.ValueText>{formatDate(belowNetAssetData[0]?.date)}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>破净股家数</Stat.Label>
+                  <Stat.ValueText>{belowNetAssetData[0]?.below_net_asset?.toLocaleString() || '-'}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>总公司数</Stat.Label>
+                  <Stat.ValueText>{belowNetAssetData[0]?.total_company?.toLocaleString() || '-'}</Stat.ValueText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>破净股比率</Stat.Label>
+                  <Stat.ValueText>
                     {belowNetAssetData[0]?.below_net_asset_ratio !== null 
                       ? `${(belowNetAssetData[0]!.below_net_asset_ratio! * 100).toFixed(2)}%` 
                       : '-'}
-                  </StatNumber>
-                  <StatHelpText>
+                  </Stat.ValueText>
+                  <Stat.HelpText>
                     {belowNetAssetData[0]?.below_net_asset_ratio !== null 
                       ? belowNetAssetData[0]!.below_net_asset_ratio! > 0.1 ? '偏高' : '正常'
                       : '-'}
-                  </StatHelpText>
-                </Stat>
-                <Stat>
-                  <StatLabel>数据条数</StatLabel>
-                  <StatNumber>{belowNetAssetData.length}</StatNumber>
-                </Stat>
+                  </Stat.HelpText>
+                </Stat.Root>
+                <Stat.Root>
+                  <Stat.Label>数据条数</Stat.Label>
+                  <Stat.ValueText>{belowNetAssetData.length}</Stat.ValueText>
+                </Stat.Root>
               </SimpleGrid>
             )}
 
-            <TableContainer>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>日期</Th>
-                    <Th isNumeric>破净股家数</Th>
-                    <Th isNumeric>总公司数</Th>
-                    <Th isNumeric>破净股比率</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+            <Box>
+              <Table.Root  size="sm">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>日期</Table.ColumnHeader>
+                    <Table.ColumnHeader >破净股家数</Table.ColumnHeader>
+                    <Table.ColumnHeader >总公司数</Table.ColumnHeader>
+                    <Table.ColumnHeader >破净股比率</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
                   {belowNetAssetData.slice(0, 100).map((item, index) => (
-                    <Tr key={index}>
-                      <Td>{formatDate(item.date)}</Td>
-                      <Td isNumeric>
-                        <Badge colorScheme="red">
+                    <Table.Row key={index}>
+                      <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                      <Table.Cell >
+                        <Badge colorPalette="red">
                           {item.below_net_asset?.toLocaleString() || '-'}
                         </Badge>
-                      </Td>
-                      <Td isNumeric>{item.total_company?.toLocaleString() || '-'}</Td>
-                      <Td isNumeric>
+                      </Table.Cell>
+                      <Table.Cell >{item.total_company?.toLocaleString() || '-'}</Table.Cell>
+                      <Table.Cell >
                         {item.below_net_asset_ratio !== null 
                           ? `${(item.below_net_asset_ratio * 100).toFixed(2)}%` 
                           : '-'}
-                      </Td>
-                    </Tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+                </Table.Body>
+              </Table.Root>
+            </Box>
             
             {belowNetAssetData.length > 100 && (
               <Text mt={2} color="gray.500" fontSize="sm">
@@ -356,8 +328,8 @@ const MarketStatisticsPage: React.FC = () => {
               </Text>
             )}
           </Box>
-        </TabPanel>
-      </TabPanels>
+        </Tabs.Content>
+      </Tabs.ContentGroup>
     </Box>
   );
 };

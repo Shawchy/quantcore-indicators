@@ -66,10 +66,10 @@ class TestAkShareRealtimeData:
         adapter = AkShareAdapter()
         await adapter.initialize()
         
-        with patch('akshare.stock_zh_index_spot_em') as mock_api:
+        with patch('akshare.stock_zh_a_spot') as mock_api:
             mock_api.return_value = pd.DataFrame({
-                '代码': ['000001'],
-                '名称': ['上证指数'],
+                'code': ['000001'],
+                'name': ['平安银行'],
                 '最新价': [3000.0],
                 '涨跌额': [10.0],
                 '涨跌幅': [0.33],
@@ -78,7 +78,8 @@ class TestAkShareRealtimeData:
                 '最高': [3010.0],
                 '最低': [2990.0],
                 '今开': [2995.0],
-                '昨收': [2990.0]
+                '昨收': [2990.0],
+                '换手率': [1.5]
             })
             
             result = await adapter.get_realtime_quote("000001")
@@ -93,7 +94,7 @@ class TestAkShareRealtimeData:
         adapter = AkShareAdapter()
         await adapter.initialize()
         
-        with patch('akshare.stock_zh_index_spot_em') as mock_api:
+        with patch('akshare.stock_zh_a_spot') as mock_api:
             mock_api.side_effect = TimeoutError("Request timeout")
             
             result = await adapter.get_realtime_quote("000001")

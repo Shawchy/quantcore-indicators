@@ -1,21 +1,9 @@
-import {
-  Box,
-  Card,
-  CardBody,
-  CardHeader,
-  Heading,
-  SimpleGrid,
-  Text,
-  VStack,
-  HStack,
-  Badge,
-  Spinner,
-  Flex,
-  useColorModeValue,
-} from '@chakra-ui/react'
+import { Badge, Box, Card, Flex, HStack, Heading, SimpleGrid, Spinner, Text, VStack } from '@chakra-ui/react'
+import { useColorModeValue } from '../components/ui/color-mode'
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import ReactECharts from 'echarts-for-react'
+import EChartsReactCore from 'echarts-for-react/lib/core'
+import echarts from '../lib/echarts'
 import { screenerApi, sectorApi, marketIndexApi } from '../services/api'
 import { INDEX_CODES } from '../constants'
 import { getKlineOption } from '../utils/chartConfig'
@@ -162,7 +150,7 @@ const Dashboard = () => {
   const shIndex = getShIndexRealtime()
 
   return (
-    <VStack spacing={6} align="stretch">
+    <VStack gap={6} align="stretch">
       {/* 标题栏 */}
       <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
         <Box>
@@ -183,7 +171,7 @@ const Dashboard = () => {
       </Flex>
 
       {/* 统计卡片 */}
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={4}>
         <StatCard
           label="市场股票数"
           value={statsLoading ? <Spinner size="sm" /> : (marketStats?.data?.total_stocks || 0)}
@@ -215,52 +203,52 @@ const Dashboard = () => {
       </SimpleGrid>
 
       {/* 大盘走势和实时行情 */}
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
         {/* K 线图 */}
-        <Card bg={cardBg}>
-          <CardHeader pb={2}>
+        <Card.Root bg={cardBg}>
+          <Card.Header pb={2}>
             <Flex justify="space-between" align="center">
               <Heading size="sm" color="light.text">
                 大盘走势（上证指数）
               </Heading>
-              <Badge colorScheme="blue" variant="subtle" fontSize="xs">
+              <Badge colorPalette="blue" variant="subtle" fontSize="xs">
                 30 日 K 线
               </Badge>
             </Flex>
-          </CardHeader>
-          <CardBody pt={2}>
+          </Card.Header>
+          <Card.Body pt={2}>
             {indexLoading ? (
               <Flex justify="center" align="center" h="300px">
                 <Spinner color="brand.500" />
               </Flex>
             ) : (
-              <ReactECharts option={klineChartOption} style={{ height: '320px' }} />
+              <EChartsReactCore echarts={echarts} option={klineChartOption} style={{ height: '320px' }} />
             )}
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
 
         {/* 实时行情 */}
-        <Card bg={cardBg}>
-          <CardHeader pb={2}>
+        <Card.Root bg={cardBg}>
+          <Card.Header pb={2}>
             <Flex justify="space-between" align="center">
               <Heading size="sm" color="light.text">
                 大盘实时行情
               </Heading>
-              <Badge colorScheme="blue" variant="subtle" fontSize="xs">
+              <Badge colorPalette="blue" variant="subtle" fontSize="xs">
                 实时更新
               </Badge>
             </Flex>
-          </CardHeader>
-          <CardBody pt={2}>
+          </Card.Header>
+          <Card.Body pt={2}>
             {realtimeLoading ? (
               <Flex justify="center" align="center" h="300px">
                 <Spinner color="brand.500" />
               </Flex>
             ) : (
-              <VStack spacing={4} align="stretch">
+              <VStack gap={4} align="stretch">
                 {realtimeData?.data?.map((item: any) => (
                   <HStack key={item.code} justify="space-between" p={3} bg="gray.50" borderRadius="md">
-                    <VStack align="start" spacing={1}>
+                    <VStack align="start" gap={1}>
                       <Text fontWeight="bold" fontSize="sm" color="light.text">
                         {item.name}
                       </Text>
@@ -268,7 +256,7 @@ const Dashboard = () => {
                         {item.code}
                       </Text>
                     </VStack>
-                    <VStack align="end" spacing={1}>
+                    <VStack align="end" gap={1}>
                       <Text fontSize="lg" fontWeight="bold" color={getMarketColor(item.change)}>
                         {item.price?.toFixed(2)}
                       </Text>
@@ -280,50 +268,50 @@ const Dashboard = () => {
                 ))}
               </VStack>
             )}
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       </SimpleGrid>
 
       {/* 行业分布和板块排行 */}
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
         {/* 行业分布 */}
-        <Card bg={cardBg}>
-          <CardHeader pb={2}>
+        <Card.Root bg={cardBg}>
+          <Card.Header pb={2}>
             <Heading size="sm" color="light.text">
               行业分布
             </Heading>
-          </CardHeader>
-          <CardBody pt={2}>
-            <ReactECharts option={industryPieOption} style={{ height: '300px' }} />
-          </CardBody>
-        </Card>
+          </Card.Header>
+          <Card.Body pt={2}>
+            <EChartsReactCore echarts={echarts} option={industryPieOption} style={{ height: '300px' }} />
+          </Card.Body>
+        </Card.Root>
 
         {/* 板块排行 */}
-        <Card bg={cardBg}>
-          <CardHeader pb={2}>
+        <Card.Root bg={cardBg}>
+          <Card.Header pb={2}>
             <Flex justify="space-between" align="center">
               <Heading size="sm" color="light.text">
                 板块排行 TOP10
               </Heading>
-              <Badge colorScheme="blue" variant="subtle" fontSize="xs">
+              <Badge colorPalette="blue" variant="subtle" fontSize="xs">
                 行业板块
               </Badge>
             </Flex>
-          </CardHeader>
-          <CardBody pt={2}>
+          </Card.Header>
+          <Card.Body pt={2}>
             {sectorLoading ? (
               <Flex justify="center" align="center" h="300px">
                 <Spinner color="brand.500" />
               </Flex>
             ) : (
-              <VStack spacing={2} align="stretch">
+              <VStack gap={2} align="stretch">
                 {sectorRanking?.data?.slice(0, 10).map((sector: any, index: number) => (
-                  <HStack key={item.code || item.name || index} justify="space-between" p={2} borderRadius="md" bg={index % 2 === 0 ? 'gray.50' : 'white'} _dark={{ bg: index % 2 === 0 ? 'gray.700' : 'gray.800' }}>
-                    <HStack spacing={3}>
+                  <HStack key={sector.code || sector.name || index} justify="space-between" p={2} borderRadius="md" bg={index % 2 === 0 ? 'gray.50' : 'white'} _dark={{ bg: index % 2 === 0 ? 'gray.700' : 'gray.800' }}>
+                    <HStack gap={3}>
                       <RankBadge rank={index + 1} />
                       <Text fontWeight="medium" fontSize="sm">{sector.name}</Text>
                     </HStack>
-                    <HStack spacing={4}>
+                    <HStack gap={4}>
                       <Text fontSize="sm" color={getMarketColor(sector.change_pct)}>
                         {sector.change_pct >= 0 ? '+' : ''}{(sector.change_pct || 0).toFixed(2)}%
                       </Text>
@@ -332,12 +320,12 @@ const Dashboard = () => {
                 ))}
               </VStack>
             )}
-          </CardBody>
-        </Card>
+          </Card.Body>
+        </Card.Root>
       </SimpleGrid>
 
       {/* 大盘资金流向 */}
-      <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={4}>
+      <SimpleGrid columns={{ base: 1, lg: 3 }} gap={4}>
         <MarketMoneyflowCard />
       </SimpleGrid>
     </VStack>

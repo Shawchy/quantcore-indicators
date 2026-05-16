@@ -4,8 +4,8 @@
  */
 import React, { useState, useMemo } from 'react'
 import { Badge, Box, Button, Dialog, Flex, HStack, Icon, NativeSelect, Separator, SimpleGrid, Spinner, Stat, Table, Text, VStack, useDisclosure } from '@chakra-ui/react'
-import { toaster } from './ui/toaster'
-import { KLineChart } from './KLineChart'
+import { toaster } from '../components/ui/toaster'
+import { KLineChart } from '../components/KLineChart'
 import { FiDownload } from 'react-icons/fi'
 
 interface KLineData {

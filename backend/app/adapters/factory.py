@@ -16,7 +16,8 @@ from app.models.schemas import FundInfo
 from .akshare_adapter import AkShareAdapter
 from .baostock_adapter import BaostockAdapter
 from .yfinance_adapter import YFinanceAdapter
-from .efinance_adapter import EFinanceAdapter
+# from .efinance_adapter import EFinanceAdapter  # 临时禁用
+EFinanceAdapter = None  # 占位符
 from .tickflow_adapter import TickFlowAdapter
 from app.config import settings
 

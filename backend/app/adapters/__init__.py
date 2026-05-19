@@ -9,7 +9,8 @@ from .base import (
 from .akshare_adapter import AkShareAdapter
 from .baostock_adapter import BaostockAdapter
 from .yfinance_adapter import YFinanceAdapter
-from .efinance_adapter import EFinanceAdapter
+# from .efinance_adapter import EFinanceAdapter  # 临时禁用，文件有语法错误
+EFinanceAdapter = None  # 占位符
 from .tickflow_adapter import TickFlowAdapter
 from .playwright_adapter import PlaywrightAdapter
 from .enhanced_playwright_adapter import EnhancedPlaywrightAdapter

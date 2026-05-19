@@ -76,8 +76,8 @@ async def get_data_source_status(
 
 @router.post("/mode", response_model=ResponseModel[Dict[str, Any]])
 async def set_data_source_mode(
-    mode: str = Query(..., description="模式：online-在线，offline-离线"),
-    current_user: CurrentAdminUser
+    current_user: CurrentAdminUser,
+    mode: str = Query(..., description="模式：online-在线，offline-离线")
 ):
     """
     设置数据源模式
@@ -107,9 +107,9 @@ async def set_data_source_mode(
 
 @router.post("/toggle", response_model=ResponseModel[Dict[str, Any]])
 async def toggle_data_source(
+    current_user: CurrentAdminUser,
     source: str = Query(..., description="数据源名称：tushare, akshare, baostock, yfinance"),
-    enabled: bool = Query(..., description="是否启用"),
-    current_user: CurrentAdminUser
+    enabled: bool = Query(..., description="是否启用")
 ):
     """
     单独启用/禁用某个数据源

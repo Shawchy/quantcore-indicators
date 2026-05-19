@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator, computed_field
+from pydantic import field_validator, computed_field, Field
 from typing import Optional
 from functools import lru_cache
 

@@ -244,7 +244,7 @@ class DataLifecycleManager:
                         try:
                             df = pd.read_parquet(parquet_file)
                             deleted_count += len(df)
-                        except:
+                        except Exception:
                             pass
                     
                     # 删除整个年份目录

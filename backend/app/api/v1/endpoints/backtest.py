@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Query, Body, BackgroundTasks, Depends
 from app.models.schemas import ResponseModel, PagedResponseModel, PageInfo
 from app.api.deps import CurrentUser
-from typing import Optional
+from typing import Optional, Dict, Any, Literal
+from pydantic import BaseModel, Field, field_validator
 import uuid
 import json
 from datetime import datetime
@@ -14,6 +15,49 @@ from app.adapters import data_source_manager
 from app.core.backtest import BacktestEngine
 
 router = APIRouter()
+
+
+class StrategyParams(BaseModel):
+    short_period: int = Field(default=5, ge=2, le=120)
+    long_period: int = Field(default=20, ge=5, le=250)
+    rsi_period: int = Field(default=14, ge=2, le=100)
+    oversold: float = Field(default=30, ge=5, le=50)
+    overbought: float = Field(default=70, ge=50, le=95)
+    fast_period: int = Field(default=12, ge=2, le=60)
+    slow_period: int = Field(default=26, ge=5, le=120)
+    signal_period: int = Field(default=9, ge=2, le=50)
+    bollinger_period: int = Field(default=20, ge=5, le=100)
+    std_dev: float = Field(default=2.0, ge=0.5, le=5.0)
+
+
+class BacktestConfig(BaseModel):
+    code: str = Field(default="000001", pattern=r"^\d{6}$")
+    start_date: str = Field(default="", pattern=r"^\d{4}-\d{2}-\d{2}$|^$")
+    end_date: str = Field(default="", pattern=r"^\d{4}-\d{2}-\d{2}$|^$")
+    strategy_type: Literal["ma_cross", "macd_cross", "rsi", "bollinger"] = "ma_cross"
+    strategy_params: StrategyParams = Field(default_factory=StrategyParams)
+    initial_capital: float = Field(default=1000000, gt=0, le=1e9)
+    strategy_id: str = Field(default="")
+    
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def validate_date_format(cls, v: str) -> str:
+        if v:
+            try:
+                datetime.strptime(v, "%Y-%m-%d")
+            except ValueError:
+                raise ValueError("日期格式必须为 YYYY-MM-DD")
+        return v
+    
+    @field_validator("end_date")
+    @classmethod
+    def validate_date_range(cls, v: str, info) -> str:
+        if v and info.data.get("start_date"):
+            start = datetime.strptime(info.data["start_date"], "%Y-%m-%d")
+            end = datetime.strptime(v, "%Y-%m-%d")
+            if start >= end:
+                raise ValueError("开始日期必须早于结束日期")
+        return v
 
 
 async def run_backtest_task(
@@ -88,6 +132,10 @@ async def run_backtest_task(
                 record.annual_return = result.annual_return
                 record.max_drawdown = result.max_drawdown
                 record.sharpe_ratio = result.sharpe_ratio
+                record.sortino_ratio = result.sortino_ratio
+                record.calmar_ratio = result.calmar_ratio
+                record.win_rate = result.win_rate
+                record.max_consecutive_losses = result.max_consecutive_losses
                 record.status = "completed"
                 await session.commit()
             
@@ -124,48 +172,22 @@ async def run_backtest_task(
 async def run_backtest(
     background_tasks: BackgroundTasks,
     current_user: CurrentUser,
-    backtest_config: dict = Body(...),
+    backtest_config: BacktestConfig = Body(...),
 ):
     try:
-        # 参数验证
-        if not backtest_config:
-            return ResponseModel(success=False, code="INVALID_PARAMS", message="回测配置不能为空")
-        
-        strategy_type = backtest_config.get("strategy_type", "ma_cross")
-        strategy_params = backtest_config.get("strategy_params", {
-            "short_period": 5,
-            "long_period": 20
-        })
-        code = backtest_config.get("code", "000001")
-        start_date = backtest_config.get("start_date", "")
-        end_date = backtest_config.get("end_date", "")
-        initial_capital = backtest_config.get("initial_capital", settings.BACKTEST_INITIAL_CAPITAL)
-        
-        # 验证股票代码
-        if not code or not isinstance(code, str):
-            return ResponseModel(success=False, code="INVALID_PARAMS", message="股票代码无效")
-        
-        # 验证日期
-        if start_date and end_date:
-            try:
-                from datetime import datetime
-                start = datetime.strptime(start_date, "%Y-%m-%d")
-                end = datetime.strptime(end_date, "%Y-%m-%d")
-                if start >= end:
-                    return ResponseModel(success=False, code="INVALID_PARAMS", message="开始日期必须早于结束日期")
-            except ValueError:
-                return ResponseModel(success=False, code="INVALID_PARAMS", message="日期格式错误，应为 YYYY-MM-DD")
-        
-        # 验证初始资金
-        if initial_capital <= 0:
-            return ResponseModel(success=False, code="INVALID_PARAMS", message="初始资金必须大于 0")
+        strategy_type = backtest_config.strategy_type
+        strategy_params = backtest_config.strategy_params.model_dump()
+        code = backtest_config.code
+        start_date = backtest_config.start_date
+        end_date = backtest_config.end_date
+        initial_capital = backtest_config.initial_capital
         
         backtest_id = f"bt_{uuid.uuid4().hex[:8]}"
         
         async with get_session() as session:
             record = BacktestRecord(
                 backtest_id=backtest_id,
-                strategy_id=backtest_config.get("strategy_id", ""),
+                strategy_id=backtest_config.strategy_id,
                 start_date=start_date,
                 end_date=end_date,
                 initial_capital=initial_capital,
@@ -220,6 +242,10 @@ async def get_backtest_result(backtest_id: str, current_user: CurrentUser):
             "annual_return": record.annual_return,
             "max_drawdown": record.max_drawdown,
             "sharpe_ratio": record.sharpe_ratio,
+            "sortino_ratio": getattr(record, 'sortino_ratio', 0),
+            "calmar_ratio": getattr(record, 'calmar_ratio', 0),
+            "win_rate": getattr(record, 'win_rate', 0),
+            "max_consecutive_losses": getattr(record, 'max_consecutive_losses', 0),
             "status": record.status,
             "created_at": record.created_at.strftime("%Y-%m-%d %H:%M:%S")
         })

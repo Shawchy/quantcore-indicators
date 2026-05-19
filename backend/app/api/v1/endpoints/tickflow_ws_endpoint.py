@@ -145,9 +145,6 @@ class ConnectionManager:
             return False
     
     async def broadcast_quotes(self, quotes_data: Dict[str, Any]):
-        """广播行情数据给所有相关订阅者（批量优化）"""
-        
-        # 按客户端分组，合并多个标的数据
         client_messages: Dict[str, Dict] = {}
         
         for code, quote_data in quotes_data.items():
@@ -158,24 +155,34 @@ class ConnectionManager:
                     client_messages[client_id] = {
                         "op": "quotes",
                         "data": {},
-                        "timestamp": datetime.now().isoformat()
+                        "ts": int(datetime.now().timestamp() * 1000)
                     }
-                # 合并到同一个消息的 data 中
                 client_messages[client_id]["data"][code] = quote_data
         
-        # 每个客户端只发送一次（批量）
         sent_count = 0
+        stale_clients = []
+        
         for client_id, message in client_messages.items():
             try:
                 conn = self._connections.get(client_id)
-                if conn:
-                    # 只序列化一次
-                    json_msg = json.dumps(message, ensure_ascii=False)
-                    await conn["websocket"].send_text(json_msg)
-                    conn["last_activity"] = datetime.now()
-                    sent_count += 1
+                if not conn:
+                    continue
+                
+                idle_seconds = (datetime.now() - conn["last_activity"]).total_seconds()
+                if idle_seconds > 300:
+                    stale_clients.append(client_id)
+                    continue
+                
+                json_msg = json.dumps(message, ensure_ascii=False, separators=(',', ':'))
+                await conn["websocket"].send_text(json_msg)
+                conn["last_activity"] = datetime.now()
+                sent_count += 1
             except Exception as e:
                 logger.debug(f"广播失败 ({client_id}): {e}")
+                stale_clients.append(client_id)
+        
+        for client_id in stale_clients:
+            self.disconnect(client_id)
         
         return sent_count
     

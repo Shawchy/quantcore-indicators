@@ -197,7 +197,7 @@ class TLSFingerprintClient:
         if self._session:
             try:
                 self._session.close()
-            except:
+            except Exception:
                 pass
     
     @property

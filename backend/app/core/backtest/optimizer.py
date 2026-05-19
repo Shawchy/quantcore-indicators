@@ -63,10 +63,10 @@ class ParameterOptimizer:
                 param_dict = dict(zip(param_names, params))
                 try:
                     score = objective_fn(param_dict)
-                    return -score if score is not None else 0
+                    return -score if score is not None else 1e6
                 except Exception as e:
                     logger.warning(f"Objective function failed: {e}")
-                    return 0
+                    return 1e6
             
             result = gp_minimize(
                 wrapped_objective,
@@ -191,7 +191,7 @@ class StrategyOptimizer:
     def __init__(self):
         self.optimizer = ParameterOptimizer()
     
-    def optimize_strategy(
+    async def optimize_strategy(
         self,
         code: str,
         start_date: str,
@@ -202,31 +202,18 @@ class StrategyOptimizer:
         n_iterations: int = 20,
         method: str = "bayesian"
     ) -> OptimizationResult:
-        """
-        优化策略参数（按需加载数据）
-        
-        优化策略：
-        1. 只拉取指定股票的 K 线数据
-        2. 数据保存到数据库后，下次优化直接使用
-        3. 不会批量拉取多只股票数据
-        """
         from app.core.backtest import BacktestEngine
         from app.adapters import data_source_manager
         from app.storage.storage_service import storage_service
         import pandas as pd
-        import asyncio
         
-        # 按需拉取单只股票数据
         logger.info(f"开始优化 {code} 的策略参数，日期范围：{start_date} - {end_date}")
         
-        klines = asyncio.run(
-            data_source_manager.get_kline(code, start_date, end_date, "qfq")
-        )
+        klines = await data_source_manager.get_kline(code, start_date, end_date, "qfq")
         
-        # 持久化保存到数据库（使用统一的 storage_service）
         if klines:
             try:
-                asyncio.run(storage_service.save_kline(code, klines, "qfq"))
+                await storage_service.save_kline(code, klines, "qfq")
                 logger.info(f"已保存 {len(klines)} 条 K 线数据：{code}")
             except Exception as e:
                 logger.warning(f"保存 K 线数据失败：{e}")
@@ -280,10 +267,14 @@ class StrategyOptimizer:
                 logger.warning(f"Backtest failed: {e}")
                 return 0
         
-        return self.optimizer.optimize(
-            objective_fn=objective_fn,
-            param_space=param_ranges,
-            method=method
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.optimizer.optimize(
+                objective_fn=objective_fn,
+                param_space=param_ranges,
+                method=method
+            )
         )
 
 

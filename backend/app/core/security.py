@@ -96,13 +96,11 @@ def decode_token(token: str) -> Optional[TokenData]:
 
 
 def verify_access_token(token: str) -> Optional[TokenData]:
-    """验证访问令牌"""
     token_data = decode_token(token)
     
     if token_data is None:
         return None
     
-    # 检查令牌类型
     if token_data.type != "access":
         logger.warning("令牌类型错误")
         return None
@@ -111,16 +109,46 @@ def verify_access_token(token: str) -> Optional[TokenData]:
 
 
 def verify_refresh_token(token: str) -> Optional[TokenData]:
-    """验证刷新令牌"""
     token_data = decode_token(token)
     
     if token_data is None:
         return None
     
-    # 检查令牌类型
     if token_data.type != "refresh":
         logger.warning("令牌类型错误")
         return None
+    
+    return token_data
+
+
+async def verify_access_token_with_blacklist(token: str) -> Optional[TokenData]:
+    token_data = verify_access_token(token)
+    if token_data is None:
+        return None
+    
+    try:
+        from app.core.token_blacklist import token_blacklist
+        if await token_blacklist.is_revoked(token):
+            logger.warning("访问令牌已被撤销")
+            return None
+    except Exception as e:
+        logger.warning(f"令牌黑名单检查失败，允许通过：{e}")
+    
+    return token_data
+
+
+async def verify_refresh_token_with_blacklist(token: str) -> Optional[TokenData]:
+    token_data = verify_refresh_token(token)
+    if token_data is None:
+        return None
+    
+    try:
+        from app.core.token_blacklist import token_blacklist
+        if await token_blacklist.is_revoked(token):
+            logger.warning("刷新令牌已被撤销")
+            return None
+    except Exception as e:
+        logger.warning(f"令牌黑名单检查失败，允许通过：{e}")
     
     return token_data
 
@@ -229,8 +257,7 @@ async def login_for_access_token(username: str, password: str) -> Token:
 
 
 async def refresh_access_token(refresh_token: str) -> Token:
-    """刷新访问令牌"""
-    token_data = verify_refresh_token(refresh_token)
+    token_data = await verify_refresh_token_with_blacklist(refresh_token)
     
     if not token_data:
         raise ValueError("刷新令牌无效或已过期")

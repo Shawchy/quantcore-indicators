@@ -299,7 +299,7 @@ class CredentialInjector:
                     try:
                         os.remove(manual_cookie_file)
                         logger.info(f"已删除过期的手动 Cookie 文件：{manual_cookie_file}")
-                    except:
+                    except OSError:
                         pass
                     
         except FileNotFoundError:

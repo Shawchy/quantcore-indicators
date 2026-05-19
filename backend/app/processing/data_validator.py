@@ -8,19 +8,15 @@ from loguru import logger
 
 
 class DataValidator:
-    """
-    数据校验器
-    
-    校验规则：
-    - 必填字段检查
-    - 数据类型验证
-    - 数值范围合理性检查
-    - 逻辑一致性校验
-    """
     
     KLINE_REQUIRED_FIELDS = ['code', 'date', 'open', 'high', 'low', 'close', 'volume']
     KLINE_NUMERIC_FIELDS = ['open', 'high', 'low', 'close', 'volume']
     KLINE_OPTIONAL_FIELDS = ['amount', 'turnover_rate', 'pre_close']
+    
+    PRICE_LIMIT_DEFAULT = 0.10
+    PRICE_LIMIT_ST = 0.05
+    PRICE_LIMIT_KC = 0.20
+    PRICE_LIMIT_CY = 0.20
     
     @staticmethod
     def validate_kline_data(klines: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str]]:
@@ -29,6 +25,7 @@ class DataValidator:
         
         valid_data = []
         errors = []
+        prev_close_map = {}
         
         for i, k in enumerate(klines):
             try:
@@ -38,8 +35,13 @@ class DataValidator:
                 
                 DataValidator._validate_numeric_fields(k)
                 DataValidator._validate_logic_consistency(k)
+                DataValidator._validate_price_limit(k, prev_close_map)
                 
                 valid_data.append(k)
+                
+                code = k.get('code', '')
+                if code:
+                    prev_close_map[code] = k.get('close', 0)
                 
             except ValueError as e:
                 error_msg = f"第{i}条: {str(e)}"
@@ -105,6 +107,31 @@ class DataValidator:
                 raise ValueError(f"收盘价({close})不在高低价范围[{low}, {high}]内")
     
     @staticmethod
+    def _validate_price_limit(k: Dict[str, Any], prev_close_map: Dict[str, float]):
+        code = k.get('code', '')
+        close = k.get('close', 0)
+        pre_close = k.get('pre_close')
+        
+        if not pre_close and code in prev_close_map:
+            pre_close = prev_close_map[code]
+        
+        if not pre_close or pre_close <= 0 or close <= 0:
+            return
+        
+        limit_ratio = DataValidator.PRICE_LIMIT_DEFAULT
+        if code.startswith('688') or code.startswith('30'):
+            limit_ratio = DataValidator.PRICE_LIMIT_KC
+        elif code.startswith('8') or code.startswith('4'):
+            limit_ratio = DataValidator.PRICE_LIMIT_DEFAULT
+        
+        change_pct = abs(close - pre_close) / pre_close
+        
+        if change_pct > limit_ratio * 1.02:
+            raise ValueError(
+                f"涨跌幅{change_pct:.2%}超过涨跌停限制{limit_ratio:.0%}"
+            )
+    
+    @staticmethod
     def validate_stock_code(code: str) -> bool:
         if not code or not isinstance(code, str):
             return False
@@ -137,6 +164,34 @@ class DataValidator:
                 continue
         
         return False
+    
+    @staticmethod
+    def validate_kline_continuity(klines: List[Dict[str, Any]], max_gap_days: int = 10) -> List[str]:
+        if len(klines) < 2:
+            return []
+        
+        warnings = []
+        from datetime import datetime, timedelta
+        
+        for i in range(1, len(klines)):
+            try:
+                curr_date = klines[i].get('date', '')
+                prev_date = klines[i-1].get('date', '')
+                
+                if not curr_date or not prev_date:
+                    continue
+                
+                fmt = '%Y-%m-%d' if '-' in curr_date else '%Y%m%d'
+                curr = datetime.strptime(curr_date, fmt)
+                prev = datetime.strptime(prev_date, fmt)
+                
+                gap = (curr - prev).days
+                if gap > max_gap_days:
+                    warnings.append(f"日期间隔过大: {prev_date} -> {curr_date} ({gap}天)")
+            except (ValueError, TypeError):
+                continue
+        
+        return warnings
 
 
 data_validator = DataValidator()

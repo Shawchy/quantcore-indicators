@@ -92,8 +92,16 @@ class FactorEngine:
         """
         start_time = time.time()
         
-        # 检查缓存
-        cache_key = f"{factor_name}_{hash(str(data.shape))}"
+        import hashlib
+        try:
+            import pandas as pd
+            content_hash = hashlib.md5(
+                pd.util.hash_pandas_object(data, index=True).values.tobytes()
+            ).hexdigest()[:12]
+        except Exception:
+            content_hash = hashlib.md5(str(data.shape).encode()).hexdigest()[:12]
+        
+        cache_key = f"{factor_name}_{content_hash}"
         if use_cache and cache_key in self._cache:
             self._stats["cache_hits"] += 1
             return self._cache[cache_key]
@@ -191,27 +199,28 @@ class FactorEngine:
         factor_names: List[str],
         **kwargs
     ) -> Dict[str, pd.Series]:
-        """并行计算因子"""
         try:
             import ray
             
             if not ray.is_initialized():
                 ray.init(ignore_reinit_error=True)
             
+            data_ref = ray.put(data)
+            
             @ray.remote
-            def calc_remote(engine_state, name, data_shape):
-                calculator = engine_state.get(name)
+            def calc_remote(name, data_ref, registry_state_key):
+                from ..engine.registry import get_registry
+                registry = get_registry()
+                registry.initialize()
+                calculator = registry.get(name)
                 if calculator:
-                    result = calculator.process(data)
+                    local_data = ray.get(data_ref)
+                    result = calculator.process(local_data)
                     return name, result.values
                 return name, None
             
             futures = [
-                calc_remote.remote(
-                    {name: self.registry.get(name) for name in factor_names},
-                    name,
-                    data.shape
-                )
+                calc_remote.remote(name, data_ref, name)
                 for name in factor_names
             ]
             

@@ -2455,7 +2455,7 @@ class EFinanceAdapter(BaseDataAdapter):
                             return f"{int(num)}"
                         else:
                             return '不变'
-                    except:
+                    except (ValueError, TypeError):
                         return value_str
                 except Exception:
                     return '未知'

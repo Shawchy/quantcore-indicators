@@ -3,6 +3,34 @@ import numpy as np
 from typing import Optional, List, Dict, Any
 from loguru import logger
 
+_CN_PRICE_LIMIT = {
+    'default': 0.10,
+    'st': 0.05,
+    'kc': 0.20,
+    'cy': 0.20,
+    'bj': 0.30,
+}
+
+
+def _get_trading_days(start: pd.Timestamp, end: pd.Timestamp) -> pd.DatetimeIndex:
+    try:
+        from chinese_calendar import is_workday
+        all_days = pd.date_range(start=start, end=end, freq="B")
+        trading_days = all_days[[is_workday(d) for d in all_days]]
+        return trading_days
+    except ImportError:
+        pass
+
+    try:
+        import exchange_calendars as xcals
+        xshg = xcals.get_calendar("XSHG")
+        sessions = xshg.sessions_in_range(start, end)
+        return sessions
+    except ImportError:
+        pass
+
+    return pd.bdate_range(start=start, end=end)
+
 
 class DataCleaner:
     @staticmethod
@@ -53,7 +81,9 @@ class DataCleaner:
     def remove_outliers(
         df: pd.DataFrame,
         columns: List[str] = None,
-        n_std: float = 3.0
+        n_std: float = 3.0,
+        use_price_limit: bool = True,
+        price_limit: float = 0.10
     ) -> pd.DataFrame:
         if df.empty:
             return df
@@ -62,14 +92,40 @@ class DataCleaner:
             columns = ["open", "high", "low", "close"]
         
         df = df.copy()
-        for col in columns:
-            if col in df.columns:
-                mean = df[col].mean()
-                std = df[col].std()
-                df = df[(df[col] >= mean - n_std * std) & 
-                        (df[col] <= mean + n_std * std)]
         
-        return df.reset_index(drop=True)
+        if use_price_limit and "close" in df.columns and "open" in df.columns:
+            prev_close = df["close"].shift(1)
+            valid_mask = pd.Series(True, index=df.index)
+            
+            for idx in df.index:
+                if pd.isna(prev_close.iloc[idx if isinstance(idx, int) else 0]):
+                    continue
+                pc = prev_close.loc[idx]
+                if pc <= 0:
+                    continue
+                
+                upper = pc * (1 + price_limit)
+                lower = pc * (1 - price_limit)
+                
+                for col in ["open", "high", "low", "close"]:
+                    if col in df.columns:
+                        val = df.loc[idx, col]
+                        if val > upper * 1.01 or val < lower * 0.99:
+                            valid_mask.loc[idx] = False
+                            break
+            
+            df = df[valid_mask].reset_index(drop=True)
+        else:
+            for col in columns:
+                if col in df.columns:
+                    median = df[col].median()
+                    mad = (df[col] - median).abs().median() * 1.4826
+                    if mad > 0:
+                        df = df[((df[col] - median) / mad).abs() <= n_std * 1.5]
+            
+            df = df.reset_index(drop=True)
+        
+        return df
     
     @staticmethod
     def fill_missing_dates(df: pd.DataFrame) -> pd.DataFrame:
@@ -83,12 +139,19 @@ class DataCleaner:
         except Exception:
             df["date"] = pd.to_datetime(df["date"], errors='coerce')
         
+        df = df.dropna(subset=["date"])
         df = df.set_index("date")
         
-        date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq="D")
-        df = df.reindex(date_range)
+        trading_days = _get_trading_days(df.index.min(), df.index.max())
         
-        df = df.ffill().bfill()
+        existing_dates = set(df.index.normalize())
+        missing_dates = [d for d in trading_days if d.normalize() not in existing_dates]
+        
+        if missing_dates:
+            missing_df = pd.DataFrame(index=missing_dates)
+            df = pd.concat([df, missing_df]).sort_index()
+        
+        df = df.ffill()
         df = df.reset_index().rename(columns={"index": "date"})
         
         return df
@@ -157,8 +220,6 @@ class PriceAdjuster:
         
         for col in ["open", "high", "low", "close"]:
             df[col] = df[col] * factor
-        
-        df["volume"] = df["volume"] / factor
         
         return df
     

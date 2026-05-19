@@ -1,6 +1,7 @@
 import sys
 import os
 import warnings
+import time
 from pathlib import Path
 
 from contextlib import asynccontextmanager
@@ -10,26 +11,48 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
-# 设置 pandas 环境变量以消除 pandas_ta 的警告
+try:
+    import orjson
+    _HAS_ORJSON = True
+except ImportError:
+    _HAS_ORJSON = False
+
+try:
+    from starlette.middleware.gzip import GZipMiddleware
+    _HAS_GZIP = True
+except ImportError:
+    _HAS_GZIP = False
+
 os.environ['PANDAS_MODE'] = 'copy_on_write'
 
-# 过滤 pandas_ta 的弃用警告
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas_ta')
 warnings.filterwarnings('ignore', category=UserWarning, message='.*copy_on_write.*')
 warnings.filterwarnings('ignore', category=Warning, message='.*Pandas4Warning.*')
 
-# 临时重定向 stderr 以过滤 pandas_ta 的警告
+import contextlib
 import io
-_old_stderr = sys.stderr
-sys.stderr = io.StringIO()
 
-from app.config import settings
-from app.api.v1 import api_router
-from app.core.exceptions import QuantException
-from app.middleware.performance import PerformanceMiddleware
+with contextlib.redirect_stderr(io.StringIO()):
+    from app.config import settings
+    from app.api.v1 import api_router
+    from app.core.exceptions import QuantException
+    from app.middleware.performance import PerformanceMiddleware
+    from app.middleware.request_dedup import RequestDedupMiddleware
 
-# 恢复 stderr
-sys.stderr = _old_stderr
+_startup_time = time.time()
+
+
+def _get_memory_usage() -> float:
+    try:
+        import psutil
+        process = psutil.Process()
+        return round(process.memory_info().rss / 1024 / 1024, 1)
+    except ImportError:
+        try:
+            import resource
+            return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+        except Exception:
+            return 0.0
 
 
 def setup_logging():
@@ -47,12 +70,22 @@ def setup_logging():
         return True
     
     logger.remove()
-    logger.add(
-        sys.stdout,
-        level=settings.LOG_LEVEL,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-        filter=pandas_warning_filter
-    )
+    
+    if settings.ENV == "production":
+        logger.add(
+            sys.stdout,
+            level=settings.LOG_LEVEL,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+            serialize=True,
+            filter=pandas_warning_filter
+        )
+    else:
+        logger.add(
+            sys.stdout,
+            level=settings.LOG_LEVEL,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+            filter=pandas_warning_filter
+        )
     
     try:
         logger.add(
@@ -62,7 +95,8 @@ def setup_logging():
             level=settings.LOG_LEVEL,
             format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
             filter=pandas_warning_filter,
-            enqueue=True
+            enqueue=True,
+            serialize=settings.ENV == "production"
         )
     except (FileNotFoundError, OSError) as e:
         logger.warning(f"无法创建日志文件 {settings.LOG_FILE}: {e}，仅使用控制台日志")
@@ -70,132 +104,93 @@ def setup_logging():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    # 启动事件
     setup_logging()
     logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 启动中...")
-    
+
+    _bg_tasks = []
+
     from app.storage.sqlite import init_database
     await init_database()
     logger.info("数据库初始化完成")
-    
+
     from app.services.trading_calendar import trading_calendar
     await trading_calendar.initialize()
     logger.info("交易日历服务初始化完成")
-    
-    # 初始化数据源（仅初始化，不预加载数据）
+
     from app.adapters import data_source_manager
     try:
         await data_source_manager.initialize()
         logger.info(f"数据源初始化完成，默认数据源：{data_source_manager._default_source}")
     except Exception as e:
         logger.error(f"数据源初始化失败：{e}")
-    
-    # 数据加载器已初始化为按需模式（不自动预加载）
-    logger.info("数据加载模式：按需加载（用户请求时才拉取数据）")
-    
-    # 缓存预热（已禁用，改为按需加载）
-    # try:
-    #     from app.storage.cache_optimizer import cache_optimizer
-    #     
-    #     # 定义热门股票（沪深龙头股）
-    #     HOT_STOCKS = [
-    #         "600000",  # 浦发银行
-    #         "600036",  # 招商银行
-    #         "000001",  # 平安银行
-    #         "601318",  # 中国平安
-    #         "600519",  # 贵州茅台
-    #         "000858",  # 五粮液
-    #         "601398",  # 工商银行
-    #         "600030",  # 中信证券
-    #         "000333",  # 美的集团
-    #         "601888",  # 中国中免
-    #     ]
-    #     
-    #     # 定义热门板块
-    #     HOT_SECTORS = [
-    #         "industry_银行",
-    #         "industry_证券",
-    #         "industry_保险",
-    #         "industry_房地产",
-    #         "industry_食品饮料",
-    #         "industry_医药生物",
-    #         "industry_电子",
-    #         "industry_计算机",
-    #     ]
-    #     
-    #     # 后台异步预热，不阻塞启动
-    #     async def warmup_task():
-    #         try:
-    #             logger.info("开始缓存预热...")
-    #             
-    #             # 预热热门股票 K 线（最近 90 天）
-    #             logger.info(f"预热热门股票 K 线：{len(HOT_STOCKS)}只")
-    #             await cache_optimizer.warmup_cache("kline", HOT_STOCKS)
-    #             
-    #             # 预热热门板块成分股
-    #             logger.info(f"预热热门板块：{len(HOT_SECTORS)}个")
-    #             await cache_optimizer.warmup_cache("sector", HOT_SECTORS)
-    #             
-    #             logger.info("缓存预热完成")
-    #             
-    #         except Exception as e:
-    #             logger.warning(f"缓存预热失败：{e}")
-    #     
-    #     # 启动后台预热任务
-    #     import asyncio
-    #     asyncio.create_task(warmup_task())
-    #     logger.info("缓存预热任务已启动（后台运行）")
-    #     
-    # except Exception as e:
-    #     logger.warning(f"缓存预热初始化失败：{e}")
-    
-    # 初始化中间件（限流器、断路器）
+
     from app.middleware import init_middleware
     init_middleware()
     logger.info("中间件初始化完成")
-    
-    # 启动定期性能报告任务
+
     import asyncio
     from app.middleware.performance import periodic_performance_report
-    asyncio.create_task(periodic_performance_report())
+    _bg_tasks.append(asyncio.create_task(periodic_performance_report()))
     logger.info("性能监控已启动")
-    
-    # 初始化本地数据库服务
+
+    from app.middleware.request_dedup import dedup_cleanup_task
+    _bg_tasks.append(asyncio.create_task(dedup_cleanup_task()))
+    logger.info("请求去重清理任务已启动")
+
     from app.services.local_database import local_db_service
     await local_db_service.initialize()
     logger.info("本地数据库服务已启动")
-    
-    # 启动数据同步定时任务
+
     from app.services.data_sync_scheduler import data_sync_scheduler
     await data_sync_scheduler.start()
     logger.info("数据同步定时任务已启动")
-    
-    # 启动生命周期管理定时任务
+
     from app.tasks.lifecycle_tasks import start_lifecycle_tasks
     start_lifecycle_tasks()
-    
-    # 启动备份定时任务
+
     from app.tasks.backup_tasks import start_backup_tasks
     start_backup_tasks()
-    
+
     Path(settings.SQLITE_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.PARQUET_DIR).mkdir(parents=True, exist_ok=True)
     logger.info("数据目录初始化完成")
-    
-    yield  # 应用运行期间
-    
-    # 关闭事件
+
+    async def _warmup_background():
+        try:
+            await asyncio.sleep(5)
+            from app.services.cache_warmup import cache_warmup_service
+            await cache_warmup_service.warmup()
+        except Exception as e:
+            logger.warning(f"缓存预热失败：{e}")
+
+    _bg_tasks.append(asyncio.create_task(_warmup_background()))
+    logger.info("缓存预热任务已调度（后台运行）")
+
+    yield
+
     logger.info(f"{settings.APP_NAME} 关闭中...")
-    
-    # 停止数据同步任务
+
+    for task in _bg_tasks:
+        task.cancel()
+    if _bg_tasks:
+        await asyncio.gather(*_bg_tasks, return_exceptions=True)
+    logger.info("后台任务已取消")
+
     await data_sync_scheduler.stop()
-    
-    # 关闭本地数据库服务
+    logger.info("数据同步任务已停止")
+
     await local_db_service.close()
-    
-    # 按需加载模式无需停止数据加载器
-    logger.info("数据加载器已停止（按需模式）")
+    logger.info("本地数据库服务已关闭")
+
+    from app.adapters.smart_preloader import smart_preloader
+    await smart_preloader.stop()
+    logger.info("智能预加载器已停止")
+
+    from app.storage.cache import cache_manager
+    await cache_manager.clear_all()
+    logger.info("缓存已清理")
+
+    logger.info(f"{settings.APP_NAME} 已优雅关闭")
 
 
 def create_app() -> FastAPI:
@@ -305,8 +300,11 @@ def create_app() -> FastAPI:
         ]
     )
     
-    # 添加性能监控中间件
+    app.add_middleware(RequestDedupMiddleware)
     app.add_middleware(PerformanceMiddleware)
+    
+    if _HAS_GZIP:
+        app.add_middleware(GZipMiddleware, minimum_size=1000)
     
     app.add_middleware(
         CORSMiddleware,
@@ -316,18 +314,39 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     
+    if _HAS_ORJSON:
+        from fastapi.responses import ORJSONResponse
+        
+        @app.middleware("http")
+        async def orjson_middleware(request: Request, call_next):
+            response = await call_next(request)
+            if hasattr(response, 'body') and response.media_type == 'application/json':
+                try:
+                    body = response.body
+                    if isinstance(body, bytes):
+                        import json
+                        data = json.loads(body)
+                        response.body = orjson.dumps(data)
+                        response.headers['content-length'] = str(len(response.body))
+                except Exception:
+                    pass
+            return response
+    
     app.include_router(api_router, prefix=settings.API_PREFIX)
     
     @app.exception_handler(QuantException)
     async def quant_exception_handler(request: Request, exc: QuantException):
+        response = {
+            "success": False,
+            "code": exc.code,
+            "message": exc.message,
+            "data": None
+        }
+        if exc.detail and settings.DEBUG:
+            response["detail"] = exc.detail
         return JSONResponse(
             status_code=exc.status_code,
-            content={
-                "success": False,
-                "code": exc.code,
-                "message": exc.message,
-                "data": None
-            }
+            content=response
         )
     
     @app.exception_handler(RequestValidationError)
@@ -357,11 +376,85 @@ def create_app() -> FastAPI:
     
     @app.get("/health")
     async def health_check():
-        return {
+        import platform
+
+        uptime = time.time() - _startup_time
+
+        checks = {
             "status": "healthy",
             "app": settings.APP_NAME,
-            "version": settings.APP_VERSION
+            "version": settings.APP_VERSION,
+            "env": settings.ENV,
+            "python": platform.python_version(),
+            "uptime_seconds": round(uptime, 1),
         }
+
+        try:
+            from app.storage.sqlite import get_engine
+            engine = get_engine()
+            if engine:
+                checks["database"] = "connected"
+            else:
+                checks["database"] = "not_initialized"
+        except Exception as e:
+            checks["database"] = f"error: {e}"
+
+        try:
+            from app.adapters import data_source_manager
+            checks["data_source"] = data_source_manager._default_source
+        except Exception:
+            checks["data_source"] = "not_initialized"
+
+        try:
+            from app.storage.cache import cache_manager
+            stats = cache_manager.get_all_stats()
+            total_hits = sum(s["hits"] for s in stats.values())
+            total_requests = sum(s["hits"] + s["misses"] for s in stats.values())
+            checks["cache_hit_rate"] = f"{(total_hits/total_requests*100):.1f}%" if total_requests > 0 else "0%"
+            checks["cache_size"] = sum(s["size"] for s in stats.values())
+        except Exception:
+            checks["cache"] = "not_initialized"
+
+        try:
+            from app.services.cache_warmup import cache_warmup_service
+            checks["cache_warmup"] = cache_warmup_service.get_stats()
+        except Exception:
+            pass
+
+        return checks
+    
+    @app.get("/metrics")
+    async def metrics_endpoint():
+        from app.middleware.performance import performance_middleware_stats
+        from app.middleware.request_dedup import dedup_middleware_stats
+        from app.storage.cache import cache_manager
+
+        perf = performance_middleware_stats()
+        cache_stats = cache_manager.get_all_stats()
+        dedup_stats = dedup_middleware_stats()
+
+        return {
+            "performance": perf,
+            "cache": cache_stats,
+            "request_dedup": dedup_stats,
+            "memory_mb": _get_memory_usage()
+        }
+    
+    @app.get("/ready")
+    async def readiness_check():
+        try:
+            from app.storage.sqlite import get_engine
+            engine = get_engine()
+            if not engine:
+                return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "database_not_initialized"})
+            
+            from app.adapters import data_source_manager
+            if not data_source_manager._adapters:
+                return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "data_source_not_initialized"})
+            
+            return {"status": "ready"}
+        except Exception as e:
+            return JSONResponse(status_code=503, content={"status": "not_ready", "reason": str(e)})
     
     return app
 

@@ -221,7 +221,6 @@ class StockService:
             K线数据列表
         """
         try:
-            # 从数据源获取分钟线
             klines = await data_source_manager.get_kline_data(
                 code=code,
                 start_date=start_date,
@@ -230,7 +229,9 @@ class StockService:
                 adjust=adjust
             )
             
-            # 转换为字典列表
+            if klines is None:
+                return []
+            
             return [
                 {
                     "date": k.date,
@@ -362,9 +363,11 @@ class StockService:
         if cached:
             return cached
         
-        # 注意：这里调用 get_kline 会返回 Dict，需要提取 data 字段
         kline_result = await self.get_kline(code, start_date, end_date, priority_load=False)
-        klines = kline_result["data"] if isinstance(kline_result, dict) else kline_result
+        klines = kline_result.get("data") if isinstance(kline_result, dict) else kline_result
+        
+        if not klines:
+            return []
         
         df = pd.DataFrame(klines)
         if "date" in df.columns:
@@ -479,11 +482,14 @@ class StockService:
             logger.error(f"保存实时行情到数据库失败 {code}: {e}")
             try:
                 await session.rollback()
-            except:
-                pass
+            except Exception as rollback_err:
+                logger.warning(f"回滚失败 {code}: {rollback_err}")
     
     async def search_stocks(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
         stocks = await data_source_manager.get_stock_list()
+        
+        if not stocks:
+            return []
         
         keyword = keyword.lower()
         filtered = [

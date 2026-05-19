@@ -34,6 +34,8 @@ from .strategy_config import (
 from .dynamic_priority import dynamic_priority_manager, DataSourcePerformance
 from .batch_optimizer import batch_optimizer, BatchRequestOptimizer
 from .smart_preloader import smart_preloader, SmartPreloader
+from app.middleware.circuit_breaker import get_circuit_breaker, init_circuit_breakers
+from app.middleware.rate_limiter import get_rate_limiter, init_rate_limiters
 
 
 class DataSourceFactory:
@@ -146,7 +148,9 @@ class DataSourceManager:
         """初始化数据源管理器"""
         await self._factory.initialize(self._default_source)
         
-        # 启动优化模块
+        init_circuit_breakers()
+        init_rate_limiters()
+        
         if self._enable_optimization:
             await self._dynamic_priority.start()
             await self._smart_preloader.start()
@@ -201,17 +205,6 @@ class DataSourceManager:
         return get_cache_ttl(data_type)
     
     async def _try_sources(self, data_type: str, method_name: str, *args, **kwargs) -> Any:
-        """
-        按优先级尝试多个数据源 - 使用统一策略配置和性能统计
-        
-        Args:
-            data_type: 数据类型
-            method_name: 方法名
-            *args, **kwargs: 方法参数
-        
-        Returns:
-            数据结果或 None
-        """
         source_priority = self._get_source_priority(data_type)
         strategy = get_strategy(data_type)
         last_error = None
@@ -220,12 +213,22 @@ class DataSourceManager:
             start_time = time.time()
             source_type_enum = StrategyDataSourceType(source)
             
+            rate_limiter = get_rate_limiter(source)
+            if rate_limiter and not await rate_limiter.acquire(f"{source}:{method_name}"):
+                logger.warning(f"数据源 {source} {method_name} 被限流，跳过")
+                continue
+            
+            circuit_breaker = get_circuit_breaker(source)
+            
             try:
                 adapter = self.get_adapter(source)
                 method = getattr(adapter, method_name)
-                result = await method(*args, **kwargs)
                 
-                # 记录成功
+                if circuit_breaker:
+                    result = await circuit_breaker.call(method, *args, **kwargs)
+                else:
+                    result = await method(*args, **kwargs)
+                
                 response_time = time.time() - start_time
                 if self._enable_optimization:
                     self._dynamic_priority.record_request(
@@ -243,7 +246,6 @@ class DataSourceManager:
                 last_error = e
                 response_time = time.time() - start_time
                 
-                # 记录失败
                 if self._enable_optimization:
                     self._dynamic_priority.record_request(
                         source=source_type_enum,
@@ -254,7 +256,6 @@ class DataSourceManager:
                 
                 logger.warning(f"数据源 {source} {method_name} 失败: {e}")
                 
-                # 检查是否启用故障转移
                 if strategy and not strategy.enable_fallback:
                     logger.info(f"{data_type} 禁用故障转移，停止尝试")
                     break
@@ -327,13 +328,73 @@ class DataSourceManager:
         market_types: Optional[list] = None,
         source_type: Optional[str] = None
     ) -> list:
-        """获取市场实时行情列表"""
         if source_type:
             adapter = self.get_adapter(source_type)
             return await adapter.get_market_realtime_quotes(market_types)
         
         result = await self._try_sources("market_quotes", "get_market_realtime_quotes", market_types)
         return result or []
+    
+    async def batch_get_kline(
+        self,
+        codes: List[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "qfq",
+        max_concurrent: int = 5
+    ) -> Dict[str, list]:
+        semaphore = asyncio.Semaphore(max_concurrent)
+        results = {}
+        
+        async def fetch_one(code: str):
+            async with semaphore:
+                try:
+                    data = await self.get_kline(code, start_date, end_date, adjust)
+                    return code, data
+                except Exception as e:
+                    logger.warning(f"批量获取 K 线失败 {code}: {e}")
+                    return code, []
+        
+        tasks = [fetch_one(code) for code in codes]
+        completed = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for item in completed:
+            if isinstance(item, Exception):
+                logger.warning(f"批量获取异常: {item}")
+                continue
+            code, data = item
+            results[code] = data
+        
+        logger.info(f"批量获取 K 线完成: {len(results)}/{len(codes)} 只股票")
+        return results
+    
+    async def batch_get_realtime_quotes(
+        self,
+        codes: List[str],
+        max_concurrent: int = 10
+    ) -> Dict[str, Dict[str, Any]]:
+        semaphore = asyncio.Semaphore(max_concurrent)
+        results = {}
+        
+        async def fetch_one(code: str):
+            async with semaphore:
+                try:
+                    data = await self.get_realtime_quote(code)
+                    return code, data
+                except Exception as e:
+                    logger.warning(f"批量获取行情失败 {code}: {e}")
+                    return code, {}
+        
+        tasks = [fetch_one(code) for code in codes]
+        completed = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for item in completed:
+            if isinstance(item, Exception):
+                continue
+            code, data = item
+            results[code] = data
+        
+        return results
     
     # ===== 板块相关方法 =====
     

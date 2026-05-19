@@ -341,78 +341,68 @@ class UnifiedStorageService:
         klines: List[Dict[str, Any]],
         adjust: str
     ) -> int:
-        """
-        使用 UPSERT 优化的批量保存（性能提升版）
-
-        优化效果：
-        - 减少 50% 的 SQL 查询（无需先查后插）
-        - 单条 SQL 完成插入或更新
-        - 批量处理，分批提交
-        - 使用参数化查询防止 SQL 注入
-
-        性能提升：60-80%
-        """
         from sqlalchemy import text
 
         if not klines:
             return 0
 
-        # 1. 去重（Python 层面）
         seen_dates = set()
         unique_klines = []
         for k in klines:
-            if k['date'] not in seen_dates:
-                seen_dates.add(k['date'])
+            date_key = k.get('date')
+            if date_key and date_key not in seen_dates:
+                seen_dates.add(date_key)
                 unique_klines.append(k)
 
-        # 2. 安全转义并构建参数化值
-        def _safe_val(val, is_numeric=True):
-            """安全转换值为 SQL 安全格式"""
-            if val is None:
-                return 'NULL'
-            if isinstance(val, (int, float)):
-                return str(val)
-            # 字符串类型：转义单引号
-            return "'" + str(val).replace("'", "''") + "'"
-
-        # 3. 构建 UPSERT 语句（使用安全转义）
-        values = []
-        for k in unique_klines:
-            values.append(
-                f"({_safe_val(code, False)}, {_safe_val(k['date'], False)}, "
-                f"{_safe_val(k.get('open', 0))}, {_safe_val(k.get('high', 0))}, "
-                f"{_safe_val(k.get('low', 0))}, {_safe_val(k.get('close', 0))}, "
-                f"{_safe_val(k.get('volume', 0))}, "
-                f"{_safe_val(k.get('amount'))}, {_safe_val(k.get('turnover_rate'))}, "
-                f"{_safe_val(k.get('pre_close'))}, {_safe_val(adjust, False)})"
-            )
-
-        # 4. 分批执行（每批 500 条）
         batch_size = 500
         total_saved = 0
 
         async with get_session() as session:
-            for i in range(0, len(values), batch_size):
-                batch = values[i:i + batch_size]
+            for i in range(0, len(unique_klines), batch_size):
+                batch = unique_klines[i:i + batch_size]
+                
+                rows_sql = []
+                params = {}
+                
+                for j, k in enumerate(batch):
+                    pfx = f"b{j}_"
+                    params[f"{pfx}code"] = code
+                    params[f"{pfx}date"] = k.get('date', '')
+                    params[f"{pfx}open"] = k.get('open', 0)
+                    params[f"{pfx}high"] = k.get('high', 0)
+                    params[f"{pfx}low"] = k.get('low', 0)
+                    params[f"{pfx}close"] = k.get('close', 0)
+                    params[f"{pfx}volume"] = k.get('volume', 0)
+                    params[f"{pfx}amount"] = k.get('amount')
+                    params[f"{pfx}turnover"] = k.get('turnover_rate')
+                    params[f"{pfx}pre_close"] = k.get('pre_close')
+                    params[f"{pfx}adjust"] = adjust
+                    
+                    rows_sql.append(
+                        f"(:{pfx}code, :{pfx}date, :{pfx}open, :{pfx}high, :{pfx}low, :{pfx}close, "
+                        f":{pfx}volume, :{pfx}amount, :{pfx}turnover, :{pfx}pre_close, :{pfx}adjust)"
+                    )
 
-                sql = f"""
-                    INSERT INTO kline
-                        (code, date, open, high, low, close, volume, amount, turnover_rate, pre_close, adjust_type)
-                    VALUES {','.join(batch)}
-                    ON CONFLICT(code, date, adjust_type) DO UPDATE SET
-                        open = excluded.open,
-                        high = excluded.high,
-                        low = excluded.low,
-                        close = excluded.close,
-                        volume = excluded.volume,
-                        amount = COALESCE(excluded.amount, kline.amount),
-                        turnover_rate = COALESCE(excluded.turnover_rate, kline.turnover_rate),
-                        pre_close = COALESCE(excluded.pre_close, kline.pre_close)
-                """
+                sql = (
+                    "INSERT INTO kline "
+                    "(code, date, open, high, low, close, volume, amount, turnover_rate, pre_close, adjust_type) "
+                    f"VALUES {','.join(rows_sql)} "
+                    "ON CONFLICT(code, date, adjust_type) DO UPDATE SET "
+                    "open = excluded.open, "
+                    "high = excluded.high, "
+                    "low = excluded.low, "
+                    "close = excluded.close, "
+                    "volume = excluded.volume, "
+                    "amount = COALESCE(excluded.amount, kline.amount), "
+                    "turnover_rate = COALESCE(excluded.turnover_rate, kline.turnover_rate), "
+                    "pre_close = COALESCE(excluded.pre_close, kline.pre_close)"
+                )
 
-                result = await session.execute(text(sql))
-                await session.commit()
+                result = await session.execute(text(sql), params)
                 total_saved += result.rowcount
+            
+            if unique_klines:
+                await session.commit()
 
             logger.info(f"UPSERT 保存 {total_saved} 条 K 线数据到 SQLite: {code}")
             return total_saved

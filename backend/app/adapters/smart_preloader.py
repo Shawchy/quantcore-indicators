@@ -121,42 +121,31 @@ class UserPattern:
 
 
 class SmartPreloader:
-    """智能预加载器"""
+    
+    CACHE_TTL_SECONDS = 300
+    MAX_CACHE_SIZE = 200
     
     def __init__(
         self,
         max_concurrent_preloads: int = 5,
         preload_interval: int = 60
     ):
-        """
-        初始化智能预加载器
-        
-        Args:
-            max_concurrent_preloads: 最大并发预加载数
-            preload_interval: 预加载间隔（秒）
-        """
         self._max_concurrent = max_concurrent_preloads
         self._preload_interval = preload_interval
         
-        # 用户行为模式
         self._user_patterns: Dict[str, UserPattern] = {}
-        
-        # 预加载队列
         self._preload_queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
-        
-        # 已预加载的缓存
         self._preloaded_cache: Dict[str, Any] = {}
-        
-        # 预加载任务
         self._preload_task: Optional[asyncio.Task] = None
         self._semaphore = asyncio.Semaphore(max_concurrent_preloads)
+        self._cache_ttl = self.CACHE_TTL_SECONDS
         
-        # 统计
         self._stats = {
             "total_preloads": 0,
             "successful_preloads": 0,
             "failed_preloads": 0,
             "cache_hits": 0,
+            "cache_evictions": 0,
         }
     
     async def start(self):
@@ -249,6 +238,14 @@ class SmartPreloader:
                 data = await self._fetch_data(data_type, code)
                 
                 if data:
+                    if len(self._preloaded_cache) >= self.MAX_CACHE_SIZE:
+                        oldest_key = min(
+                            self._preloaded_cache,
+                            key=lambda k: self._preloaded_cache[k]["timestamp"]
+                        )
+                        del self._preloaded_cache[oldest_key]
+                        self._stats["cache_evictions"] += 1
+                    
                     self._preloaded_cache[cache_key] = {
                         "data": data,
                         "timestamp": datetime.now(),
@@ -264,11 +261,36 @@ class SmartPreloader:
                 logger.warning(f"预加载失败 {cache_key}: {e}")
     
     async def _fetch_data(self, data_type: str, code: str) -> Any:
-        """获取数据（模拟）"""
-        # 这里应该调用实际的数据源
-        # 返回模拟数据用于测试
-        await asyncio.sleep(0.01)  # 模拟网络延迟
-        return {"code": code, "data_type": data_type, "preloaded": True}
+        try:
+            from app.adapters import data_source_manager
+            
+            method_map = {
+                "kline": "get_kline",
+                "realtime_quote": "get_realtime_quote",
+                "stock_info": "get_stock_info",
+                "indicators": "get_indicators",
+                "chip": "get_chip_data",
+            }
+            
+            method_name = method_map.get(data_type)
+            if not method_name:
+                return None
+            
+            if data_type == "kline":
+                return await data_source_manager.get_kline(code)
+            elif data_type == "realtime_quote":
+                return await data_source_manager.get_realtime_quote(code)
+            elif data_type == "stock_info":
+                return await data_source_manager.get_stock_info(code)
+            elif data_type == "indicators":
+                return await data_source_manager.get_indicators(code)
+            elif data_type == "chip":
+                return await data_source_manager.get_chip_data(code)
+            
+            return None
+        except Exception as e:
+            logger.debug(f"预加载获取数据失败 {data_type}:{code}: {e}")
+            return None
     
     def record_user_request(
         self,
@@ -290,12 +312,19 @@ class SmartPreloader:
         self._user_patterns[user_id].record_request(data_type, code)
     
     def get_preloaded_data(self, data_type: str, code: str) -> Optional[Any]:
-        """获取预加载的数据"""
         cache_key = f"{data_type}:{code}"
         
         if cache_key in self._preloaded_cache:
+            entry = self._preloaded_cache[cache_key]
+            age = (datetime.now() - entry["timestamp"]).total_seconds()
+            
+            if age > self._cache_ttl:
+                del self._preloaded_cache[cache_key]
+                self._stats["cache_evictions"] += 1
+                return None
+            
             self._stats["cache_hits"] += 1
-            return self._preloaded_cache[cache_key]["data"]
+            return entry["data"]
         
         return None
     

@@ -4,6 +4,7 @@ use super::position::Position;
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
+use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -145,16 +146,16 @@ impl Portfolio {
 
     /// 买入
     pub fn buy(&mut self, symbol: &str, price: f64, quantity: i64, commission: f64, tax: f64) -> PyResult<()> {
-        let price_dec = Decimal::from_f64_retain(price).unwrap_or_else(|| {
+        let price_dec = Decimal::from_str(&format!("{:.4}", price)).unwrap_or_else(|_| {
             log::error!("买入价格转换失败: {}", price);
             Decimal::ZERO
         });
         let amount = price_dec * Decimal::from(quantity);
-        let commission_dec = Decimal::from_f64_retain(commission).unwrap_or_else(|| {
+        let commission_dec = Decimal::from_str(&format!("{:.4}", commission)).unwrap_or_else(|_| {
             log::warn!("佣金转换失败: {}", commission);
             Decimal::ZERO
         });
-        let tax_dec = Decimal::from_f64_retain(tax).unwrap_or_else(|| {
+        let tax_dec = Decimal::from_str(&format!("{:.4}", tax)).unwrap_or_else(|_| {
             log::warn!("税费转换失败: {}", tax);
             Decimal::ZERO
         });
@@ -175,7 +176,7 @@ impl Portfolio {
 
         let total_qty = position.quantity + quantity;
         if total_qty > 0 {
-            let new_avg = (position.cost_price * Decimal::from(position.quantity) + Decimal::from_f64_retain(price) * Decimal::from(quantity)) / Decimal::from(total_qty);
+            let new_avg = (position.cost_price * Decimal::from(position.quantity) + price_dec * Decimal::from(quantity)) / Decimal::from(total_qty);
             position.cost_price = new_avg;
             position.quantity = total_qty;
         }
@@ -194,16 +195,16 @@ impl Portfolio {
                 )));
             }
 
-            let price_dec = Decimal::from_f64_retain(price).unwrap_or_else(|| {
+            let price_dec = Decimal::from_str(&format!("{:.4}", price)).unwrap_or_else(|_| {
                 log::error!("卖出价格转换失败: {}", price);
                 Decimal::ZERO
             });
             let revenue = price_dec * Decimal::from(quantity);
-            let commission_dec = Decimal::from_f64_retain(commission).unwrap_or_else(|| {
+            let commission_dec = Decimal::from_str(&format!("{:.4}", commission)).unwrap_or_else(|_| {
                 log::warn!("佣金转换失败: {}", commission);
                 Decimal::ZERO
             });
-            let tax_dec = Decimal::from_f64_retain(tax).unwrap_or_else(|| {
+            let tax_dec = Decimal::from_str(&format!("{:.4}", tax)).unwrap_or_else(|_| {
                 log::warn!("税费转换失败: {}", tax);
                 Decimal::ZERO
             });

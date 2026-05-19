@@ -86,12 +86,38 @@ class UnifiedKLine(BaseModel):
     @field_validator('high', 'low')
     @classmethod
     def validate_price_range(cls, v, info):
-        """验证价格合理性"""
-        # Pydantic V2 中使用 info.data 访问其他字段
         data = info.data
-        if 'open' in data and v < data['open'] * 0.9:
-            # 价格波动超过 10% 视为异常（A 股涨跌停限制）
-            raise ValueError("价格波动异常")
+        if 'open' in data and data['open'] > 0 and v > 0:
+            change_pct = abs(v - data['open']) / data['open']
+            if change_pct > 0.3:
+                raise ValueError(f"价格波动异常: 变动{change_pct*100:.1f}%")
+        return v
+    
+    @field_validator('close')
+    @classmethod
+    def validate_close(cls, v, info):
+        data = info.data
+        if v <= 0:
+            return v
+        if 'high' in data and data.get('high') is not None and data['high'] > 0:
+            if v > data['high'] * 1.001:
+                raise ValueError(f"收盘价{v}高于最高价{data['high']}")
+        if 'low' in data and data.get('low') is not None and data['low'] > 0:
+            if v < data['low'] * 0.999:
+                raise ValueError(f"收盘价{v}低于最低价{data['low']}")
+        return v
+    
+    @field_validator('amount')
+    @classmethod
+    def validate_amount(cls, v, info):
+        if v is not None and v < 0:
+            raise ValueError("成交额不能为负数")
+        data = info.data
+        if v is not None and v > 0 and 'volume' in data and data.get('volume', 0) > 0:
+            avg_price = v / data['volume']
+            close = data.get('close', 0)
+            if close > 0 and (avg_price < close * 0.5 or avg_price > close * 2.0):
+                raise ValueError(f"均价{avg_price:.2f}与收盘价{close:.2f}偏差过大")
         return v
 
 

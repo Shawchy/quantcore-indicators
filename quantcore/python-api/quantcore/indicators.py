@@ -12,7 +12,14 @@
 优先使用 quantcore-indicators（Rust 加速版本），不可用时降级到纯 Python 实现
 """
 
-from typing import List
+from typing import List, Union
+import math
+
+try:
+    import numpy as np
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
 
 # 尝试导入 quantcore-indicators（Rust 加速版）
 try:
@@ -39,22 +46,26 @@ def _use_rust_if_available():
     return _USE_RUST
 
 
+def _to_array(data) -> 'np.ndarray':
+    if _HAS_NUMPY:
+        if isinstance(data, np.ndarray):
+            return data.astype(np.float64)
+        return np.asarray(data, dtype=np.float64)
+    return list(data)
+
+
 def ma(prices: List[float], period: int) -> List[float]:
-    """
-    移动平均线
-    
-    Args:
-        prices: 价格列表
-        period: 周期
-        
-    Returns:
-        MA 值列表
-    """
     if _USE_RUST:
         return _rsi_ma(prices, period).tolist()
     
     if len(prices) < period:
         return []
+    
+    if _HAS_NUMPY:
+        arr = _to_array(prices)
+        kernel = np.ones(period) / period
+        result = np.convolve(arr, kernel, mode='valid')
+        return result.tolist()
     
     result = []
     for i in range(period - 1, len(prices)):
@@ -65,16 +76,6 @@ def ma(prices: List[float], period: int) -> List[float]:
 
 
 def ema(prices: List[float], period: int) -> List[float]:
-    """
-    指数移动平均线
-    
-    Args:
-        prices: 价格列表
-        period: 周期
-        
-    Returns:
-        EMA 值列表
-    """
     if _USE_RUST:
         return _rsi_ema(prices, period).tolist()
     
@@ -82,7 +83,16 @@ def ema(prices: List[float], period: int) -> List[float]:
         return []
     
     multiplier = 2 / (period + 1)
-    result = [sum(prices[:period]) / period]  # 第一个值为 SMA
+    
+    if _HAS_NUMPY:
+        arr = _to_array(prices)
+        result = np.empty(len(arr) - period + 1)
+        result[0] = np.mean(arr[:period])
+        for i in range(1, len(result)):
+            result[i] = (arr[period + i - 1] - result[i - 1]) * multiplier + result[i - 1]
+        return result.tolist()
+    
+    result = [sum(prices[:period]) / period]
     
     for i in range(period, len(prices)):
         ema_value = (prices[i] - result[-1]) * multiplier + result[-1]
@@ -138,62 +148,86 @@ def macd(prices: List[float], fast: int = 12, slow: int = 26, signal: int = 9) -
 
 
 def rsi(prices: List[float], period: int = 14) -> List[float]:
-    """
-    RSI 相对强弱指标
-    
-    Args:
-        prices: 价格列表
-        period: 周期
-        
-    Returns:
-        RSI 值列表
-    """
     if _USE_RUST:
         return _rsi_rsi(prices, period).tolist()
     
     if len(prices) < period + 1:
         return []
     
+    if _HAS_NUMPY:
+        arr = _to_array(prices)
+        deltas = np.diff(arr)
+        
+        gains = np.where(deltas > 0, deltas, 0.0)
+        losses = np.where(deltas < 0, -deltas, 0.0)
+        
+        alpha = 1.0 / period
+        
+        try:
+            from scipy.signal import lfilter
+            b = [alpha]
+            a = [1, -(1 - alpha)]
+            avg_gain = lfilter(b, a, gains)
+            avg_loss = lfilter(b, a, losses)
+            
+            avg_gain[:period-1] = 0.0
+            avg_loss[:period-1] = 0.0
+            seed_gain = np.mean(gains[:period])
+            seed_loss = np.mean(losses[:period])
+            avg_gain[period-1] = seed_gain
+            avg_loss[period-1] = seed_loss
+            
+            for i in range(period, min(period + 1, len(deltas))):
+                avg_gain[i] = avg_gain[i-1] * (1 - alpha) + gains[i] * alpha
+                avg_loss[i] = avg_loss[i-1] * (1 - alpha) + losses[i] * alpha
+        except ImportError:
+            avg_gain = np.empty(len(deltas))
+            avg_loss = np.empty(len(deltas))
+            
+            avg_gain[:period] = 0.0
+            avg_loss[:period] = 0.0
+            avg_gain[period - 1] = np.mean(gains[:period])
+            avg_loss[period - 1] = np.mean(losses[:period])
+            
+            for i in range(period, len(deltas)):
+                avg_gain[i] = avg_gain[i-1] * (1 - alpha) + gains[i] * alpha
+                avg_loss[i] = avg_loss[i-1] * (1 - alpha) + losses[i] * alpha
+        
+        rs = np.where(avg_loss[period-1:] != 0, avg_gain[period-1:] / avg_loss[period-1:], 0.0)
+        rsi_values = np.where(avg_loss[period-1:] != 0, 100.0 - (100.0 / (1.0 + rs)), 100.0)
+        
+        return rsi_values.tolist()
+    
+    deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+    
+    gains = [d if d > 0 else 0.0 for d in deltas]
+    losses = [-d if d < 0 else 0.0 for d in deltas]
+    
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    
     result = []
     
-    for i in range(period, len(prices)):
-        gains = []
-        losses = []
-        
-        for j in range(i - period + 1, i + 1):
-            change = prices[j] - prices[j - 1]
-            if change > 0:
-                gains.append(change)
-                losses.append(0)
-            else:
-                gains.append(0)
-                losses.append(abs(change))
-        
-        avg_gain = sum(gains) / period
-        avg_loss = sum(losses) / period
+    if avg_loss == 0:
+        result.append(100.0)
+    else:
+        rs = avg_gain / avg_loss
+        result.append(100.0 - (100.0 / (1.0 + rs)))
+    
+    for i in range(period, len(deltas)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
         
         if avg_loss == 0:
             result.append(100.0)
         else:
             rs = avg_gain / avg_loss
-            rsi_value = 100 - (100 / (1 + rs))
-            result.append(rsi_value)
+            result.append(100.0 - (100.0 / (1.0 + rs)))
     
     return result
 
 
 def bollinger_bands(prices: List[float], period: int = 20, std_dev: float = 2.0) -> dict:
-    """
-    布林带
-    
-    Args:
-        prices: 价格列表
-        period: 周期
-        std_dev: 标准差倍数
-        
-    Returns:
-        包含 upper、middle、lower 的字典
-    """
     if _USE_RUST:
         result = _rsi_boll(prices, period, std_dev)
         return {
@@ -204,6 +238,26 @@ def bollinger_bands(prices: List[float], period: int = 20, std_dev: float = 2.0)
     
     if len(prices) < period:
         return {'upper': [], 'middle': [], 'lower': []}
+    
+    if _HAS_NUMPY:
+        arr = _to_array(prices)
+        cumsum = np.cumsum(arr)
+        sums = cumsum[period - 1:] - np.concatenate([[0], cumsum[:-period]])
+        middle = sums / period
+        
+        cumsum2 = np.cumsum(arr ** 2)
+        sums2 = cumsum2[period - 1:] - np.concatenate([[0], cumsum2[:-period]])
+        variance = sums2 / period - middle ** 2
+        std = np.sqrt(np.maximum(variance, 0))
+        
+        upper = middle + std_dev * std
+        lower = middle - std_dev * std
+        
+        return {
+            'upper': upper.tolist(),
+            'middle': middle.tolist(),
+            'lower': lower.tolist()
+        }
     
     middle = ma(prices, period)
     upper = []
@@ -282,27 +336,32 @@ def kdj(high: List[float], low: List[float], close: List[float],
 
 def atr(high_prices: List[float], low_prices: List[float], 
        close_prices: List[float], period: int = 14) -> List[float]:
-    """
-    ATR 指标（平均真实波幅）
-    
-    Args:
-        high_prices: 最高价列表
-        low_prices: 最低价列表
-        close_prices: 收盘价列表
-        period: 周期，默认 14
-        
-    Returns:
-        ATR 值列表
-    """
     if _USE_RUST:
         return _rsi_atr(high_prices, low_prices, close_prices, period).tolist()
     
     if len(high_prices) < period or len(low_prices) < period or len(close_prices) < period:
         return []
     
+    if _HAS_NUMPY:
+        high = _to_array(high_prices)
+        low = _to_array(low_prices)
+        close = _to_array(close_prices)
+        
+        tr = np.maximum(high - low, np.maximum(
+            np.abs(high - np.concatenate([[close[0]], close[:-1]])),
+            np.abs(low - np.concatenate([[close[0]], close[:-1]]))
+        ))
+        tr[0] = high[0] - low[0]
+        
+        atr_result = np.empty(len(tr) - period + 1)
+        atr_result[0] = np.mean(tr[:period])
+        for i in range(1, len(atr_result)):
+            atr_result[i] = (atr_result[i - 1] * (period - 1) + tr[period + i - 1]) / period
+        
+        return atr_result.tolist()
+    
     tr_list = []
     
-    # 计算真实波幅 TR
     for i in range(len(high_prices)):
         if i == 0:
             tr = high_prices[i] - low_prices[i]
@@ -313,58 +372,55 @@ def atr(high_prices: List[float], low_prices: List[float],
             tr = max(tr1, tr2, tr3)
         tr_list.append(tr)
     
-    # 计算 ATR
     atr_list = []
     
-    # 第一个 ATR 是前 period 个 TR 的平均值
     first_atr = sum(tr_list[:period]) / period
     atr_list.append(first_atr)
     
-    # 后续使用平滑方法
     for i in range(period, len(tr_list)):
-        atr = (atr_list[-1] * (period - 1) + tr_list[i]) / period
-        atr_list.append(atr)
+        atr_val = (atr_list[-1] * (period - 1) + tr_list[i]) / period
+        atr_list.append(atr_val)
     
     return atr_list
 
 
 def cci(high_prices: List[float], low_prices: List[float], 
       close_prices: List[float], period: int = 14) -> List[float]:
-    """
-    CCI 指标（顺势指标）
-    
-    Args:
-        high_prices: 最高价列表
-        low_prices: 最低价列表
-        close_prices: 收盘价列表
-        period: 周期，默认 14
-        
-    Returns:
-        CCI 值列表
-    """
     if _USE_RUST:
         return _rsi_cci(high_prices, low_prices, close_prices, period).tolist()
     
     if len(high_prices) < period or len(low_prices) < period or len(close_prices) < period:
         return []
     
+    if _HAS_NUMPY:
+        high = _to_array(high_prices)
+        low = _to_array(low_prices)
+        close = _to_array(close_prices)
+        
+        tp = (high + low + close) / 3.0
+        
+        kernel = np.ones(period) / period
+        ma_tp = np.convolve(tp, kernel, mode='valid')
+        
+        tp_windows = np.lib.stride_tricks.sliding_window_view(tp, period)
+        mean_dev = np.mean(np.abs(tp_windows - ma_tp[:, np.newaxis]), axis=1)
+        
+        cci_values = np.where(mean_dev > 0, (tp[period-1:] - ma_tp) / (0.015 * mean_dev), 0.0)
+        return cci_values.tolist()
+    
     cci_list = []
     
     for i in range(period - 1, len(close_prices)):
-        # 计算典型价格 TP
         tp_list = []
         for j in range(i - period + 1, i + 1):
             tp = (high_prices[j] + low_prices[j] + close_prices[j]) / 3
             tp_list.append(tp)
         
-        # 计算 TP 的移动平均
         ma_tp = sum(tp_list) / period
         
-        # 计算平均偏差
         deviations = [abs(tp - ma_tp) for tp in tp_list]
         mean_deviation = sum(deviations) / period
         
-        # 计算 CCI
         if mean_deviation == 0:
             cci = 0.0
         else:
@@ -378,33 +434,35 @@ def cci(high_prices: List[float], low_prices: List[float],
 
 def williams_r(high_prices: List[float], low_prices: List[float], 
                close_prices: List[float], period: int = 14) -> List[float]:
-    """
-    Williams %R 指标（威廉指标）
-    
-    Args:
-        high_prices: 最高价列表
-        low_prices: 最低价列表
-        close_prices: 收盘价列表
-        period: 周期，默认 14
-        
-    Returns:
-        Williams %R 值列表（范围 -100 到 0）
-    """
     if _USE_RUST:
         return _rsi_williams(high_prices, low_prices, close_prices, period).tolist()
     
     if len(high_prices) < period or len(low_prices) < period or len(close_prices) < period:
         return []
     
+    if _HAS_NUMPY:
+        high = _to_array(high_prices)
+        low = _to_array(low_prices)
+        close = _to_array(close_prices)
+        
+        high_windows = np.lib.stride_tricks.sliding_window_view(high, period)
+        low_windows = np.lib.stride_tricks.sliding_window_view(low, period)
+        
+        highest = np.max(high_windows, axis=1)
+        lowest = np.min(low_windows, axis=1)
+        
+        current_close = close[period - 1:]
+        
+        wr = np.where(highest == lowest, -50.0, ((highest - current_close) / (highest - lowest)) * -100)
+        return wr.tolist()
+    
     wr_list = []
     
     for i in range(period - 1, len(close_prices)):
-        # 计算最近 N 天的最高价和最低价
         highest = max(high_prices[i - period + 1:i + 1])
         lowest = min(low_prices[i - period + 1:i + 1])
         current_close = close_prices[i]
         
-        # 计算 Williams %R
         if highest == lowest:
             wr = -50.0
         else:
@@ -416,23 +474,24 @@ def williams_r(high_prices: List[float], low_prices: List[float],
 
 
 def obv(close_prices: List[float], volumes: List[int]) -> List[float]:
-    """
-    OBV 指标（能量潮）
-    
-    Args:
-        close_prices: 收盘价列表
-        volumes: 成交量列表
-        
-    Returns:
-        OBV 值列表
-    """
     if _USE_RUST:
         return _rsi_obv(close_prices, volumes).tolist()
     
     if len(close_prices) != len(volumes) or len(close_prices) < 2:
         return []
     
-    obv_list = [0.0]  # 初始 OBV 为 0
+    if _HAS_NUMPY:
+        close = _to_array(close_prices)
+        vol = _to_array(volumes).astype(np.float64)
+        
+        direction = np.sign(np.diff(close))
+        direction = np.concatenate([[0], direction])
+        
+        signed_vol = vol * direction
+        result = np.cumsum(signed_vol)
+        return result.tolist()
+    
+    obv_list = [0.0]
     
     for i in range(1, len(close_prices)):
         if close_prices[i] > close_prices[i-1]:
@@ -448,30 +507,35 @@ def obv(close_prices: List[float], volumes: List[int]) -> List[float]:
 
 
 # 11. ADX - 平均趋向指标
-def adx(high_prices: List[float], low_prices: List[float], 
-        close_prices: List[float], period: int = 14) -> List[float]:
-    """
-    ADX 指标（Average Directional Index，平均趋向指标）
+
+def _calc_true_range(high_prices, low_prices, close_prices):
+    if _HAS_NUMPY:
+        high = _to_array(high_prices)
+        low = _to_array(low_prices)
+        close = _to_array(close_prices)
+        tr = np.maximum(high - low, np.maximum(
+            np.abs(high - np.concatenate([[close[0]], close[:-1]])),
+            np.abs(low - np.concatenate([[close[0]], close[:-1]]))
+        ))
+        tr[0] = high[0] - low[0]
+        return tr
     
-    Args:
-        high_prices: 最高价列表
-        low_prices: 最低价列表
-        close_prices: 收盘价列表
-        period: 周期，默认 14
-        
-    Returns:
-        ADX 值列表
-    """
-    if _USE_RUST:
-        return _rsi_adx(high_prices, low_prices, close_prices, period).tolist()
-    
-    if len(high_prices) < period + 1:
-        return []
-    
-    # 计算 +DM 和 -DM
+    tr_list = []
+    for i in range(len(high_prices)):
+        if i == 0:
+            tr = high_prices[i] - low_prices[i]
+        else:
+            tr1 = high_prices[i] - low_prices[i]
+            tr2 = abs(high_prices[i] - close_prices[i-1])
+            tr3 = abs(low_prices[i] - close_prices[i-1])
+            tr = max(tr1, tr2, tr3)
+        tr_list.append(tr)
+    return tr_list
+
+
+def _calc_directional_movement(high_prices, low_prices):
     plus_dm = []
     minus_dm = []
-    
     for i in range(1, len(high_prices)):
         up_move = high_prices[i] - high_prices[i-1]
         down_move = low_prices[i-1] - low_prices[i]
@@ -485,18 +549,19 @@ def adx(high_prices: List[float], low_prices: List[float],
             minus_dm.append(down_move)
         else:
             minus_dm.append(0.0)
+    return plus_dm, minus_dm
+
+
+def adx(high_prices: List[float], low_prices: List[float], 
+        close_prices: List[float], period: int = 14) -> List[float]:
+    if _USE_RUST:
+        return _rsi_adx(high_prices, low_prices, close_prices, period).tolist()
     
-    # 计算 TR
-    tr_list = []
-    for i in range(len(high_prices)):
-        if i == 0:
-            tr = high_prices[i] - low_prices[i]
-        else:
-            tr1 = high_prices[i] - low_prices[i]
-            tr2 = abs(high_prices[i] - close_prices[i-1])
-            tr3 = abs(low_prices[i] - close_prices[i-1])
-            tr = max(tr1, tr2, tr3)
-        tr_list.append(tr)
+    if len(high_prices) < period + 1:
+        return []
+    
+    plus_dm, minus_dm = _calc_directional_movement(high_prices, low_prices)
+    tr_list = _calc_true_range(high_prices, low_prices, close_prices)
     
     # 计算 +DI 和 -DI
     plus_di = []
@@ -597,28 +662,36 @@ def sar(high_prices: List[float], low_prices: List[float],
 def stoch(high_prices: List[float], low_prices: List[float], 
           close_prices: List[float], k_period: int = 14, 
           d_period: int = 3) -> dict:
-    """
-    STOCH 指标（Stochastic Oscillator，随机指标）
-    
-    Args:
-        high_prices: 最高价列表
-        low_prices: 最低价列表
-        close_prices: 收盘价列表
-        k_period: %K 周期，默认 14
-        d_period: %D 周期，默认 3
-        
-    Returns:
-        包含 %K 和 %D 的字典
-    """
     if len(high_prices) < k_period:
         return {'k': [], 'd': []}
+    
+    if _HAS_NUMPY:
+        high = _to_array(high_prices)
+        low = _to_array(low_prices)
+        close = _to_array(close_prices)
+        
+        high_windows = np.lib.stride_tricks.sliding_window_view(high, k_period)
+        low_windows = np.lib.stride_tricks.sliding_window_view(low, k_period)
+        
+        highest = np.max(high_windows, axis=1)
+        lowest = np.min(low_windows, axis=1)
+        
+        current_close = close[k_period - 1:]
+        
+        k_values = np.where(highest == lowest, 50.0, ((current_close - lowest) / (highest - lowest)) * 100)
+        
+        k_full = np.concatenate([np.full(k_period - 1, 50.0), k_values])
+        
+        d_values = np.convolve(k_full, np.ones(d_period) / d_period, mode='valid')
+        
+        return {'k': k_full.tolist(), 'd': d_values.tolist()}
     
     k_list = []
     d_list = []
     
     for i in range(len(close_prices)):
         if i < k_period - 1:
-            k_list.append(50.0)  # 初始值
+            k_list.append(50.0)
             d_list.append(50.0)
         else:
             highest = max(high_prices[i-k_period+1:i+1])
@@ -631,7 +704,6 @@ def stoch(high_prices: List[float], low_prices: List[float],
             
             k_list.append(k)
             
-            # 计算 %D（%K 的 MA）
             if len(k_list) >= d_period:
                 d = sum(k_list[-d_period:]) / d_period
             else:
@@ -643,18 +715,13 @@ def stoch(high_prices: List[float], low_prices: List[float],
 
 # 14. ROC - 变动率指标
 def roc(prices: List[float], period: int = 12) -> List[float]:
-    """
-    ROC 指标（Rate of Change，变动率指标）
-    
-    Args:
-        prices: 价格列表
-        period: 周期，默认 12
-        
-    Returns:
-        ROC 值列表
-    """
     if len(prices) < period + 1:
         return []
+    
+    if _HAS_NUMPY:
+        arr = _to_array(prices)
+        result = np.where(arr[:-period] != 0, ((arr[period:] - arr[:-period]) / arr[:-period]) * 100, 0.0)
+        return result.tolist()
     
     roc_list = []
     
@@ -672,33 +739,42 @@ def roc(prices: List[float], period: int = 12) -> List[float]:
 def mfi(high_prices: List[float], low_prices: List[float], 
         close_prices: List[float], volumes: List[int], 
         period: int = 14) -> List[float]:
-    """
-    MFI 指标（Money Flow Index，资金流量指标）
-    
-    Args:
-        high_prices: 最高价列表
-        low_prices: 最低价列表
-        close_prices: 收盘价列表
-        volumes: 成交量列表
-        period: 周期，默认 14
-        
-    Returns:
-        MFI 值列表
-    """
     if len(high_prices) < period + 1:
         return []
     
-    # 计算典型价格
+    if _HAS_NUMPY:
+        high = _to_array(high_prices)
+        low = _to_array(low_prices)
+        close = _to_array(close_prices)
+        vol = _to_array(volumes).astype(np.float64)
+        
+        tp = (high + low + close) / 3.0
+        mf = tp * vol
+        
+        tp_diff = np.diff(tp)
+        tp_diff = np.concatenate([[0], tp_diff])
+        
+        positive_mf = np.where(tp_diff > 0, mf, 0.0)
+        negative_mf = np.where(tp_diff < 0, mf, 0.0)
+        
+        kernel = np.ones(period)
+        sum_pos = np.convolve(positive_mf[1:], kernel, mode='valid')
+        sum_neg = np.convolve(negative_mf[1:], kernel, mode='valid')
+        
+        mfi_values = np.where(sum_neg == 0, 100.0, 100.0 - (100.0 / (1.0 + sum_pos / sum_neg)))
+        
+        padding = np.full(len(high) - len(mfi_values), 50.0)
+        result = np.concatenate([padding, mfi_values])
+        return result.tolist()
+    
     typical_prices = [(high_prices[i] + low_prices[i] + close_prices[i]) / 3 
                       for i in range(len(high_prices))]
     
-    # 计算资金流量
     money_flow = []
     for i in range(len(typical_prices)):
         mf = typical_prices[i] * volumes[i]
         money_flow.append(mf)
     
-    # 计算正负资金流量
     positive_flow = []
     negative_flow = []
     
@@ -713,7 +789,6 @@ def mfi(high_prices: List[float], low_prices: List[float],
             positive_flow.append(0.0)
             negative_flow.append(0.0)
     
-    # 计算 MFI
     mfi_list = []
     for i in range(len(positive_flow)):
         if i < period - 1:
@@ -890,51 +965,11 @@ def trix(prices: List[float], period: int = 14) -> List[float]:
 # 20. DMI - 动向指标
 def dmi(high_prices: List[float], low_prices: List[float], 
         close_prices: List[float], period: int = 14) -> dict:
-    """
-    DMI 指标（Directional Movement Index，动向指标）
-    
-    Args:
-        high_prices: 最高价列表
-        low_prices: 最低价列表
-        close_prices: 收盘价列表
-        period: 周期，默认 14
-        
-    Returns:
-        包含 +DI、-DI 和 ADX 的字典
-    """
     adx_values = adx(high_prices, low_prices, close_prices, period)
     
-    # 计算 +DM 和 -DM
-    plus_dm = []
-    minus_dm = []
+    plus_dm, minus_dm = _calc_directional_movement(high_prices, low_prices)
+    tr_list = _calc_true_range(high_prices, low_prices, close_prices)
     
-    for i in range(1, len(high_prices)):
-        up_move = high_prices[i] - high_prices[i-1]
-        down_move = low_prices[i-1] - low_prices[i]
-        
-        if up_move > down_move and up_move > 0:
-            plus_dm.append(up_move)
-        else:
-            plus_dm.append(0.0)
-        
-        if down_move > up_move and down_move > 0:
-            minus_dm.append(down_move)
-        else:
-            minus_dm.append(0.0)
-    
-    # 计算 TR
-    tr_list = []
-    for i in range(len(high_prices)):
-        if i == 0:
-            tr = high_prices[i] - low_prices[i]
-        else:
-            tr1 = high_prices[i] - low_prices[i]
-            tr2 = abs(high_prices[i] - close_prices[i-1])
-            tr3 = abs(low_prices[i] - close_prices[i-1])
-            tr = max(tr1, tr2, tr3)
-        tr_list.append(tr)
-    
-    # 计算 +DI 和 -DI
     plus_di = [0.0]
     minus_di = [0.0]
     

@@ -2,10 +2,11 @@
 //!
 //! 功能：
 //! 1. 事件驱动架构
-//! 2. T+1 交易规则
-//! 3. 涨跌停价格限制
+//! 2. T+1 交易规则（基于回测时间）
+//! 3. 涨跌停价格限制（基于前一日收盘价）
 //! 4. 精细化手续费计算
-//! 5. 并行回测支持
+//! 5. 信号延迟执行（T+1 开盘价成交）
+//! 6. 完整风险指标
 
 use pyo3::prelude::*;
 use std::collections::{HashMap, VecDeque};
@@ -39,7 +40,6 @@ pub trait EventHandler: Send + Sync {
     fn handle_event(&mut self, event: &Event) -> Result<(), String>;
 }
 
-/// 事件引擎（核心调度器）
 pub struct EventEngine {
     event_queue: VecDeque<Event>,
     handlers: HashMap<EventType, Vec<Box<dyn EventHandler>>>,
@@ -121,6 +121,7 @@ impl TPlus1Manager {
 pub struct PriceLimitChecker {
     limit_up_ratio: f64,
     limit_down_ratio: f64,
+    prev_close: Option<f64>,
 }
 
 impl PriceLimitChecker {
@@ -128,15 +129,22 @@ impl PriceLimitChecker {
         Self {
             limit_up_ratio,
             limit_down_ratio,
+            prev_close: None,
         }
+    }
+
+    pub fn update_prev_close(&mut self, close: f64) {
+        self.prev_close = Some(close);
     }
 
     pub fn check_and_adjust_price(
         &self,
-        bar: &Bar,
         order: &Order,
     ) -> Result<f64, String> {
-        let prev_close = self.get_prev_close(bar);
+        let prev_close = match self.prev_close {
+            Some(pc) if pc > 0.0 => pc,
+            _ => return Ok(order.price.to_f64().unwrap_or(0.0)),
+        };
 
         let limit_up = prev_close * (1.0 + self.limit_up_ratio);
         let limit_down = prev_close * (1.0 - self.limit_down_ratio);
@@ -166,10 +174,6 @@ impl PriceLimitChecker {
             }
         }
     }
-
-    fn get_prev_close(&self, bar: &Bar) -> f64 {
-        bar.close.to_f64().unwrap_or(0.0)
-    }
 }
 
 
@@ -187,6 +191,9 @@ pub struct BacktestEngineV2 {
     daily_values: Vec<f64>,
     bar_index: usize,
     event_engine: EventEngine,
+    pending_buy_orders: Vec<Order>,
+    pending_sell_orders: Vec<Order>,
+    current_bar_date: Option<NaiveDate>,
 }
 
 #[pymethods]
@@ -213,25 +220,36 @@ impl BacktestEngineV2 {
             daily_values: Vec::new(),
             bar_index: 0,
             event_engine: EventEngine::new(),
+            pending_buy_orders: Vec::new(),
+            pending_sell_orders: Vec::new(),
+            current_bar_date: None,
         }
     }
 
-    /// 运行完整回测（支持T+1、涨跌停等规则）
     fn run(&mut self, bars: Vec<Bar>) -> PyResult<BacktestResultV2> {
+        if bars.is_empty() {
+            return Ok(BacktestResultV2::empty(self.config.initial_capital));
+        }
+
         let mut prev_date: Option<String> = None;
 
         for (i, bar) in bars.iter().enumerate() {
             self.bar_index = i + 1;
 
-            let current_date = Some(bar.timestamp.format("%Y-%m-%d").to_string());
-            if prev_date.is_some() && prev_date != current_date {
+            let current_date_str = bar.timestamp.format("%Y-%m-%d").to_string();
+            let current_date = NaiveDate::parse_from_str(&current_date_str, "%Y-%m-%d").ok();
+            self.current_bar_date = current_date;
+
+            if prev_date.is_some() && prev_date.as_deref() != Some(&current_date_str) {
                 self.on_day_start();
             }
-            prev_date = current_date;
+            prev_date = Some(current_date_str);
+
+            self.execute_pending_orders(bar);
 
             self.update_positions(bar);
 
-            self.process_orders_with_rules(bar)?;
+            self.price_checker.update_prev_close(bar.close.to_f64().unwrap_or(0.0));
 
             self.daily_values.push(self.portfolio.total_value().to_f64().unwrap_or(0.0));
         }
@@ -240,7 +258,6 @@ impl BacktestEngineV2 {
         Ok(result)
     }
 
-    /// 买入（带T+1标记）
     fn buy(&mut self, symbol: &str, price: f64, volume: i64) -> PyResult<Order> {
         let order_id = format!("BUY-{}", self.orders.len() + 1);
         let order = Order::new(
@@ -254,17 +271,18 @@ impl BacktestEngineV2 {
             None,
         );
 
+        self.pending_buy_orders.push(order.clone());
         self.orders.push(order.clone());
         Ok(order)
     }
 
-    /// 卖出（检查T+1）
     fn sell(&mut self, symbol: &str, price: f64, volume: i64) -> PyResult<Order> {
-        let today = chrono::Local::now().date_naive();
-        if !self.tplus1_manager.can_sell(symbol, today) {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "Cannot sell: T+1 rule violation"
-            ));
+        if let Some(current_date) = self.current_bar_date {
+            if self.config.enable_tplus1 && !self.tplus1_manager.can_sell(symbol, current_date) {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    format!("Cannot sell {}: T+1 rule violation", symbol)
+                ));
+            }
         }
 
         let order_id = format!("SELL-{}", self.orders.len() + 1);
@@ -279,6 +297,7 @@ impl BacktestEngineV2 {
             None,
         );
 
+        self.pending_sell_orders.push(order.clone());
         self.orders.push(order.clone());
         Ok(order)
     }
@@ -298,7 +317,65 @@ impl BacktestEngineV2 {
 
 impl BacktestEngineV2 {
     fn on_day_start(&mut self) {
-        // 每日开始时更新可用仓位（T+1）
+    }
+
+    fn execute_pending_orders(&mut self, bar: &Bar) {
+        let open_price = bar.open.to_f64().unwrap_or(0.0);
+        if open_price <= 0.0 {
+            return;
+        }
+
+        let buy_orders: Vec<Order> = self.pending_buy_orders.drain(..).collect();
+        for mut order in buy_orders {
+            let fill_price = open_price * (1.0 + self.config.slippage);
+            order.price = Decimal::from_f64_retain(fill_price).unwrap_or(order.price);
+
+            if self.config.enable_price_limit {
+                match self.price_checker.check_and_adjust_price(&order) {
+                    Ok(adjusted_price) => {
+                        if let Some(trade) = self.matching_engine.match_order_v2(&mut order, bar, adjusted_price) {
+                            self.update_position_from_trade(&trade, bar);
+                            self.trades.push(trade);
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Buy order rejected: {}", e);
+                        order.status = OrderStatus::Rejected;
+                    }
+                }
+            } else {
+                if let Some(trade) = self.matching_engine.match_order_v2(&mut order, bar, fill_price) {
+                    self.update_position_from_trade(&trade, bar);
+                    self.trades.push(trade);
+                }
+            }
+        }
+
+        let sell_orders: Vec<Order> = self.pending_sell_orders.drain(..).collect();
+        for mut order in sell_orders {
+            let fill_price = open_price * (1.0 - self.config.slippage);
+            order.price = Decimal::from_f64_retain(fill_price).unwrap_or(order.price);
+
+            if self.config.enable_price_limit {
+                match self.price_checker.check_and_adjust_price(&order) {
+                    Ok(adjusted_price) => {
+                        if let Some(trade) = self.matching_engine.match_order_v2(&mut order, bar, adjusted_price) {
+                            self.update_position_from_trade(&trade, bar);
+                            self.trades.push(trade);
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Sell order rejected: {}", e);
+                        order.status = OrderStatus::Rejected;
+                    }
+                }
+            } else {
+                if let Some(trade) = self.matching_engine.match_order_v2(&mut order, bar, fill_price) {
+                    self.update_position_from_trade(&trade, bar);
+                    self.trades.push(trade);
+                }
+            }
+        }
     }
 
     fn update_positions(&mut self, bar: &Bar) {
@@ -307,35 +384,6 @@ impl BacktestEngineV2 {
             pos.update_price(close_f64);
         }
         self.portfolio.update();
-    }
-
-    fn process_orders_with_rules(&mut self, bar: &Bar) -> Result<(), String> {
-        let orders_to_process: Vec<usize> = self.orders.iter()
-            .enumerate()
-            .filter(|(_, order)| {
-                order.is_active() && order.symbol == bar.symbol
-            })
-            .map(|(i, _)| i)
-            .collect();
-
-        for &i in &orders_to_process {
-            let order = &mut self.orders[i];
-
-            match self.price_checker.check_and_adjust_price(bar, order) {
-                Ok(adjusted_price) => {
-                    if let Some(trade) = self.matching_engine.match_order_v2(order, bar, adjusted_price) {
-                        self.update_position_from_trade(&trade, bar);
-                        self.trades.push(trade);
-                    }
-                }
-                Err(e) => {
-                    log::warn!("Order rejected: {}", e);
-                    order.status = OrderStatus::Rejected;
-                }
-            }
-        }
-
-        Ok(())
     }
 
     fn update_position_from_trade(&mut self, trade: &Trade, bar: &Bar) {
@@ -373,14 +421,36 @@ impl BacktestEngineV2 {
     }
 
     fn calculate_performance_v2(&self) -> BacktestResultV2 {
-        let total_return = self.portfolio.total_pnl_percent.to_f64().unwrap_or(0.0);
+        let total_return = if self.config.initial_capital > 0.0 {
+            (self.portfolio.total_asset.to_f64().unwrap_or(0.0) - self.config.initial_capital) / self.config.initial_capital
+        } else {
+            0.0
+        };
+
+        let annual_return = self.calculate_annual_return();
+        let volatility = self.calculate_volatility();
+        let sharpe_ratio = self.calculate_sharpe_ratio();
+        let max_drawdown = self.calculate_max_drawdown();
+        let sortino_ratio = self.calculate_sortino_ratio();
+        let calmar_ratio = if max_drawdown > 0.0 {
+            annual_return / max_drawdown
+        } else {
+            0.0
+        };
+
+        let (win_rate, profit_loss_ratio, max_consecutive_losses) = self.calculate_trade_stats();
 
         BacktestResultV2 {
             total_return,
-            annual_return: self.calculate_annual_return(),
-            volatility: self.calculate_volatility(),
-            sharpe_ratio: self.calculate_sharpe_ratio(),
-            max_drawdown: self.calculate_max_drawdown(),
+            annual_return,
+            volatility,
+            sharpe_ratio,
+            max_drawdown,
+            sortino_ratio,
+            calmar_ratio,
+            win_rate,
+            profit_loss_ratio,
+            max_consecutive_losses,
             total_trades: self.trades.len() as i32,
             initial_capital: self.config.initial_capital,
             final_capital: self.portfolio.total_asset.to_f64().unwrap_or(0.0),
@@ -401,6 +471,79 @@ impl BacktestEngineV2 {
 
     fn calculate_max_drawdown(&self) -> f64 {
         calculate_max_drawdown(&self.daily_values)
+    }
+
+    fn calculate_sortino_ratio(&self) -> f64 {
+        if self.daily_values.len() < 2 {
+            return 0.0;
+        }
+
+        let returns: Vec<f64> = self.daily_values
+            .windows(2)
+            .map(|w| (w[1] - w[0]) / w[0])
+            .collect();
+
+        let downside_returns: Vec<f64> = returns.iter().filter(|&&r| r < 0.0).cloned().collect();
+
+        if downside_returns.is_empty() {
+            return if self.calculate_annual_return() > 0.03 { f64::INFINITY } else { 0.0 };
+        }
+
+        let mean_downside = downside_returns.iter().sum::<f64>() / downside_returns.len() as f64;
+        let downside_var = downside_returns.iter()
+            .map(|r| (r - mean_downside).powi(2))
+            .sum::<f64>() / downside_returns.len() as f64;
+        let downside_std = downside_var.sqrt() * (252_f64).sqrt();
+
+        if downside_std == 0.0 {
+            return 0.0;
+        }
+
+        (self.calculate_annual_return() - 0.03) / downside_std
+    }
+
+    fn calculate_trade_stats(&self) -> (f64, f64, i32) {
+        let mut buy_costs: HashMap<String, (f64, i64)> = HashMap::new();
+        let mut wins = 0i32;
+        let mut losses = 0i32;
+        let mut total_win = 0.0f64;
+        let mut total_loss = 0.0f64;
+        let mut consecutive_losses = 0i32;
+        let mut max_consecutive_losses = 0i32;
+
+        for trade in &self.trades {
+            let price_f64 = trade.price.to_f64().unwrap_or(0.0);
+            if trade.side == "buy" {
+                let entry = buy_costs.entry(trade.symbol.clone()).or_insert((0.0, 0));
+                let total_cost = entry.0 * entry.1 as f64 + price_f64 * trade.quantity as f64;
+                entry.1 += trade.quantity;
+                entry.0 = if entry.1 > 0 { total_cost / entry.1 as f64 } else { 0.0 };
+            } else {
+                if let Some(entry) = buy_costs.get(&trade.symbol) {
+                    let avg_cost = entry.0;
+                    if price_f64 > avg_cost {
+                        wins += 1;
+                        total_win += (price_f64 - avg_cost) * trade.quantity as f64;
+                        consecutive_losses = 0;
+                    } else {
+                        losses += 1;
+                        total_loss += (avg_cost - price_f64) * trade.quantity as f64;
+                        consecutive_losses += 1;
+                        max_consecutive_losses = max_consecutive_losses.max(consecutive_losses);
+                    }
+                }
+            }
+        }
+
+        let total = wins + losses;
+        let win_rate = if total > 0 { wins as f64 / total as f64 } else { 0.0 };
+        let profit_loss_ratio = if losses > 0 && total_loss > 0.0 {
+            (total_win / wins.max(1) as f64) / (total_loss / losses as f64)
+        } else {
+            0.0
+        };
+
+        (win_rate, profit_loss_ratio, max_consecutive_losses)
     }
 }
 
@@ -476,6 +619,21 @@ pub struct BacktestResultV2 {
     pub max_drawdown: f64,
 
     #[pyo3(get)]
+    pub sortino_ratio: f64,
+
+    #[pyo3(get)]
+    pub calmar_ratio: f64,
+
+    #[pyo3(get)]
+    pub win_rate: f64,
+
+    #[pyo3(get)]
+    pub profit_loss_ratio: f64,
+
+    #[pyo3(get)]
+    pub max_consecutive_losses: i32,
+
+    #[pyo3(get)]
     pub total_trades: i32,
 
     #[pyo3(get)]
@@ -485,12 +643,33 @@ pub struct BacktestResultV2 {
     pub final_capital: f64,
 }
 
+impl BacktestResultV2 {
+    fn empty(initial_capital: f64) -> Self {
+        Self {
+            total_return: 0.0,
+            annual_return: 0.0,
+            volatility: 0.0,
+            sharpe_ratio: 0.0,
+            max_drawdown: 0.0,
+            sortino_ratio: 0.0,
+            calmar_ratio: 0.0,
+            win_rate: 0.0,
+            profit_loss_ratio: 0.0,
+            max_consecutive_losses: 0,
+            total_trades: 0,
+            initial_capital,
+            final_capital: initial_capital,
+        }
+    }
+}
+
 #[pymethods]
 impl BacktestResultV2 {
     fn __repr__(&self) -> String {
         format!(
-            "BacktestResultV2(return={:.2%}, sharpe={:.2}, max_dd={:.2%}, trades={})",
-            self.total_return, self.sharpe_ratio, self.max_drawdown, self.total_trades
+            "BacktestResultV2(return={:.2%}, sharpe={:.2}, sortino={:.2}, calmar={:.2}, max_dd={:.2%}, win_rate={:.1%}, trades={})",
+            self.total_return, self.sharpe_ratio, self.sortino_ratio, self.calmar_ratio,
+            self.max_drawdown, self.win_rate, self.total_trades
         )
     }
 }

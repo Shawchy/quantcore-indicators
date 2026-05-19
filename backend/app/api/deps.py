@@ -8,7 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from loguru import logger
 
 from app.core.security import (
-    verify_access_token,
+    verify_access_token_with_blacklist,
     TokenData,
     User
 )
@@ -58,7 +58,7 @@ async def get_current_user(
     except Exception as e:
         logger.warning(f"令牌黑名单检查失败，跳过撤销检查：{e}")
     
-    token_data = verify_access_token(token)
+    token_data = await verify_access_token_with_blacklist(token)
     
     if token_data is None:
         raise HTTPException(
@@ -120,7 +120,7 @@ async def get_optional_current_user(
         return None
     
     token = credentials.credentials
-    token_data = verify_access_token(token)
+    token_data = await verify_access_token_with_blacklist(token)
     
     if token_data is None:
         return None

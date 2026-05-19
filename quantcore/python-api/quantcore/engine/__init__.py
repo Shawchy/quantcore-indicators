@@ -97,47 +97,37 @@ class BacktestEngine:
         return self.portfolio
     
     def run(self, strategy, bars: List[Bar]) -> BacktestResult:
-        """
-        运行回测（支持 T+1）
-        
-        Args:
-            strategy: 策略对象
-            bars: K 线数据列表
-            
-        Returns:
-            回测结果
-        """
-        # 初始化策略
         strategy.on_init(self)
         
-        # 处理每个 K 线
         prev_date = None
-        for bar in bars:
-            # 检查是否是新的一天
+        pending_orders = []
+        
+        for i, bar in enumerate(bars):
             current_date = bar.timestamp.date() if hasattr(bar.timestamp, 'date') else str(bar.timestamp)[:10]
             
-            # 如果是新的一天，更新 T+1 状态
             if prev_date is not None and current_date != prev_date:
                 self._update_tplus1_positions()
             
             prev_date = current_date
             
-            # 更新持仓价格
             self._update_positions(bar)
             
-            # 触发策略
+            if pending_orders:
+                next_bar = bars[i] if i < len(bars) else bar
+                open_price = next_bar.open if hasattr(next_bar, 'open') else next_bar.close
+                self._match_pending_orders(pending_orders, open_price, bar)
+                pending_orders = []
+            
             strategy.on_bar(bar, self)
             
-            # 撮合订单
-            self._match_orders(bar)
+            new_pending = [o for o in self.orders if o.status.value == "pending" or o.status == OrderStatus.PENDING]
+            if new_pending:
+                pending_orders.extend(new_pending)
             
-            # 记录每日账户值
             self.daily_values.append(self.portfolio.total_asset)
         
-        # 回测结束
         strategy.on_finish(self)
         
-        # 计算绩效
         result = self._calculate_performance()
         return result
     
@@ -221,13 +211,10 @@ class BacktestEngine:
         return self._create_order(symbol, OrderSide.SELL, price, volume, order_type, "SELL")
     
     def _match_orders(self, bar: Bar):
-        """撮合订单"""
-        # 处理所有未成交的订单
         from ..core import OrderStatus, OrderType
         
         pending_orders = [o for o in self.orders if o.status == OrderStatus.PENDING]
         
-        # 调试信息
         if pending_orders:
             self.logger.debug(f"  发现 {len(pending_orders)} 个待成交订单")
         
@@ -236,9 +223,7 @@ class BacktestEngine:
         for order in pending_orders:
             filled = False
             
-            # 市价单立即成交
             if order.order_type == OrderType.MARKET:
-                # 应用滑点
                 if order.side.value == "buy":
                     fill_price = bar.close * (1 + self.config.slippage)
                 else:
@@ -247,46 +232,73 @@ class BacktestEngine:
                 fill_quantity = order.quantity
                 filled = True
                 
-                # 调试信息
                 self.logger.debug(f"  市价单 {order.order_id} 准备成交：{order.side.value} {fill_quantity} @ {fill_price:.2f}")
             
-            # 限价单检查是否满足成交条件
             elif order.order_type == OrderType.LIMIT:
                 if order.side.value == "buy":
-                    # 买入限价单：当前价 <= 限价时成交
                     if bar.low <= order.price:
-                        fill_price = order.price  # 限价成交
+                        fill_price = order.price
                         fill_quantity = order.quantity
                         filled = True
                         self.logger.debug(f"  限价买单 {order.order_id} 成交：{order.quantity} @ {order.price:.2f} (Bar Low: {bar.low:.2f})")
                 else:
-                    # 卖出限价单：当前价 >= 限价时成交
                     if bar.high >= order.price:
-                        fill_price = order.price  # 限价成交
+                        fill_price = order.price
                         fill_quantity = order.quantity
                         filled = True
                         self.logger.debug(f"  限价卖单 {order.order_id} 成交：{order.quantity} @ {order.price:.2f} (Bar High: {bar.high:.2f})")
             
-            # 执行成交
             if filled:
-                # 生成成交记录
                 trade = self._generate_trade(order, fill_price, fill_quantity)
                 self.trades.append(trade)
                 
-                # 更新订单状态
                 order.status = OrderStatus.FILLED
                 order.filled_quantity = fill_quantity
                 order.updated_at = bar.timestamp
                 
-                # 更新持仓
                 self._update_portfolio_from_trade(trade)
                 
                 filled_orders.append(order)
         
-        # 移除已成交订单的调试信息
         if filled_orders:
             for order in filled_orders:
                 self.logger.info(f"订单 {order.order_id} 成交：{order.side.value} {order.filled_quantity} @ {order.price:.2f}")
+    
+    def _match_pending_orders(self, pending_orders: list, open_price: float, bar: Bar):
+        from ..core import OrderStatus, OrderType
+        
+        for order in pending_orders:
+            filled = False
+            
+            if order.order_type == OrderType.MARKET:
+                if order.side.value == "buy":
+                    fill_price = open_price * (1 + self.config.slippage)
+                else:
+                    fill_price = open_price * (1 - self.config.slippage)
+                
+                fill_quantity = order.quantity
+                filled = True
+            elif order.order_type == OrderType.LIMIT:
+                if order.side.value == "buy":
+                    if open_price <= order.price:
+                        fill_price = order.price
+                        fill_quantity = order.quantity
+                        filled = True
+                else:
+                    if open_price >= order.price:
+                        fill_price = order.price
+                        fill_quantity = order.quantity
+                        filled = True
+            
+            if filled:
+                trade = self._generate_trade(order, fill_price, fill_quantity)
+                self.trades.append(trade)
+                
+                order.status = OrderStatus.FILLED
+                order.filled_quantity = fill_quantity
+                order.updated_at = bar.timestamp
+                
+                self._update_portfolio_from_trade(trade)
     
     def _update_portfolio_from_trade(self, trade: Trade):
         """根据成交更新持仓（支持 T+1）"""
@@ -440,31 +452,41 @@ class BacktestEngine:
         
         # 胜率和盈亏比
         if self.trades:
-            # 按订单分组计算盈亏
-            trade_pnl = {}
-            for trade in self.trades:
-                if trade.order_id not in trade_pnl:
-                    trade_pnl[trade.order_id] = 0.0
-                # 计算盈亏（简化：假设卖出时实现盈亏）
-                if trade.side.value == "sell":
-                    trade_pnl[trade.order_id] += trade.price * trade.quantity - trade.commission - trade.tax
-                else:
-                    trade_pnl[trade.order_id] -= (trade.price * trade.quantity + trade.commission + trade.tax)
+            avg_buy_prices = {}
+            winning = 0
+            losing = 0
+            total_win = 0.0
+            total_loss = 0.0
             
-            # 统计盈利和亏损交易
-            winning = sum(1 for pnl in trade_pnl.values() if pnl > 0)
-            losing = sum(1 for pnl in trade_pnl.values() if pnl < 0)
+            for trade in self.trades:
+                symbol = trade.symbol
+                if trade.side.value == "buy":
+                    if symbol not in avg_buy_prices:
+                        avg_buy_prices[symbol] = {"total_cost": 0.0, "total_qty": 0}
+                    avg_buy_prices[symbol]["total_cost"] += trade.price * trade.quantity
+                    avg_buy_prices[symbol]["total_qty"] += trade.quantity
+                elif trade.side.value == "sell":
+                    if symbol in avg_buy_prices and avg_buy_prices[symbol]["total_qty"] > 0:
+                        avg_cost = avg_buy_prices[symbol]["total_cost"] / avg_buy_prices[symbol]["total_qty"]
+                        pnl = (trade.price - avg_cost) * trade.quantity - trade.commission - trade.tax
+                        if pnl > 0:
+                            winning += 1
+                            total_win += pnl
+                        else:
+                            losing += 1
+                            total_loss += abs(pnl)
+                        avg_buy_prices[symbol]["total_cost"] -= avg_cost * trade.quantity
+                        avg_buy_prices[symbol]["total_qty"] -= trade.quantity
+            
             result.winning_trades = winning
             result.losing_trades = losing
             
             if winning + losing > 0:
                 result.win_rate = winning / (winning + losing)
             
-            # 盈亏比
-            if losing > 0:
-                avg_win = sum(pnl for pnl in trade_pnl.values() if pnl > 0) / winning if winning > 0 else 0
-                avg_loss = abs(sum(pnl for pnl in trade_pnl.values() if pnl < 0) / losing)
-                if avg_loss > 0:
-                    result.profit_loss_ratio = avg_win / avg_loss
+            if losing > 0 and total_loss > 0:
+                avg_win = total_win / winning if winning > 0 else 0
+                avg_loss = total_loss / losing
+                result.profit_loss_ratio = avg_win / avg_loss
         
         return result

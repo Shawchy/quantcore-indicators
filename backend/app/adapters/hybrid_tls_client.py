@@ -361,25 +361,25 @@ class DrissionPagePool:
         for page in self._pages:
             try:
                 await page.close()
-            except:
+            except Exception:
                 pass
         
         for context in self._contexts:
             try:
                 await context.close()
-            except:
+            except Exception:
                 pass
         
         if self._browser:
             try:
                 await self._browser.close()
-            except:
+            except Exception:
                 pass
         
         if self._playwright:
             try:
                 await self._playwright.stop()
-            except:
+            except Exception:
                 pass
         
         self._is_initialized = False
@@ -477,13 +477,13 @@ class TLSClientPool:
         for client in self._curl_clients.values():
             try:
                 client.close()
-            except:
+            except Exception:
                 pass
         
         if self._httpx_client:
             try:
                 self._httpx_client.close()
-            except:
+            except Exception:
                 pass
 
 

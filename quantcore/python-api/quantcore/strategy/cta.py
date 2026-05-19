@@ -366,20 +366,16 @@ class DualMaCTAStrategy(CTAStrategy):
 
 
 class ATRTrailingCTAStrategy(CTAStrategy):
-    """
-    ATR 移动止损 CTA 策略
-    
-    逻辑：
-    - 突破 N 日高点：做多
-    - 移动止损（基于 ATR）：平仓
-    """
-    
     default_params = {
         'breakout_period': 20,
         'atr_period': 14,
         'atr_multiplier': 2.0,
         'position_ratio': 0.3,
     }
+    
+    def __init__(self, strategy_id: str = "", params: dict = None):
+        super().__init__(strategy_id, params)
+        self.stop_loss_price = 0.0
     
     def on_cta_bar(self, bar: Bar, engine):
         symbol = bar.symbol

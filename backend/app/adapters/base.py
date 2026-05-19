@@ -1279,38 +1279,55 @@ class BaseDataAdapter(ABC):
     # ========== 智能缓存方法 ==========
     
     def _get_cache_key(self, prefix: str, **kwargs) -> str:
-        """生成缓存键
-        
-        Args:
-            prefix: 缓存前缀（如 'stock_list', 'kline'）
-            **kwargs: 额外参数（如 code, start_date 等）
-        
-        Returns:
-            缓存键字符串
-        
-        示例:
-            >>> _get_cache_key('stock_list')
-            'efinance_stock_list_default_20260402'
-            
-            >>> _get_cache_key('kline', code='600000', start='20240101')
-            'efinance_kline_code=600000_start=20240101_20260402'
-        """
         from datetime import datetime
+        import json
         
-        # 添加日期后缀（按天缓存）
         date_suffix = datetime.now().strftime('%Y%m%d')
         
-        # 构建参数部分
-        params = []
+        params = {}
         for key, value in sorted(kwargs.items()):
-            params.append(f"{key}={value}")
+            params[key] = str(value)
         
-        params_str = '_'.join(params) if params else 'default'
+        meta = {
+            "source": self.source_type.value,
+            "prefix": prefix,
+            "params": params,
+            "date": date_suffix
+        }
         
-        # 生成完整缓存键
-        cache_key = f"{self.source_type.value}_{prefix}_{params_str}_{date_suffix}"
+        return json.dumps(meta, separators=(',', ':'), ensure_ascii=False)
+    
+    @staticmethod
+    def _parse_cache_key(cache_key: str) -> dict:
+        import json
         
-        return cache_key
+        try:
+            meta = json.loads(cache_key)
+            return {
+                "source": meta.get("source", ""),
+                "prefix": meta.get("prefix", ""),
+                "params": meta.get("params", {}),
+                "date": meta.get("date", "")
+            }
+        except (json.JSONDecodeError, TypeError):
+            parts = cache_key.split('_')
+            if len(parts) < 3:
+                return {"source": "", "prefix": "", "params": {}, "date": ""}
+            
+            prefix = parts[1]
+            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
+            params = {}
+            for param in params_str.split('_'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    params[key] = value
+            
+            return {
+                "source": parts[0],
+                "prefix": prefix,
+                "params": params,
+                "date": parts[-1] if parts else ""
+            }
     
     async def _get_from_cache(self, cache_key: str, data_type: str) -> Optional[Any]:
         """从缓存获取数据（智能判断缓存层级）
@@ -1374,9 +1391,8 @@ class BaseDataAdapter(ABC):
         if cache_type:
             # 空值缓存处理（防穿透）
             if data is None:
-                # 空值也缓存，设置短 TTL（1 分钟）
-                await cache_manager.set(cache_type, cache_key, "__NONE__", ttl=60)
-                logger.debug(f"缓存空值：{data_type} - {cache_key} (TTL=60s)")
+                await cache_manager.set(cache_type, cache_key, "__NONE__", ttl=300)
+                logger.debug(f"缓存空值：{data_type} - {cache_key} (TTL=300s)")
             else:
                 await cache_manager.set(cache_type, cache_key, data, ttl=decision.ttl_seconds)
                 logger.debug(f"缓存保存：{data_type} - {cache_key} (TTL={decision.ttl_seconds}s)")
@@ -1440,40 +1456,16 @@ class BaseDataAdapter(ABC):
             return None
     
     async def _get_from_sqlite(self, cache_key: str, data_type: str) -> Optional[Any]:
-        """从 SQLite 数据库获取数据
-        
-        Args:
-            cache_key: 缓存键（格式：source_type_prefix_params_date）
-            data_type: 数据类型
-        
-        Returns:
-            数据或 None
-        """
         try:
             from app.services.local_database import local_db_service
             
             if not local_db_service._initialized:
                 await local_db_service.initialize()
             
-            # 解析 cache_key
-            parts = cache_key.split('_')
-            if len(parts) < 3:
-                return None
+            parsed = self._parse_cache_key(cache_key)
+            prefix = parsed.get("prefix", "")
+            params = parsed.get("params", {})
             
-            # 示例：efinance_kline_code=600000_20260402
-            # source_type = efinance, prefix = kline, params = code=600000, date = 20260402
-            
-            prefix = parts[1]  # kline, quote, sector, etc.
-            
-            # 提取参数
-            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
-            params = {}
-            for param in params_str.split('_'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    params[key] = value
-            
-            # 根据数据类型调用不同的查询
             if 'kline' in prefix:
                 code = params.get('code')
                 start_date = params.get('start')
@@ -1482,7 +1474,7 @@ class BaseDataAdapter(ABC):
                 if code:
                     df = await local_db_service.get_kline(code, start_date, end_date)
                     if df is not None and not df.empty:
-                        logger.debug(f"SQLite 命中：{data_type} - {cache_key}")
+                        logger.debug(f"SQLite 命中：{data_type} - {prefix}")
                         return df
             
             elif 'quote' in prefix:
@@ -1490,82 +1482,61 @@ class BaseDataAdapter(ABC):
                 if code:
                     quote = await local_db_service.get_quote(code)
                     if quote:
-                        logger.debug(f"SQLite 命中：{data_type} - {cache_key}")
+                        logger.debug(f"SQLite 命中：{data_type} - {prefix}")
                         return quote
             
             elif 'sector' in prefix:
                 sector_type = params.get('type', 'industry')
                 sectors = await local_db_service.get_sector_list(sector_type)
                 if sectors:
-                    logger.debug(f"SQLite 命中：{data_type} - {cache_key}")
+                    logger.debug(f"SQLite 命中：{data_type} - {prefix}")
                     return sectors
             
             return None
             
         except Exception as e:
-            logger.warning(f"SQLite 查询失败：{cache_key}, 错误：{e}")
+            logger.warning(f"SQLite 查询失败：{data_type}, 错误：{e}")
             return None
     
     async def _get_from_parquet(self, cache_key: str, data_type: str) -> Optional[Any]:
-        """从 Parquet 文件获取数据
-        
-        Args:
-            cache_key: 缓存键
-            data_type: 数据类型
-        
-        Returns:
-            数据或 None
-        """
         try:
-            from app.storage.parquet_store import ParquetStore
+            from app.storage.parquet_manager import parquet_manager
             
-            parquet = ParquetStore()
+            parsed = self._parse_cache_key(cache_key)
+            prefix = parsed.get("prefix", "")
+            params = parsed.get("params", {})
             
-            # 解析 cache_key
-            parts = cache_key.split('_')
-            if len(parts) < 3:
-                return None
-            
-            prefix = parts[1]
-            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
-            params = {}
-            for param in params_str.split('_'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    params[key] = value
-            
-            # 根据数据类型调用不同的加载方法
             if 'kline' in prefix:
                 code = params.get('code')
                 start_date = params.get('start')
                 end_date = params.get('end')
                 
                 if code:
-                    df = parquet.load_kline(code, start_date, end_date)
+                    df = parquet_manager.load_kline(code, start_date, end_date)
                     if df is not None and not df.empty:
-                        logger.debug(f"Parquet 命中：{data_type} - {cache_key}")
+                        logger.debug(f"Parquet 命中：{data_type} - {prefix}")
                         return df
             
             elif 'indicators' in prefix or 'indicator' in prefix:
                 code = params.get('code')
                 if code:
-                    df = parquet.load_indicators(code)
+                    df = parquet_manager.load_indicators(code)
                     if df is not None and not df.empty:
-                        logger.debug(f"Parquet 命中：{data_type} - {cache_key}")
+                        logger.debug(f"Parquet 命中：{data_type} - {prefix}")
                         return df
             
             elif 'chip' in prefix:
                 code = params.get('code')
                 if code:
-                    df = parquet.load_chip_data(code)
+                    df = parquet_manager.load_chip_data(code)
                     if df is not None and not df.empty:
-                        logger.debug(f"Parquet 命中：{data_type} - {cache_key}")
+                        logger.debug(f"Parquet 命中：{data_type} - {prefix}")
                         return df
             
             return None
             
         except Exception as e:
-            logger.warning(f"Parquet 读取失败：{cache_key}, 错误：{e}")
+            logger.warning(f"Parquet 读取失败：{data_type}, 错误：{e}")
             return None
     
     async def _save_to_persist(self, cache_key: str, data: Any, data_type: str) -> None:
@@ -1657,48 +1628,36 @@ class BaseDataAdapter(ABC):
             data_type: 数据类型
         """
         try:
-            from app.storage.parquet_store import ParquetStore
+            from app.storage.parquet_manager import parquet_manager
             import pandas as pd
             
             if not isinstance(data, pd.DataFrame) or data.empty:
                 return
             
-            parquet = ParquetStore()
+            parsed = self._parse_cache_key(cache_key)
+            prefix = parsed.get("prefix", "")
+            params = parsed.get("params", {})
             
-            # 解析 cache_key
-            parts = cache_key.split('_')
-            if len(parts) < 3:
-                return
-            
-            prefix = parts[1]
-            params_str = '_'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
-            params = {}
-            for param in params_str.split('_'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    params[key] = value
-            
-            # 根据数据类型调用不同的保存方法
             if 'kline' in prefix:
                 code = params.get('code')
                 if code:
-                    parquet.save_kline(data, code)
-                    logger.debug(f"Parquet 保存：{data_type} - {cache_key}")
+                    parquet_manager.save_kline(data, code)
+                    logger.debug(f"Parquet 保存：{data_type} - {prefix}")
             
             elif 'indicators' in prefix or 'indicator' in prefix:
                 code = params.get('code')
                 if code:
-                    parquet.save_indicators(data, code)
-                    logger.debug(f"Parquet 保存：{data_type} - {cache_key}")
+                    parquet_manager.save_indicators(data, code)
+                    logger.debug(f"Parquet 保存：{data_type} - {prefix}")
             
             elif 'chip' in prefix:
                 code = params.get('code')
                 if code:
-                    parquet.save_chip_data(data, code)
-                    logger.debug(f"Parquet 保存：{data_type} - {cache_key}")
+                    parquet_manager.save_chip_data(data, code)
+                    logger.debug(f"Parquet 保存：{data_type} - {prefix}")
             
         except Exception as e:
-            logger.warning(f"Parquet 保存失败：{cache_key}, 错误：{e}")
+            logger.warning(f"Parquet 保存失败：{data_type}, 错误：{e}")
     
     # ========== 原有方法 ==========
     

@@ -10,14 +10,24 @@ import {
   type ColumnFiltersState,
   type PaginationState,
 } from '@tanstack/react-table'
-import { useState } from 'react'
-import { Box, HStack, IconButton, Input, NativeSelect, Table, Text } from '@chakra-ui/react'
-import { useColorModeValue } from './ui/color-mode'
-import { FiArrowUp, FiArrowDown } from 'react-icons/fi'
 
-interface ColumnMeta {
-  isNumeric?: boolean
+declare module '@tanstack/react-table' {
+  interface ColumnMeta<TData, TValue> {
+    isNumeric?: boolean
+  }
 }
+import { useState } from 'react'
+import {
+  Table,
+  Box,
+  Text,
+  HStack,
+  IconButton,
+  NativeSelect,
+  Input,
+} from '@chakra-ui/react'
+import { useColorModeValue } from './ui/color-mode'
+import { FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiArrowUp, FiArrowDown } from 'react-icons/fi'
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, unknown>[]
@@ -80,55 +90,46 @@ function DataTable<TData>({
       )}
 
       <Box overflowY={height ? 'auto' : undefined} maxH={height}>
-        <Table.Root size="sm" >
+        <Table.Root size="sm">
           <Table.Header bg={headerBg} position="sticky" top={0} zIndex={1}>
             {table.getHeaderGroups().map((headerGroup) => (
               <Table.Row key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  const meta = header.column.columnDef.meta as ColumnMeta | undefined
-                  const isNumeric = meta?.isNumeric ?? false
-                  return (
-                    <Table.ColumnHeader
-                      key={header.id}
-                      cursor={header.column.getCanSort() ? 'pointer' : undefined}
-                      onClick={header.column.getToggleSortingHandler()}
-                      color={textColor}
-                      fontSize="xs"
-                      py={2}
-                      textAlign={isNumeric ? 'right' : 'left'}
-                    >
-                      <HStack gap={1} justify={isNumeric ? 'flex-end' : 'flex-start'}>
-                        <Text as="span" fontWeight="600">
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                        </Text>
-                        {header.column.getIsSorted() === 'asc' && <FiArrowUp size={12} />}
-                        {header.column.getIsSorted() === 'desc' && <FiArrowDown size={12} />}
-                      </HStack>
-                    </Table.ColumnHeader>
-                  )
-                })}
+                {headerGroup.headers.map((header) => (
+                  <Table.ColumnHeader
+                    key={header.id}
+                    textAlign={header.column.columnDef.meta?.isNumeric ? 'end' : undefined}
+                    cursor={header.column.getCanSort() ? 'pointer' : undefined}
+                    onClick={header.column.getToggleSortingHandler()}
+                    color={textColor}
+                    fontSize="xs"
+                    py={2}
+                  >
+                    <HStack gap={1} justify={header.column.columnDef.meta?.isNumeric ? 'flex-end' : 'flex-start'}>
+                      <Text as="span" fontWeight="600">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                      </Text>
+                      {header.column.getIsSorted() === 'asc' && <FiArrowUp size={12} />}
+                      {header.column.getIsSorted() === 'desc' && <FiArrowDown size={12} />}
+                    </HStack>
+                  </Table.ColumnHeader>
+                ))}
               </Table.Row>
             ))}
           </Table.Header>
           <Table.Body>
             {table.getRowModel().rows.map((row) => (
               <Table.Row key={row.id} _hover={{ bg: hoverBg }} borderColor={borderColor}>
-                {row.getVisibleCells().map((cell) => {
-                  const meta = cell.column.columnDef.meta as ColumnMeta | undefined
-                  const isNumeric = meta?.isNumeric ?? false
-                  return (
-                    <Table.Cell
-                      key={cell.id}
-                      color={textColor}
-                      fontSize="sm"
-                      py={2}
-                      textAlign={isNumeric ? 'right' : 'left'}
-                      fontFamily={isNumeric ? 'mono' : undefined}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </Table.Cell>
-                  )
-                })}
+                {row.getVisibleCells().map((cell) => (
+                  <Table.Cell
+                    key={cell.id}
+                    textAlign={cell.column.columnDef.meta?.isNumeric ? 'end' : undefined}
+                    color={textColor}
+                    fontSize="sm"
+                    py={2}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </Table.Cell>
+                ))}
               </Table.Row>
             ))}
             {table.getRowModel().rows.length === 0 && (
@@ -151,42 +152,49 @@ function DataTable<TData>({
           borderColor={borderColor}
         >
           <IconButton
-            size="sm"
+            size="xs"
             variant="ghost"
             aria-label="首页"
             onClick={() => table.setPageIndex(0)}
             disabled={!table.getCanPreviousPage()}
-          />
+          >
+            <FiChevronsLeft />
+          </IconButton>
           <IconButton
-            size="sm"
+            size="xs"
             variant="ghost"
             aria-label="上一页"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-          />
+          >
+            <FiChevronLeft />
+          </IconButton>
 
           <Text fontSize="sm" color={mutedColor} px={2} minW="80px" textAlign="center">
             {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
           </Text>
 
           <IconButton
-            size="sm"
+            size="xs"
             variant="ghost"
             aria-label="下一页"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-          />
+          >
+            <FiChevronRight />
+          </IconButton>
           <IconButton
-            size="sm"
+            size="xs"
             variant="ghost"
             aria-label="末页"
             onClick={() => table.setPageIndex(table.getPageCount() - 1)}
             disabled={!table.getCanNextPage()}
-          />
+          >
+            <FiChevronsRight />
+          </IconButton>
 
-          <NativeSelect.Root size="sm" w="70px" ml={4}>
+          <NativeSelect.Root size="xs" w="70px" ml={4}>
             <NativeSelect.Field
-              borderRadius="md"
               value={table.getState().pagination.pageSize}
               onChange={(e) => table.setPageSize(Number(e.target.value))}
             >
@@ -196,6 +204,7 @@ function DataTable<TData>({
                 </option>
               ))}
             </NativeSelect.Field>
+            <NativeSelect.Indicator />
           </NativeSelect.Root>
         </HStack>
       )}
@@ -204,4 +213,4 @@ function DataTable<TData>({
 }
 
 export default DataTable
-export type { ColumnDef, ColumnMeta }
+export type { ColumnDef }

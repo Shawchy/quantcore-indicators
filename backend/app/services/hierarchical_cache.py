@@ -163,7 +163,7 @@ class HierarchicalCache:
         }
         
         target_cache = cache_map.get(level)
-        if target_cache is None:
+        if not target_cache:
             return None
         
         entry = target_cache.get(key)
@@ -243,7 +243,7 @@ class HierarchicalCache:
         }
         
         target_cache = cache_map.get(level)
-        if target_cache is None:
+        if not target_cache:
             return False
         
         async with self._lock:

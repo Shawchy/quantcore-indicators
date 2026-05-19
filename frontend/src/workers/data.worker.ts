@@ -239,7 +239,7 @@ self.onmessage = function(e: MessageEvent<WorkerMessage>) {
 
   try {
     switch (type) {
-      case 'PROCESS_DATA':
+      case 'PROCESS_DATA': {
         const processed = processData(data as RawKlineItem[])
         const response: WorkerResponse = {
           type: 'DATA_READY',
@@ -248,8 +248,9 @@ self.onmessage = function(e: MessageEvent<WorkerMessage>) {
         }
         self.postMessage(response)
         break
+      }
 
-      case 'FORMAT_DATA':
+      case 'FORMAT_DATA': {
         const formatted = formatIndicators(data as IndicatorInput)
         self.postMessage({
           type: 'DATA_READY',
@@ -257,8 +258,9 @@ self.onmessage = function(e: MessageEvent<WorkerMessage>) {
           id
         })
         break
+      }
 
-      case 'CALC_INDICATORS':
+      case 'CALC_INDICATORS': {
         self.postMessage({
           type: 'ERROR',
           data: null,
@@ -266,6 +268,7 @@ self.onmessage = function(e: MessageEvent<WorkerMessage>) {
           id
         })
         break
+      }
 
       default:
         throw new Error(`未知的消息类型：${type}`)

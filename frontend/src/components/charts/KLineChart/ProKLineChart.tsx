@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useRef, useMemo } from 'react'
-import { Box, Flex, Spinner, Text } from '@chakra-ui/react'
+import { Box, Spinner, Flex, Text } from '@chakra-ui/react'
 import type { KLineData } from '@/types'
 import { init, dispose } from 'klinecharts'
 

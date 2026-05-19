@@ -1,7 +1,24 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Badge, Box, Breadcrumb, Button, Card, Flex, HStack, Heading, Icon, SimpleGrid, Spinner, Stat, Table, Tabs, Text, VStack } from '@chakra-ui/react'
-import { toaster } from '../components/ui/toaster'
+import {
+  Card,
+  Heading,
+  VStack,
+  HStack,
+  Text,
+  Badge,
+  SimpleGrid,
+  Spinner,
+  Tabs,
+  Flex,
+  Button,
+  Breadcrumb,
+  Icon,
+  createToaster,
+  Box,
+  Table,
+  Stat,
+} from '@chakra-ui/react'
 import { FiArrowLeft } from 'react-icons/fi'
 import { useQuery } from '@tanstack/react-query'
 import { stockApi, realtimeApi, boardApi } from '../services/api'
@@ -11,13 +28,17 @@ import { ProKLineChart as KLineChart } from '../components/charts/KLineChart'
 import type { RealtimeQuoteData, TickData, StockBasic, RealtimeQuote, KLineData, TechnicalIndicator, ApiResponse, BoardInfo, CapitalFlow, Shareholder, ChartItemStyleParams } from '../types'
 import { useEffect } from 'react'
 
+const toaster = createToaster({
+  placement: 'bottom-end',
+  duration: 5000,
+})
+
 const queryEnabled = (code: string | undefined, valid: boolean) => Boolean(code && valid)
 
 const StockDetail = () => {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
   const location = useLocation()
-  
   
   // 判断是否来自自选股页面
   const isFromWatchlist = location.state?.from === 'watchlist'
@@ -93,8 +114,6 @@ const StockDetail = () => {
         title: '无效的股票代码',
         description: '请输入 6 位数字股票代码',
         type: 'error',
-        duration: 5000,
-        closable: true,
       })
       navigate('/')
     }
@@ -153,8 +172,8 @@ const StockDetail = () => {
     return []
   })()
   
-  const indicators = ((indicatorData as unknown as ApiResponse<TechnicalIndicator[]> | undefined)?.data) || []
-  const boards = ((boardData as unknown as ApiResponse<BoardInfo[]> | undefined)?.data) || []
+  const indicators = ((indicatorData as ApiResponse<TechnicalIndicator[]> | undefined)?.data) || []
+  const boards = ((boardData as ApiResponse<BoardInfo[]> | undefined)?.data) || []
   const capitalFlows: CapitalFlow[] = []
   const shareholders: Shareholder[] = []
 
@@ -163,7 +182,6 @@ const StockDetail = () => {
     // K线数据加载状态
   }, [klines])
 
-  // @ts-expect-error reserved for future use
   const _getKlineOption = () => {
   //   if (!klines.length) {
   //     return {
@@ -237,7 +255,6 @@ const StockDetail = () => {
     }
   }
 
-  // @ts-expect-error reserved for future use
   const _getWeeklyKlineOption = () => {
     if (!weeklyKlines.length) {
       return {
@@ -311,7 +328,6 @@ const StockDetail = () => {
     }
   }
 
-  // @ts-expect-error reserved for future use
   const _getMonthlyKlineOption = () => {
     if (!monthlyKlines.length) {
       return {
@@ -385,7 +401,6 @@ const StockDetail = () => {
     }
   }
 
-  // @ts-expect-error reserved for future use
   const _getIndicatorOption = () => {
     if (!indicators.length) {
       return {
@@ -435,6 +450,12 @@ const StockDetail = () => {
     }
   }
 
+  // Unused legacy option generators - kept for future reference
+  void _getKlineOption;
+  void _getWeeklyKlineOption;
+  void _getMonthlyKlineOption;
+  void _getIndicatorOption;
+
   if (basicLoading) {
     return (
       <Flex justify="center" align="center" h="400px">
@@ -460,7 +481,7 @@ const StockDetail = () => {
               </Breadcrumb.Link>
             </Breadcrumb.Item>
           )}
-          <Breadcrumb.Item >
+          <Breadcrumb.Item>
             <Text color="light.text" fontWeight="medium">{stock?.name || code}</Text>
           </Breadcrumb.Item>
         </Breadcrumb.Root>
@@ -471,8 +492,7 @@ const StockDetail = () => {
             variant="ghost"
             onClick={() => navigate('/watchlist')}
           >
-            <Icon as={FiArrowLeft} />
-            返回自选股
+            <Icon as={FiArrowLeft} /> 返回自选股
           </Button>
         )}
       </HStack>
@@ -507,9 +527,6 @@ const StockDetail = () => {
               {quote.price?.toFixed(2)}
             </Text>
             <HStack>
-              <Stat.Root>
-                {quote.change_pct >= 0 ? <Stat.UpIndicator color="up.500" /> : <Stat.DownIndicator color="down.500" />}
-              </Stat.Root>
               <Text color={quote.change_pct >= 0 ? 'up.500' : 'down.500'} fontWeight="bold" fontFamily="mono">
                 {quote.change_pct >= 0 ? '+' : ''}{quote.change_pct?.toFixed(2)}%
               </Text>
@@ -540,12 +557,11 @@ const StockDetail = () => {
         <Card.Body>
           <Tabs.Root variant="line">
             <Tabs.List borderColor="light.border">
-              <Tabs.Trigger value="日_k_线">日 K 线</Tabs.Trigger>
-              <Tabs.Trigger value="周_k_线">周 K 线</Tabs.Trigger>
-              <Tabs.Trigger value="月_k_线">月 K 线</Tabs.Trigger>
+              <Tabs.Trigger value="daily" color="light.textSecondary">日 K 线</Tabs.Trigger>
+              <Tabs.Trigger value="weekly" color="light.textSecondary">周 K 线</Tabs.Trigger>
+              <Tabs.Trigger value="monthly" color="light.textSecondary">月 K 线</Tabs.Trigger>
             </Tabs.List>
-            <Tabs.ContentGroup>
-              <Tabs.Content value="周_k_线" p={0} pt={4}>
+              <Tabs.Content value="daily" p={0} pt={4}>
                 <KLineChart
                   data={klines}
                   loading={klineLoading}
@@ -553,7 +569,7 @@ const StockDetail = () => {
                   height="400px"
                 />
               </Tabs.Content>
-              <Tabs.Content value="月_k_线" p={0} pt={4}>
+              <Tabs.Content value="weekly" p={0} pt={4}>
                 <KLineChart
                   data={weeklyKlines}
                   loading={weeklyKlineLoading}
@@ -561,7 +577,7 @@ const StockDetail = () => {
                   height="400px"
                 />
               </Tabs.Content>
-              <Tabs.Content value="月K" p={0} pt={4}>
+              <Tabs.Content value="monthly" p={0} pt={4}>
                 <KLineChart
                   data={monthlyKlines}
                   loading={monthlyKlineLoading}
@@ -569,7 +585,6 @@ const StockDetail = () => {
                   height="400px"
                 />
               </Tabs.Content>
-            </Tabs.ContentGroup>
           </Tabs.Root>
         </Card.Body>
       </Card.Root>
@@ -658,51 +673,51 @@ const StockDetail = () => {
             <Heading size="sm" color="light.text">资金流向</Heading>
           </Card.Header>
           <Card.Body>
-            <Box>
-              <Table.Root size="sm" >
+            <Box overflowX="auto">
+              <Table.Root size="sm">
                 <Table.Header>
                   <Table.Row>
                     <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">日期</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >收盘价</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >涨跌幅</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >主力净流入</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >主力净流入率</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >超大单</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >大单</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >中单</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >小单</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">收盘价</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">涨跌幅</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">主力净流入</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">主力净流入率</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">超大单</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">大单</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">中单</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">小单</Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
                   {capitalFlows.slice(-10).reverse().map((item: CapitalFlow) => (
                     <Table.Row key={item.trade_date} _hover={{ bg: 'light.bgSecondary' }}>
                       <Table.Cell borderColor="light.border" color="light.text">{item.trade_date}</Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {item.close_price?.toFixed(2) || '-'}
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         <Badge colorPalette={item.change_pct && item.change_pct > 0 ? 'red' : 'green'}>
                           {item.change_pct?.toFixed(2) || 0}%
                         </Badge>
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         <Badge colorPalette={item.main_net_amount && item.main_net_amount > 0 ? 'red' : 'green'}>
                           {(item.main_net_amount / 10000).toFixed(0)}万
                         </Badge>
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {item.main_net_amount_rate?.toFixed(2) || 0}%
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {(item.buy_elg_amount / 10000).toFixed(0)}万
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {(item.buy_lg_amount / 10000).toFixed(0)}万
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {(item.buy_md_amount / 10000).toFixed(0)}万
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {(item.buy_sm_amount / 10000).toFixed(0)}万
                       </Table.Cell>
                     </Table.Row>
@@ -721,14 +736,14 @@ const StockDetail = () => {
             <Heading size="sm" color="light.text">前十大股东</Heading>
           </Card.Header>
           <Card.Body>
-            <Box>
-              <Table.Root size="sm" >
+            <Box overflowX="auto">
+              <Table.Root size="sm">
                 <Table.Header>
                   <Table.Row>
                     <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">股东名称</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >持股数 (股)</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >持股比例</Table.ColumnHeader>
-                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >持股变化</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">持股数 (股)</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">持股比例</Table.ColumnHeader>
+                    <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">持股变化</Table.ColumnHeader>
                     <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">报告期</Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
@@ -736,13 +751,13 @@ const StockDetail = () => {
                   {shareholders.map((item: Shareholder) => (
                     <Table.Row key={item.shareholder_name} _hover={{ bg: 'light.bgSecondary' }}>
                       <Table.Cell borderColor="light.border" color="light.text">{item.shareholder_name}</Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {item.hold_amount?.toLocaleString() || '-'}
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         {item.hold_ratio?.toFixed(2) || 0}%
                       </Table.Cell>
-                      <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">
+                      <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">
                         <Badge colorPalette={item.change_amount && item.change_amount > 0 ? 'red' : 'green'}>
                           {item.change_amount?.toLocaleString() || 0}
                         </Badge>
@@ -777,30 +792,30 @@ const StockDetail = () => {
           <Heading size="sm" color="light.text">指标数据</Heading>
         </Card.Header>
         <Card.Body>
-          <Box>
-            <Table.Root size="sm" >
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">日期</Table.ColumnHeader>
-                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >MA5</Table.ColumnHeader>
-                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >MA20</Table.ColumnHeader>
-                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >RSI6</Table.ColumnHeader>
-                  <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" >MACD</Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {indicators.slice(-20).reverse().map((item: TechnicalIndicator) => (
-                  <Table.Row key={item.date} _hover={{ bg: 'light.bgSecondary' }}>
-                    <Table.Cell borderColor="light.border" color="light.text">{item.date}</Table.Cell>
-                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.ma5?.toFixed(2)}</Table.Cell>
-                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.ma20?.toFixed(2)}</Table.Cell>
-                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.rsi6?.toFixed(2)}</Table.Cell>
-                    <Table.Cell borderColor="light.border" fontFamily="mono" color="light.text">{item.macd?.toFixed(4)}</Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>
-            </Table.Root>
-          </Box>
+          <Box overflowX="auto">
+              <Table.Root size="sm">
+                <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader borderColor="light.border" color="light.textSecondary">日期</Table.ColumnHeader>
+                      <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">MA5</Table.ColumnHeader>
+                      <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">MA20</Table.ColumnHeader>
+                      <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">RSI6</Table.ColumnHeader>
+                      <Table.ColumnHeader borderColor="light.border" color="light.textSecondary" textAlign="end">MACD</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {indicators.slice(-20).reverse().map((item: TechnicalIndicator) => (
+                      <Table.Row key={item.date} _hover={{ bg: 'light.bgSecondary' }}>
+                        <Table.Cell borderColor="light.border" color="light.text">{item.date}</Table.Cell>
+                        <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">{item.ma5?.toFixed(2)}</Table.Cell>
+                        <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">{item.ma20?.toFixed(2)}</Table.Cell>
+                        <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">{item.rsi6?.toFixed(2)}</Table.Cell>
+                        <Table.Cell borderColor="light.border" textAlign="end" fontFamily="mono" color="light.text">{item.macd?.toFixed(4)}</Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+              </Table.Root>
+            </Box>
         </Card.Body>
       </Card.Root>
     </VStack>

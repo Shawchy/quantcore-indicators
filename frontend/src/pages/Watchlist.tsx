@@ -1,8 +1,26 @@
-import { Badge, Box, Button, Card, Field, Flex, HStack, Heading, Icon, IconButton, Input, Dialog, Separator, Spinner, Table, Tabs, Text, VStack, useDisclosure } from '@chakra-ui/react'
-import { toaster } from '../components/ui/toaster'
+import {
+  Card,
+  Heading,
+  VStack,
+  HStack,
+  Text,
+  Badge,
+  Button,
+  IconButton,
+  Table,
+  Spinner,
+  Dialog,
+  Input,
+  Tabs,
+  Box,
+  Flex,
+  Icon,
+  Separator,
+  createToaster,
+} from '@chakra-ui/react'
 import { useColorModeValue } from '../components/ui/color-mode'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FiPlus, FiStar, FiTrendingUp, FiTrendingDown, FiActivity } from 'react-icons/fi'
+import { FiTrash2, FiPlus, FiRefreshCw, FiStar, FiTrendingUp, FiTrendingDown, FiActivity } from 'react-icons/fi'
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { watchlistApi } from '../services/api'
@@ -11,25 +29,31 @@ import fundStorage from '../services/fundStorage'
 import { FundInfo } from '../services/fund'
 import { getMarketColor } from '../utils/marketColors'
 
+const toaster = createToaster({
+  placement: 'bottom-end',
+  max: 5,
+})
+
 const Watchlist = () => {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  
   const [selectedCode, setSelectedCode] = useState<string>('')
   const [selectedType, setSelectedType] = useState<'stock' | 'fund'>('stock')
   const [addCode, setAddCode] = useState('')
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [isAddOpen, setIsAddOpen] = useState(false)
   const cancelRef = useRef<HTMLButtonElement>(null)
-  
-  const { open: isDeleteOpen, onOpen: onDeleteOpen, setOpen: setDeleteOpen } = useDisclosure()
-  const { open: isAddOpen, onOpen: onAddOpen, setOpen: setAddOpen } = useDisclosure()
 
-  // 股票自选列表
+  const cardBg = useColorModeValue('white', 'gray.800')
+  const cardHoverBg = useColorModeValue('gray.50', 'gray.700')
+  const borderColor = useColorModeValue('gray.200', 'gray.700')
+  const rowAltBg = useColorModeValue('gray.50', 'gray.750')
+
   const { data: stockWatchlistData, isLoading: stockLoading } = useQuery({
     queryKey: ['watchlist'],
     queryFn: () => watchlistApi.getList(),
   })
 
-  // 基金自选列表（从本地存储或 API 获取）
   const { data: fundWatchlistData, isLoading: fundLoading, refetch: refetchFundWatchlist } = useQuery({
     queryKey: ['fundWatchlist'],
     queryFn: async () => {
@@ -44,21 +68,17 @@ const Watchlist = () => {
     },
   })
 
-  // 股票行情数据
   const { data: quotesData, isLoading: quotesLoading, refetch } = useQuery({
     queryKey: ['watchlistQuotes'],
     queryFn: () => watchlistApi.getQuotes(),
   })
 
-  // 基金行情数据
   const { data: fundQuotesData, isLoading: fundQuotesLoading, refetch: refetchFundQuotes } = useQuery({
     queryKey: ['fundWatchlistQuotes'],
     queryFn: async () => {
-      // 从本地存储获取基金自选代码（使用 fundStorage 的验证方法）
       const codes = fundStorage.getWatchlist()
       if (codes.length === 0) return []
       
-      // 批量获取实时估算涨跌幅
       const rateRes = await fundApi.getFundRealtimeRate(codes)
       return Array.isArray(rateRes.data) ? rateRes.data : [rateRes.data]
     },
@@ -69,13 +89,11 @@ const Watchlist = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['watchlist'] })
       queryClient.invalidateQueries({ queryKey: ['watchlistQuotes'] })
-      setDeleteOpen(false)
+      setIsDeleteOpen(false)
       toaster.create({
         title: '删除成功',
         description: `已删除股票 ${selectedCode}`,
         type: 'success',
-        duration: 3000,
-        closable: true,
       })
     },
     onError: (error: any) => {
@@ -83,29 +101,23 @@ const Watchlist = () => {
         title: '删除失败',
         description: error.message,
         type: 'error',
-        duration: 3000,
-        closable: true,
       })
     },
   })
 
-  // 删除基金
   const deleteFundMutation = useMutation({
     mutationFn: (code: string) => {
-      // 使用 fundStorage 的删除方法
       fundStorage.removeFromWatchlist(code)
       return Promise.resolve()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fundWatchlist'] })
       queryClient.invalidateQueries({ queryKey: ['fundWatchlistQuotes'] })
-      setDeleteOpen(false)
+      setIsDeleteOpen(false)
       toaster.create({
         title: '删除成功',
         description: `已删除基金 ${selectedCode}`,
         type: 'success',
-        duration: 3000,
-        closable: true,
       })
     },
   })
@@ -113,7 +125,7 @@ const Watchlist = () => {
   const handleDelete = (code: string, type: 'stock' | 'fund' = 'stock') => {
     setSelectedCode(code)
     setSelectedType(type)
-    onDeleteOpen()
+    setIsDeleteOpen(true)
   }
 
   const confirmDelete = () => {
@@ -125,12 +137,11 @@ const Watchlist = () => {
   }
 
   const handleAddToWatchlist = () => {
-    onAddOpen()
+    setIsAddOpen(true)
   }
 
   const confirmAdd = () => {
     if (selectedType === 'stock') {
-      // 股票添加到自选 - 调用 API
       watchlistApi.add(addCode)
         .then(() => {
           queryClient.invalidateQueries({ queryKey: ['watchlist'] })
@@ -139,38 +150,29 @@ const Watchlist = () => {
             title: '添加成功',
             description: `已添加股票 ${addCode}`,
             type: 'success',
-            duration: 3000,
-            closable: true,
           })
           setAddCode('')
-          setAddOpen(false)
+          setIsAddOpen(false)
         })
         .catch((err) => {
           toaster.create({
             title: '添加失败',
             description: err.message || '请重试',
             type: 'error',
-            duration: 3000,
-            closable: true,
           })
         })
     } else {
-      // 基金添加到自选 - 使用 fundStorage 的验证方法
       const fundCode = addCode.trim()
       
-      // 先验证代码格式
       if (!/^\d{6}$/.test(fundCode)) {
         toaster.create({
           title: '添加失败',
           description: '请输入 6 位数字的基金代码',
           type: 'error',
-          duration: 3000,
-          closable: true,
         })
         return
       }
       
-      // 使用 fundStorage 的添加方法（会自动验证）
       fundStorage.addToWatchlist(fundCode)
       
       refetchFundWatchlist().catch((err) => {
@@ -185,24 +187,17 @@ const Watchlist = () => {
         title: '添加成功',
         description: `已添加基金 ${fundCode}`,
         type: 'success',
-        duration: 3000,
-        closable: true,
       })
       setAddCode('')
-      setAddOpen(false)
+      setIsAddOpen(false)
     }
   }
 
-  // 渲染股票列表
   const renderStockWatchlist = () => {
-    const cardBg = useColorModeValue('white', 'gray.800')
-    const cardHoverBg = useColorModeValue('gray.50', 'gray.700')
-    const borderColor = useColorModeValue('gray.200', 'gray.700')
-    
     if (stockLoading || quotesLoading) {
       return (
         <VStack py={12}>
-          <Spinner size="xl" color="blue.500" borderWidth="3px" />
+          <Spinner size="xl" color="blue.500" />
           <Text color="gray.500" fontSize="sm">加载自选股数据...</Text>
         </VStack>
       )
@@ -224,21 +219,18 @@ const Watchlist = () => {
             onClick={handleAddToWatchlist}
             size="md"
           >
-            <FiPlus />
-            添加自选股
+            <FiPlus /> 添加自选股
           </Button>
         </VStack>
       )
     }
 
-    // 统计涨跌家数
     const riseCount = quotes.filter((q: any) => q.change_percent !== null && q.change_percent !== undefined && q.change_percent > 0).length
     const fallCount = quotes.filter((q: any) => q.change_percent !== null && q.change_percent !== undefined && q.change_percent < 0).length
     const flatCount = quotes.filter((q: any) => q.change_percent !== null && q.change_percent !== undefined && q.change_percent === 0).length
 
     return (
       <>
-        {/* 工具栏 */}
         <Flex justify="space-between" align="center" mb={4}>
           <HStack gap={2}>
             <Button 
@@ -247,8 +239,7 @@ const Watchlist = () => {
               onClick={handleAddToWatchlist}
               variant="solid"
             >
-              <FiPlus />
-              添加股票
+              <FiPlus /> 添加股票
             </Button>
             <IconButton
               aria-label="刷新"
@@ -256,10 +247,11 @@ const Watchlist = () => {
               onClick={() => refetch()}
               variant="outline"
               colorPalette="blue"
-            />
+            >
+              <FiRefreshCw />
+            </IconButton>
           </HStack>
           
-          {/* 涨跌统计 */}
           <HStack gap={3} fontSize="xs">
             <Badge colorPalette="red" px={2} py={1} borderRadius="md">
               涨 {riseCount}
@@ -273,17 +265,16 @@ const Watchlist = () => {
           </HStack>
         </Flex>
         
-        {/* 表格 */}
-        <Box borderRadius="lg" border="1px" borderColor={borderColor}>
-          <Table.Root  size="sm">
+        <Box borderRadius="lg" border="1px" borderColor={borderColor} overflowX="auto">
+          <Table.Root size="sm">
             <Table.Header bg={cardBg}>
               <Table.Row>
                 <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">代码</Table.ColumnHeader>
                 <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">名称</Table.ColumnHeader>
-                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">最新价</Table.ColumnHeader>
-                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">涨跌幅</Table.ColumnHeader>
-                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">成交量</Table.ColumnHeader>
-                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">成交额</Table.ColumnHeader>
+                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium" textAlign="end">最新价</Table.ColumnHeader>
+                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium" textAlign="end">涨跌幅</Table.ColumnHeader>
+                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium" textAlign="end">成交量</Table.ColumnHeader>
+                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium" textAlign="end">成交额</Table.ColumnHeader>
                 <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">操作</Table.ColumnHeader>
               </Table.Row>
             </Table.Header>
@@ -299,7 +290,7 @@ const Watchlist = () => {
                     _hover={{ bg: cardHoverBg }} 
                     cursor="pointer"
                     onClick={() => navigate(`/stock/${code}`)}
-                    bg={index % 2 === 0 ? 'transparent' : useColorModeValue('gray.50', 'gray.750')}
+                    bg={index % 2 === 0 ? 'transparent' : rowAltBg}
                   >
                     <Table.Cell>
                       <VStack align="start" gap={1}>
@@ -309,10 +300,10 @@ const Watchlist = () => {
                     <Table.Cell>
                       <Text fontSize="sm" fontWeight="medium">{quote?.name || code}</Text>
                     </Table.Cell>
-                    <Table.Cell >
+                    <Table.Cell textAlign="end">
                       <Text fontWeight="bold" fontSize="sm">{quote?.price?.toFixed(2) || '--'}</Text>
                     </Table.Cell>
-                    <Table.Cell >
+                    <Table.Cell textAlign="end">
                       {quote?.change_percent !== null && quote?.change_percent !== undefined ? (
                         <HStack justify="end" gap={1}>
                           <Icon 
@@ -334,10 +325,10 @@ const Watchlist = () => {
                         <Text fontSize="sm" color="gray.400">--</Text>
                       )}
                     </Table.Cell>
-                    <Table.Cell >
+                    <Table.Cell textAlign="end">
                       <Text fontSize="sm" color="gray.600">{quote?.volume || '--'}</Text>
                     </Table.Cell>
-                    <Table.Cell >
+                    <Table.Cell textAlign="end">
                       <Text fontSize="sm" color="gray.600">{quote?.amount || '--'}</Text>
                     </Table.Cell>
                     <Table.Cell>
@@ -352,7 +343,9 @@ const Watchlist = () => {
                             handleDelete(code, 'stock')
                           }}
                           _hover={{ bg: 'red.50' }}
-                        />
+                        >
+                          <FiTrash2 />
+                        </IconButton>
                       </HStack>
                     </Table.Cell>
                   </Table.Row>
@@ -365,16 +358,11 @@ const Watchlist = () => {
     )
   }
 
-  // 渲染基金列表
   const renderFundWatchlist = () => {
-    const cardBg = useColorModeValue('white', 'gray.800')
-    const cardHoverBg = useColorModeValue('gray.50', 'gray.700')
-    const borderColor = useColorModeValue('gray.200', 'gray.700')
-    
     if (fundLoading || fundQuotesLoading) {
       return (
         <VStack py={12}>
-          <Spinner size="xl" color="blue.500" borderWidth="3px" />
+          <Spinner size="xl" color="blue.500" />
           <Text color="gray.500" fontSize="sm">加载自选基金数据...</Text>
         </VStack>
       )
@@ -396,20 +384,17 @@ const Watchlist = () => {
             onClick={handleAddToWatchlist}
             size="md"
           >
-            <FiPlus />
-            添加自选基金
+            <FiPlus /> 添加自选基金
           </Button>
         </VStack>
       )
     }
 
-    // 统计涨跌家数
     const riseCount = fundList.filter((f: any) => f.change_pct !== null && f.change_pct !== undefined && f.change_pct > 0).length
     const fallCount = fundList.filter((f: any) => f.change_pct !== null && f.change_pct !== undefined && f.change_pct < 0).length
 
     return (
       <>
-        {/* 工具栏 */}
         <Flex justify="space-between" align="center" mb={4}>
           <HStack gap={2}>
             <Button 
@@ -418,12 +403,10 @@ const Watchlist = () => {
               onClick={handleAddToWatchlist}
               variant="solid"
             >
-              <FiPlus />
-              添加基金
+              <FiPlus /> 添加基金
             </Button>
           </HStack>
           
-          {/* 涨跌统计 */}
           <HStack gap={3} fontSize="xs">
             <Badge colorPalette="red" px={2} py={1} borderRadius="md">
               涨 {riseCount}
@@ -434,16 +417,15 @@ const Watchlist = () => {
           </HStack>
         </Flex>
         
-        {/* 表格 */}
-        <Box borderRadius="lg" border="1px" borderColor={borderColor}>
-          <Table.Root  size="sm">
+        <Box borderRadius="lg" border="1px" borderColor={borderColor} overflowX="auto">
+          <Table.Root size="sm">
             <Table.Header bg={cardBg}>
               <Table.Row>
                 <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">代码</Table.ColumnHeader>
                 <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">名称</Table.ColumnHeader>
-                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">最新净值</Table.ColumnHeader>
-                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">日涨跌</Table.ColumnHeader>
-                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">估算涨幅</Table.ColumnHeader>
+                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium" textAlign="end">最新净值</Table.ColumnHeader>
+                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium" textAlign="end">日涨跌</Table.ColumnHeader>
+                <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium" textAlign="end">估算涨幅</Table.ColumnHeader>
                 <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">类型</Table.ColumnHeader>
                 <Table.ColumnHeader color="gray.500" fontSize="xs" fontWeight="medium">操作</Table.ColumnHeader>
               </Table.Row>
@@ -460,7 +442,7 @@ const Watchlist = () => {
                     _hover={{ bg: cardHoverBg }} 
                     cursor="pointer"
                     onClick={() => navigate(`/fund/detail/${fund.code}`)}
-                    bg={index % 2 === 0 ? 'transparent' : useColorModeValue('gray.50', 'gray.750')}
+                    bg={index % 2 === 0 ? 'transparent' : rowAltBg}
                   >
                     <Table.Cell>
                       <VStack align="start" gap={1}>
@@ -470,10 +452,10 @@ const Watchlist = () => {
                     <Table.Cell>
                       <Text fontSize="sm" fontWeight="medium">{fund.name}</Text>
                     </Table.Cell>
-                    <Table.Cell >
+                    <Table.Cell textAlign="end">
                       <Text fontWeight="bold" fontSize="sm">{fund.net_asset_value?.toFixed(4) || '--'}</Text>
                     </Table.Cell>
-                    <Table.Cell >
+                    <Table.Cell textAlign="end">
                       {fund.change_pct !== null && fund.change_pct !== undefined ? (
                         <HStack justify="end" gap={1}>
                           <Icon 
@@ -495,7 +477,7 @@ const Watchlist = () => {
                         <Text fontSize="sm" color="gray.400">--</Text>
                       )}
                     </Table.Cell>
-                    <Table.Cell >
+                    <Table.Cell textAlign="end">
                       {rate?.estimate_change_pct !== null && rate?.estimate_change_pct !== undefined ? (
                         <HStack justify="end" gap={1}>
                           <Icon 
@@ -539,7 +521,9 @@ const Watchlist = () => {
                             handleDelete(fund.code, 'fund')
                           }}
                           _hover={{ bg: 'red.50' }}
-                        />
+                        >
+                          <FiTrash2 />
+                        </IconButton>
                       </HStack>
                     </Table.Cell>
                   </Table.Row>
@@ -557,7 +541,6 @@ const Watchlist = () => {
       <Card.Root>
         <Card.Body>
           <VStack gap={4}>
-            {/* 头部标题 */}
             <Flex justify="space-between" align="center" w="full">
               <HStack gap={3}>
                 <Box 
@@ -575,46 +558,40 @@ const Watchlist = () => {
               </HStack>
             </Flex>
 
-            {/* 分隔线 */}
             <Separator />
 
-            {/* Tab 切换 */}
-            <Tabs.Root variant="enclosed" w="full" defaultValue="stock" onValueChange={(e) => {
-              setSelectedType(e.value === 'stock' ? 'stock' : 'fund')
+            <Tabs.Root variant="enclosed" w="full" onValueChange={(details) => {
+              setSelectedType(details.value === '0' ? 'stock' : 'fund')
             }}>
               <Tabs.List>
-                <Tabs.Trigger value="stock" _selected={{ color: 'blue.500', bg: 'blue.50' }}>
+                <Tabs.Trigger value="0">
                   <HStack gap={2}>
                     <Icon as={FiActivity} w={4} h={4} />
                     <Text>自选股</Text>
                   </HStack>
                 </Tabs.Trigger>
-                <Tabs.Trigger value="fund" _selected={{ color: 'blue.500', bg: 'blue.50' }}>
+                <Tabs.Trigger value="1">
                   <HStack gap={2}>
                     <Icon as={FiTrendingUp} w={4} h={4} />
                     <Text>自选基金</Text>
                   </HStack>
                 </Tabs.Trigger>
+                <Tabs.Indicator />
               </Tabs.List>
-              <Tabs.ContentGroup>
-                <Tabs.Content value="stock" p={0} pt={4}>
-                  {renderStockWatchlist()}
-                </Tabs.Content>
-                <Tabs.Content value="fund" p={0} pt={4}>
-                  {renderFundWatchlist()}
-                </Tabs.Content>
-              </Tabs.ContentGroup>
+              <Tabs.Content value="0" p={0} pt={4}>
+                {renderStockWatchlist()}
+              </Tabs.Content>
+              <Tabs.Content value="1" p={0} pt={4}>
+                {renderFundWatchlist()}
+              </Tabs.Content>
             </Tabs.Root>
           </VStack>
         </Card.Body>
       </Card.Root>
 
-      {/* 删除确认对话框 */}
-      <Dialog.Root
-        open={isDeleteOpen}
-        onOpenChange={(details) => setDeleteOpen(details.open)}
-      >
-        <Dialog.Backdrop>
+      <Dialog.Root open={isDeleteOpen} onOpenChange={(details) => setIsDeleteOpen(details.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header fontSize="lg" fontWeight="bold">
               删除确认
@@ -623,7 +600,7 @@ const Watchlist = () => {
               确定要删除{selectedType === 'stock' ? '股票' : '基金'} {selectedCode} 吗？
             </Dialog.Body>
             <Dialog.Footer>
-              <Button ref={cancelRef} onClick={() => setDeleteOpen(false)}>
+              <Button variant="outline" ref={cancelRef} onClick={() => setIsDeleteOpen(false)}>
                 取消
               </Button>
               <Button
@@ -636,33 +613,36 @@ const Watchlist = () => {
               </Button>
             </Dialog.Footer>
           </Dialog.Content>
-        </Dialog.Backdrop>
+        </Dialog.Positioner>
       </Dialog.Root>
 
-      {/* 添加对话框 */}
-      <Dialog.Root open={isAddOpen} onOpenChange={(details) => setAddOpen(details.open)}>
+      <Dialog.Root open={isAddOpen} onOpenChange={(details) => setIsAddOpen(details.open)}>
         <Dialog.Backdrop />
-        <Dialog.Content>
-          <Dialog.Header>添加{selectedType === 'stock' ? '股票' : '基金'}</Dialog.Header>
-          <Dialog.CloseTrigger />
-          <Dialog.Body>
-            <Field.Root>
-              <Field.Label>{selectedType === 'stock' ? '股票代码' : '基金代码'}</Field.Label>
-              <Input
-                placeholder={`请输入${selectedType === 'stock' ? '6 位股票代码' : '6 位基金代码'}`}
-                value={addCode}
-                onChange={(e) => setAddCode(e.target.value)}
-                maxLength={6}
-              />
-            </Field.Root>
-          </Dialog.Body>
-          <Dialog.Footer>
-            <Button onClick={() => setAddOpen(false)}>取消</Button>
-            <Button colorPalette="blue" onClick={confirmAdd} ml={3}>
-              添加
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>添加{selectedType === 'stock' ? '股票' : '基金'}</Dialog.Header>
+            <Dialog.CloseTrigger />
+            <Dialog.Body>
+              <Box mb={4}>
+                <Text fontSize="sm" fontWeight="medium" mb={2}>
+                  {selectedType === 'stock' ? '股票代码' : '基金代码'}
+                </Text>
+                <Input
+                  placeholder={`请输入${selectedType === 'stock' ? '6 位股票代码' : '6 位基金代码'}`}
+                  value={addCode}
+                  onChange={(e) => setAddCode(e.target.value)}
+                  maxLength={6}
+                />
+              </Box>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button variant="outline" onClick={() => setIsAddOpen(false)}>取消</Button>
+              <Button colorPalette="blue" onClick={confirmAdd} ml={3}>
+                添加
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
       </Dialog.Root>
     </VStack>
   )

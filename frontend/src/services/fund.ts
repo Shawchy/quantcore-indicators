@@ -20,6 +20,11 @@ export interface FundInfo {
   type?: string                   // 基金类型
   fund_scale?: number             // 基金规模（亿元）
   rank?: number                   // 同类排行
+  rank_3y?: number                // 近3年排名
+  change_1m?: number              // 近1月涨跌幅
+  change_3m?: number              // 近3月涨跌幅
+  change_6m?: number              // 近6月涨跌幅
+  change_1y?: number              // 近1年涨跌幅
   performance?: {                 // 阶段涨跌幅
     '1w'?: number                 // 近 1 周
     '1m'?: number                 // 近 1 月

@@ -2,15 +2,29 @@
  * 东方财富千股千评页面
  */
 import React, { useState, useEffect } from 'react';
-import { Badge, Box, Button, Center, Dialog, Flex, Grid, Heading, Input, InputGroup, Spinner, Stat, Table, Tabs, Text, useDisclosure } from '@chakra-ui/react'
+import {
+  Box,
+  Heading,
+  Table,
+  Flex,
+  Text,
+  Badge,
+  Spinner,
+  Button,
+  SimpleGrid,
+  Stat,
+  Input,
+  InputGroup,
+  Dialog,
+  Tabs,
+} from '@chakra-ui/react';
 import {
   eastMoneyApi,
   type StockComment,
   type StockCommentDetailInstitution,
   type StockCommentDetailScore,
 } from '@/services/akshare/index';
-import EChartsReactCore from 'echarts-for-react/lib/core'
-import echarts from '@/lib/echarts'
+import ReactECharts from 'echarts-for-react'
 
 const EastMoneyStockCommentPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -20,8 +34,7 @@ const EastMoneyStockCommentPage: React.FC = () => {
   const [institutionData, setInstitutionData] = useState<StockCommentDetailInstitution[]>([]);
   const [scoreData, setScoreData] = useState<StockCommentDetailScore[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
-  
-  const { open, onOpen, setOpen } = useDisclosure();
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   // 获取千股千评数据
   const fetchComments = async () => {
@@ -66,7 +79,7 @@ const EastMoneyStockCommentPage: React.FC = () => {
   const handleViewDetail = (stock: StockComment) => {
     setSelectedStock(stock);
     fetchStockDetail(stock.code);
-    onOpen();
+    setIsDetailOpen(true);
   };
 
   // 搜索股票
@@ -94,13 +107,13 @@ const EastMoneyStockCommentPage: React.FC = () => {
       <Flex justify="space-between" align="center" mb={6}>
         <Heading size="lg">东方财富千股千评</Heading>
         <Flex gap={4} align="center">
-          <InputGroup width="300px" startAddon="股票代码/名称">
-  <Input
+          <InputGroup width="300px">
+            <Input
               value={searchCode}
               onChange={(e) => setSearchCode(e.target.value)}
               placeholder="输入股票代码或名称"
             />
-</InputGroup>
+          </InputGroup>
           <Button onClick={handleSearch} colorPalette="blue">
             搜索
           </Button>
@@ -111,7 +124,7 @@ const EastMoneyStockCommentPage: React.FC = () => {
       </Flex>
 
       {/* 统计信息 */}
-      <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
+      <SimpleGrid columns={4} gap={4} mb={6}>
         <Stat.Root>
           <Stat.Label>股票总数</Stat.Label>
           <Stat.ValueText color="blue.500">{stats.total}</Stat.ValueText>
@@ -128,16 +141,16 @@ const EastMoneyStockCommentPage: React.FC = () => {
           <Stat.Label>平均综合得分</Stat.Label>
           <Stat.ValueText color="purple.500">{stats.avgScore.toFixed(2)}</Stat.ValueText>
         </Stat.Root>
-      </Grid>
+      </SimpleGrid>
 
       {/* 千股千评表格 */}
       {loading ? (
-        <Center h="400px">
+        <Flex justify="center" align="center" h="400px">
           <Spinner size="xl" />
-        </Center>
+        </Flex>
       ) : (
         <Box overflowX="auto">
-          <Table.Root  size="sm">
+          <Table.Root size="sm">
             <Table.Header>
               <Table.Row>
                 <Table.ColumnHeader>序号</Table.ColumnHeader>
@@ -202,37 +215,36 @@ const EastMoneyStockCommentPage: React.FC = () => {
             </Table.Body>
           </Table.Root>
           {comments.length === 0 && (
-            <Center h="200px">
+            <Flex justify="center" align="center" h="200px">
               <Text color="gray.500">暂无数据</Text>
-            </Center>
+            </Flex>
           )}
         </Box>
       )}
 
       {/* 详情弹窗 */}
-      <Dialog.Root open={open} onOpenChange={(details) => setOpen(details.open)} size="full">
+      <Dialog.Root open={isDetailOpen} onOpenChange={(details) => setIsDetailOpen(details.open)}>
         <Dialog.Backdrop />
-        <Dialog.Content>
-          <Dialog.Header>
-            {selectedStock?.code} - {selectedStock?.name} 详情
-          </Dialog.Header>
-          <Dialog.CloseTrigger />
-          <Dialog.Body>
-            {detailLoading ? (
-              <Center h="400px">
-                <Spinner size="xl" />
-              </Center>
-            ) : (
-              <Tabs.Root colorPalette="blue">
-                <Tabs.List>
-                  <Tabs.Trigger value="机构参与度">机构参与度</Tabs.Trigger>
-                  <Tabs.Trigger value="历史评分">历史评分</Tabs.Trigger>
-                </Tabs.List>
-                <Tabs.ContentGroup>
-                  {/* 机构参与度 */}
-                  <Tabs.Content value="历史评分">
+        <Dialog.Positioner>
+          <Dialog.Content maxW="6xl">
+            <Dialog.Header>
+              {selectedStock?.code} - {selectedStock?.name} 详情
+            </Dialog.Header>
+            <Dialog.CloseTrigger />
+            <Dialog.Body>
+              {detailLoading ? (
+                <Flex justify="center" align="center" h="400px">
+                  <Spinner size="xl" />
+                </Flex>
+              ) : (
+                <Tabs.Root variant="enclosed" colorPalette="blue">
+                  <Tabs.List>
+                    <Tabs.Trigger value="institution">机构参与度</Tabs.Trigger>
+                    <Tabs.Trigger value="score">历史评分</Tabs.Trigger>
+                  </Tabs.List>
+                  <Tabs.Content value="institution" p={0} pt={4}>
                     <Box h="400px">
-                      <EChartsReactCore echarts={echarts}
+                      <ReactECharts
                         option={{
                           grid: { left: 60, right: 20, top: 30, bottom: 40 },
                           xAxis: { type: 'category', data: institutionData.map(d => d.trading_day), axisLabel: { color: '#64748b' } },
@@ -252,11 +264,9 @@ const EastMoneyStockCommentPage: React.FC = () => {
                       />
                     </Box>
                   </Tabs.Content>
-
-                  {/* 历史评分 */}
-                  <Tabs.Content value="机构参与度">
+                  <Tabs.Content value="score" p={0} pt={4}>
                     <Box h="400px">
-                      <EChartsReactCore echarts={echarts}
+                      <ReactECharts
                         option={{
                           grid: { left: 60, right: 20, top: 30, bottom: 40 },
                           xAxis: { type: 'category', data: scoreData.map(d => d.trading_day), axisLabel: { color: '#64748b' } },
@@ -276,14 +286,14 @@ const EastMoneyStockCommentPage: React.FC = () => {
                       />
                     </Box>
                   </Tabs.Content>
-                </Tabs.ContentGroup>
-              </Tabs.Root>
-            )}
-          </Dialog.Body>
-          <Dialog.Footer>
-            <Button onClick={() => setOpen(false)}>关闭</Button>
-          </Dialog.Footer>
-        </Dialog.Content>
+                </Tabs.Root>
+              )}
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button onClick={() => setIsDetailOpen(false)}>关闭</Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
       </Dialog.Root>
     </Box>
   );

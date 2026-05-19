@@ -3,7 +3,9 @@
  * 显示买一卖一、五档盘口等实时数据
  */
 import React from 'react'
-import { Alert, Box, Flex, Spinner, Stat, Table, Text } from '@chakra-ui/react'
+import { 
+  Box, Flex, Text, Table, Stat, Spinner, Alert as ChakraAlert
+} from '@chakra-ui/react'
 import type { RealtimeQuoteData } from '../types'
 
 interface RealtimeQuoteProps {
@@ -34,7 +36,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
     const bgColor = type === 'bid' ? 'red.50' : 'green.50'
     
     return (
-      <Table.Row key={index} bg={bgColor}>
+      <Table.Row key={`${type}-${index}`} bg={bgColor}>
         <Table.Cell 
           color={color} 
           fontWeight="bold" 
@@ -68,10 +70,10 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
 
   if (error) {
     return (
-      <Alert.Root status="error" size="sm" borderRadius="md">
-        <Alert.Indicator boxSize={3} />
+      <ChakraAlert.Root status="error" size="sm" borderRadius="md">
+        <ChakraAlert.Indicator />
         <Text fontSize="xs">{error}</Text>
-      </Alert.Root>
+      </ChakraAlert.Root>
     )
   }
 
@@ -133,7 +135,7 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
           { label: '成交额', value: quote?.amount != null ? (quote.amount >= 100000000 ? `${(quote.amount / 100000000).toFixed(2)}亿` : `${(quote.amount / 10000).toFixed(0)}万`) : '-' },
         ].map((item, index) => (
           <Box 
-            key={index} 
+            key={item.label || index} 
             flex="1" 
             minW="80px"
             bg="gray.50" 
@@ -162,15 +164,13 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
             <Text fontSize="xs" fontWeight="bold" color="red.600" mb={2} textAlign="center">
               买盘
             </Text>
-            <Box>
-              <Table.Root size="sm" variant="outline">
-                <Table.Body>
-                  {bid_ask.bid.slice(0, 5).map((item, index) => (
-                    renderBidAskRow(item, index, 'bid')
-                  ))}
-                </Table.Body>
-              </Table.Root>
-            </Box>
+            <Table.Root size="sm">
+              <Table.Body>
+                {bid_ask.bid.slice(0, 5).map((item, index) => (
+                  renderBidAskRow(item, index, 'bid')
+                ))}
+              </Table.Body>
+            </Table.Root>
           </Box>
 
           {/* 卖盘 */}
@@ -178,15 +178,13 @@ const RealtimeQuote: React.FC<RealtimeQuoteProps> = ({ data, loading, error }) =
             <Text fontSize="xs" fontWeight="bold" color="green.600" mb={2} textAlign="center">
               卖盘
             </Text>
-            <Box>
-              <Table.Root size="sm" variant="outline">
-                <Table.Body>
-                  {bid_ask.ask.slice(0, 5).map((item, index) => (
-                    renderBidAskRow(item, index, 'ask')
-                  ))}
-                </Table.Body>
-              </Table.Root>
-            </Box>
+            <Table.Root size="sm">
+              <Table.Body>
+                {bid_ask.ask.slice(0, 5).map((item, index) => (
+                  renderBidAskRow(item, index, 'ask')
+                ))}
+              </Table.Body>
+            </Table.Root>
           </Box>
         </Flex>
       )}

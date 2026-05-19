@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Tuple, Callable
 from enum import Enum
 from loguru import logger
 from pydantic import BaseModel
@@ -24,7 +24,14 @@ from .base import (
     ChipData,
     IndexComponent
 )
-from .smart_retry import SmartRetryExecutor, ErrorClassifier, ErrorType
+from .anti_wind import (
+    AntiWindFacade,
+    CookieInjectStrategy,
+    TLSFingerprintStrategy,
+    RateLimitStrategy,
+    UARotatorStrategy,
+    SmartRetryStrategy,
+)
 from .hybrid_tls_client import HybridTLSClient
 from app.models.schemas import (
     BillboardEntry,
@@ -100,6 +107,7 @@ class FinancialPerformance(BaseModel):
     gross_margin: float  # 销售毛利率
 
 
+from app.utils.data_validator import validator
 from app.utils.api_cache_stats import api_call_cache
 
 
@@ -110,12 +118,34 @@ def safe_float(value, default=0.0):
     if isinstance(value, (int, float)):
         return float(value)
     try:
-        # 处理字符串中的百分号
         if isinstance(value, str):
             value = value.strip().replace(',', '').replace('%', '')
         return float(value)
     except (ValueError, TypeError):
         return default
+
+
+def safe_int(value, default=0):
+    """安全转换整数"""
+    if value is None:
+        return default
+    if isinstance(value, int):
+        return value
+    try:
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            value = value.strip().replace(',', '')
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_get(data: dict, key: str, default=None):
+    """安全获取字典值"""
+    if data is None:
+        return default
+    return data.get(key, default)
 
 
 class MarketQuote(BaseModel):
@@ -161,51 +191,56 @@ class EFinanceAdapter(BaseDataAdapter):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
-        self._is_initialized = False
         
-        # 反风控设置
-        self._request_delay_range = (1.0, 2.0)  # 请求间隔（秒）
-        self._max_retries = 3  # 最大重试次数
-        self._retry_base_delay = 2.0  # 重试基础延迟（秒）
-        
-        # 请求头轮换池（简化版：4 个主流浏览器）
-        self._user_agents = [
-            # Chrome 最新版（主力，60% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            
-            # Chrome 上一版（20% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            
-            # Edge（10% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
-            
-            # Firefox（10% 概率）
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-        ]
-        
-        # 当前使用的 User-Agent 索引
-        self._current_ua_index = 0
-        
-        # 请求统计
-        self._request_count = 0
-        self._fail_count = 0
-        self._last_request_time = 0
-        
-        # 动态调整参数
-        self._adaptive_delay_enabled = True  # 启用自适应延迟
-        self._consecutive_failures = 0  # 连续失败次数
-        
-        # 智能重试执行器
-        self._retry_executor = SmartRetryExecutor({
+        # 反风控门面（统一管理所有策略）
+        self.anti_wind = AntiWindFacade({
+            'enable_cookie_inject': True,
+            'enable_tls_fingerprint': True,
+            'enable_rate_limit': True,
+            'enable_ua_rotation': True,
+            'enable_smart_retry': True,
             'max_retries': 3,
-            'base_wait_seconds': 2.0,
+            'rate_limit_config': {
+                'base_delay_range': (1.0, 2.0),  # efinance 请求较快
+                'adaptive_delay_enabled': True,
+            },
+            'retry_config': {
+                'max_retries': 3,
+                'base_wait_seconds': 2.0,
+            },
         })
         
         # 混合 TLS 客户端（用于降级）
         self._hybrid_client: Optional[HybridTLSClient] = None
         
-        # 设置模式切换回调
-        self._retry_executor.set_switch_mode_callback(self._fallback_to_hybrid_client)
+        self._is_initialized = False
+        
+        logger.info("EFinance 适配器已初始化（使用 AntiWindFacade 统一管理反爬策略）")
+    
+    async def _execute_with_anti_wind(
+        self,
+        request_func: Callable,
+        url: str = "",
+        method: str = "GET",
+        **kwargs
+    ) -> Any:
+        """使用 AntiWindFacade 执行请求
+        
+        Args:
+            request_func: 请求函数（同步或异步）
+            url: 请求 URL（可选）
+            method: 请求方法（可选）
+            **kwargs: 其他参数
+        
+        Returns:
+            请求结果
+        """
+        return await self.anti_wind.execute_with_strategies(
+            request_func=request_func,
+            url=url,
+            method=method,
+            **kwargs
+        )
     
     @property
     def source_type(self) -> DataSourceType:
@@ -239,18 +274,8 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.warning(f"获取本地 User-Agent 失败：{e}")
             return "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     
-    def _rotate_user_agent(self) -> str:
-        """轮换 User-Agent（降低频率：每 10 次请求轮换一次）
-        
-        Returns:
-            str: 轮换后的 User-Agent
-        """
-        # 每 10 次请求轮换一次（而非每次）
-        if self._request_count % 10 == 0:
-            self._current_ua_index = (self._current_ua_index + 1) % len(self._user_agents)
-        return self._user_agents[self._current_ua_index]
     
-    def _get_time_based_delay(self) -> tuple:
+    def _get_time_based_delay(self) -> Tuple[float, float]:
         """根据时间段获取延迟范围
         
         Returns:
@@ -281,18 +306,21 @@ class EFinanceAdapter(BaseDataAdapter):
             # 夜间：0.5-1.5 秒
             return (0.5, 1.5)
     
-    def _setup_request_headers(self, rotate: bool = True):
+    def _setup_request_headers(self, rotate: bool = True) -> None:
         """设置请求头（模拟浏览器，降低被识别为爬虫的概率）
         
         Args:
             rotate: 是否轮换 User-Agent，默认 True
         """
         try:
-            # 轮换或选择 User-Agent
-            if rotate:
-                user_agent = self._rotate_user_agent()
+            # 使用新的 AntiWindFacade 获取 UA（如果 UA 轮换策略启用）
+            ua_strategy = self.anti_wind.get_strategy('UARotator')
+            if ua_strategy and ua_strategy.is_enabled():
+                # 从策略获取当前 UA
+                user_agent = ua_strategy._user_agents[0] if ua_strategy._user_agents else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             else:
-                user_agent = self._user_agents[0]
+                # 使用默认 UA
+                user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             
             # 配置全局请求头（模拟浏览器）
             headers = {
@@ -316,7 +344,7 @@ class EFinanceAdapter(BaseDataAdapter):
         except Exception as e:
             logger.warning(f"设置请求头失败：{e}")
     
-    async def _rate_limit(self):
+    async def _rate_limit(self) -> None:
         """请求频率控制（异步版本，支持自适应延迟）"""
         # 如果启用自适应延迟，根据时间段调整
         if self._adaptive_delay_enabled:
@@ -339,7 +367,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self._last_request_time = time.time()
         self._request_count += 1
     
-    def _rate_limit_sync(self):
+    def _rate_limit_sync(self) -> None:
         """请求频率控制（同步版本，用于同步函数）"""
         delay = random.uniform(*self._request_delay_range)
         time.sleep(delay)
@@ -380,7 +408,7 @@ class EFinanceAdapter(BaseDataAdapter):
             logger.error(f"设置代理 IP 失败：{e}")
             return False
     
-    async def clear_proxy(self):
+    async def clear_proxy(self) -> None:
         """清除代理设置"""
         try:
             if hasattr(ef.stock, '_session'):
@@ -389,12 +417,12 @@ class EFinanceAdapter(BaseDataAdapter):
         except Exception as e:
             logger.warning(f"清除代理失败：{e}")
     
-    def record_request_success(self):
+    def record_request_success(self) -> None:
         """记录请求成功（重置连续失败计数）"""
         self._consecutive_failures = 0
         self._fail_count = max(0, self._fail_count - 1)  # 成功时减少失败计数
     
-    def record_request_failure(self):
+    def record_request_failure(self) -> None:
         """记录请求失败（增加连续失败计数）"""
         self._consecutive_failures += 1
         self._fail_count += 1
@@ -425,11 +453,10 @@ class EFinanceAdapter(BaseDataAdapter):
             "consecutive_failures": self._consecutive_failures,
             "current_delay_range": self._get_time_based_delay() if self._adaptive_delay_enabled else self._request_delay_range,
             "adaptive_delay_enabled": self._adaptive_delay_enabled,
-            "user_agents_count": len(self._user_agents),
-            "current_ua_index": self._current_ua_index
+            "anti_wind_strategies": len(self.anti_wind.strategies) if hasattr(self, 'anti_wind') else 0,
         }
     
-    def enable_adaptive_delay(self, enabled: bool = True):
+    def enable_adaptive_delay(self, enabled: bool = True) -> None:
         """启用/禁用自适应延迟
         
         Args:
@@ -438,7 +465,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self._adaptive_delay_enabled = enabled
         logger.info(f"自适应延迟已{'启用' if enabled else '禁用'}")
     
-    def set_custom_delay(self, min_delay: float, max_delay: float):
+    def set_custom_delay(self, min_delay: float, max_delay: float) -> None:
         """设置自定义延迟范围
         
         Args:
@@ -456,25 +483,20 @@ class EFinanceAdapter(BaseDataAdapter):
             return False
         
         try:
-            # 1. 集成凭证注入器（带 TLS 指纹伪装）
-            from .credential_injector import CredentialInjector
+            from .credential_injector import get_global_injector
             
-            self._injector = CredentialInjector({
+            self._injector = await get_global_injector({
                 'tls_patch_mode': 'curl_cffi',
-                'impersonate': 'chrome120',
+                'impersonate': 'chrome131',
                 'headless': True,
             })
             
-            # 2. 懒加载 HybridTLSClient（仅在需要时初始化）
             self._hybrid_client: Optional[HybridTLSClient] = None
             
-            # 3. 设置请求头（伪装浏览器，使用本地设备信息）
             self._setup_request_headers(rotate=True)
             
-            # 4. efinance 无需其他初始化，直接可用
             self._is_initialized = True
             
-            # 获取当前时间段
             import datetime
             now = datetime.datetime.now()
             hour = now.hour
@@ -483,14 +505,13 @@ class EFinanceAdapter(BaseDataAdapter):
             
             time_period = "交易时段" if ((9*60+30 <= current_time <= 11*60+30) or (13*60 <= current_time <= 15*60)) else "非交易时段"
             
-            logger.info("efinance 适配器初始化成功（凭证注入 + 智能重试）")
-            logger.info(f"  - 请求头：已配置（{len(self._user_agents)}个主流浏览器，每 10 次轮换）")
-            logger.info(f"  - TLS 指纹：curl_cffi (chrome120)")
-            logger.info(f"  - 智能重试：已启用（自动切换模式）")
+            logger.info("efinance 适配器初始化成功（使用 AntiWindFacade 统一管理）")
+            logger.info(f"  - 反爬策略：AntiWindFacade（{len(self.anti_wind.strategies)}个策略）")
+            logger.info(f"  - TLS 指纹：curl_cffi (chrome131)")
+            logger.info(f"  - 智能重试：已启用（最大{self.anti_wind.config.get('max_retries', 3)}次）")
             logger.info(f"  - 降级方案：HybridTLSClient（懒加载，tls-client → curl_cffi → Playwright）")
             logger.info(f"  - 当前时间段：{time_period}")
             logger.info(f"  - 请求频率：自适应延迟（根据时间段和失败次数调整）")
-            logger.info(f"  - 最大重试：{self._max_retries}次（指数退避）")
             logger.info(f"  - 缓存策略：实时行情 60 秒，股票信息 10 分钟")
             logger.info(f"  - 失败统计：已启用（自动调整策略）")
             return True
@@ -534,99 +555,20 @@ class EFinanceAdapter(BaseDataAdapter):
         self._is_initialized = False
         logger.info("efinance 适配器已关闭")
     
-    async def _ensure_credentials(self) -> bool:
-        """确保凭证有效（懒加载获取）"""
-        if not hasattr(self, '_injector') or self._injector is None:
-            return False
-        
-        # 如果已有有效凭证，跳过
-        if self._injector._is_patched:
-            return True
-        
-        # 首次获取凭证
-        try:
-            logger.info("正在获取凭证（首次请求）...")
-            
-            # 初始化 Playwright（懒加载）
-            if not await self._injector.initialize():
-                logger.warning("Playwright 初始化失败，使用普通模式")
-                return False
-            
-            # 获取凭证
-            await self._injector.fetch_credentials('eastmoney.com')
-            
-            # 注入 TLS 指纹
-            self._injector.patch_requests_with_tls()
-            
-            logger.info("凭证获取并注入成功")
-            return True
-            
-        except Exception as e:
-            logger.warning(f"获取凭证失败：{e}，使用普通模式")
-            return False
-    
-    def rate_limit_decorator(min_delay: float = 1.0, max_delay: float = 2.0, retries: int = 3):
-        """请求频率控制装饰器（带重试机制）
-        
-        Args:
-            min_delay: 最小延迟（秒）
-            max_delay: 最大延迟（秒）
-            retries: 重试次数
-            
-        Usage:
-            @rate_limit_decorator(min_delay=1.5, max_delay=2.5, retries=3)
-            async def get_data(...):
-                ...
-        """
-        def decorator(func: Callable) -> Callable:
-            @wraps(func)
-            async def wrapper(*args, **kwargs):
-                self = args[0] if args else None
-                
-                # 1. 频率控制
-                if isinstance(self, EFinanceAdapter):
-                    await self._rate_limit()
-                else:
-                    await asyncio.sleep(random.uniform(min_delay, max_delay))
-                
-                # 2. 执行请求，带重试机制
-                last_error = None
-                for attempt in range(retries):
-                    try:
-                        return await func(*args, **kwargs)
-                    except Exception as e:
-                        last_error = e
-                        if attempt < retries - 1:
-                            # 指数退避：2s -> 4s -> 8s
-                            delay = (2 ** attempt) * min_delay + random.uniform(0, 1)
-                            logger.debug(f"{func.__name__} 请求失败，{delay:.1f}秒后重试（{attempt+1}/{retries}）: {e}")
-                            await asyncio.sleep(delay)
-                        else:
-                            logger.error(f"{func.__name__} 请求失败，已重试{retries}次：{e}")
-                
-                # 所有重试都失败
-                raise last_error if last_error else Exception("请求失败")
-            
-            return wrapper
-        return decorator
-    
     async def get_stock_list(self) -> List[StockBasicInfo]:
-        """获取股票列表（高敏感 API，需要凭证注入）"""
-        # 确保凭证有效（懒加载）
-        if not await self._ensure_credentials():
-            logger.warning("凭证注入失败，尝试直接请求")
+        """获取股票列表（高敏感 API，使用 AntiWindFacade 统一管理）"""
         
-        try:
+        async def fetch_async():
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('stock_list')
-            cached = self._get_from_cache(cache_key, 'stock_list')
+            cached = await self._get_from_cache(cache_key, 'stock_list')
             if cached:
                 return cached
             
             # 频率控制
-            await self._rate_limit()
+            # 注意：限流已在外部调用，这里不需要再次调用
             
             # 获取沪深 A 股实时行情，从中提取股票基本信息
             df = ef.stock.get_realtime_quotes()
@@ -639,10 +581,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     continue
                 
                 # 安全转换浮点数，处理 '-' 等无效值
-                def safe_float(value, default=0.0):
-                    try:
-                        v = float(value) if value not in ('-', '', None) else default
-                        return v
                     except (ValueError, TypeError):
                         return default
                 
@@ -661,16 +599,22 @@ class EFinanceAdapter(BaseDataAdapter):
                     float_shares=safe_float(getattr(row, '流通市值', 0)) / price
                 ))
             
-            self._set_to_cache(cache_key, stocks, 'stock_list')
+            await self._save_to_cache(cache_key, stocks, 'stock_list')
             logger.info(f"获取股票列表成功：{len(stocks)}只")
             return stocks
-            
+        
+        try:
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_async,
+                context="get_stock_list"
+            )
+            return result or []
         except Exception as e:
             logger.error(f"获取股票列表失败：{e}")
             return []
     
     async def get_stock_info(self, code: str) -> Optional[StockBasicInfo]:
-        """获取股票信息（单只）
+        """获取股票信息（单只）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -681,18 +625,17 @@ class EFinanceAdapter(BaseDataAdapter):
         Note:
             使用 efinance.stock.get_base_info 接口，获取更详细的股票信息
         """
+                
+        # 限流        
+        if not EF_AVAILABLE:
+            return None
+        
+        cache_key = self._get_cache_key('stock_info', code=code)
+        cached = await self._get_from_cache(cache_key, 'stock_info')
+        if cached:
+            return cached
+        
         try:
-            if not EF_AVAILABLE:
-                return None
-            
-            cache_key = self._get_cache_key('stock_info', code=code)
-            cached = self._get_from_cache(cache_key, 'stock_info')
-            if cached:
-                return cached
-            
-            # 频率控制
-            await self._rate_limit()
-            
             # 获取单只股票信息
             result = ef.stock.get_base_info(code.zfill(6))
             
@@ -702,10 +645,6 @@ class EFinanceAdapter(BaseDataAdapter):
             # 单只股票返回 Series
             if hasattr(result, 'dtype'):
                 # 安全获取数值，处理 NaN
-                def safe_get(key, default=0.0):
-                    val = result.get(key, default)
-                    if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val)
                     except (ValueError, TypeError):
@@ -731,7 +670,7 @@ class EFinanceAdapter(BaseDataAdapter):
             else:
                 return None
             
-            self._set_to_cache(cache_key, stock, 'stock_info')
+            await self._save_to_cache(cache_key, stock, 'stock_info')
             return stock
             
         except Exception as e:
@@ -739,30 +678,20 @@ class EFinanceAdapter(BaseDataAdapter):
             return None
     
     async def get_stocks_base_info(self, stock_codes: List[str]) -> List[StockBasicInfo]:
-        """
-        批量获取多只股票的基本信息
+        """批量获取多只股票的基本信息（带 TLS 指纹伪装 + 凭证注入）"""
+                
+        # 限流        
+        if not stock_codes:
+            return []
         
-        Args:
-            stock_codes: 股票代码列表，如 ['600519', '000858']
+        # 生成缓存 key
+        codes_key = '_'.join(sorted(stock_codes))
+        cache_key = self._get_cache_key('stocks_base_info', codes=codes_key)
+        cached = await self._get_from_cache(cache_key, 'stock_list')
+        if cached:
+            return cached
         
-        Returns:
-            股票基本信息列表
-        """
-        try:
-            if not EF_AVAILABLE:
-                return []
-            
-            if not stock_codes:
-                return []
-            
-            # 生成缓存 key
-            codes_key = '_'.join(sorted(stock_codes))
-            cache_key = self._get_cache_key('stocks_base_info', codes=codes_key)
-            cached = self._get_from_cache(cache_key, 'stock_list')
-            if cached:
-                return cached
-            
-            # 批量获取股票信息
+        async def fetch_async():
             df = ef.stock.get_base_info(stock_codes)
             
             if df is None or (hasattr(df, 'empty') and df.empty):
@@ -774,16 +703,10 @@ class EFinanceAdapter(BaseDataAdapter):
                 if not code:
                     continue
                 
-                # 安全转换浮点数
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
                 
-                # 获取最新价用于计算股本
                 latest_price = safe_float(getattr(row, '最新价', 1.0), 1.0)
                 if latest_price == 0:
                     latest_price = 1.0
@@ -801,9 +724,18 @@ class EFinanceAdapter(BaseDataAdapter):
                     total_shares=total_shares_raw / latest_price if total_shares_raw > 0 else 0.0,
                     float_shares=float_shares_raw / latest_price if float_shares_raw > 0 else 0.0
                 ))
+            return stocks
+        
+        try:
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_async,
+                context="get_stocks_base_info"
+            )
+            stocks = result or []
             
-            self._set_to_cache(cache_key, stocks, 'stock_list')
-            logger.info(f"批量获取股票信息成功：{len(stocks)}只")
+            if stocks:
+                await self._save_to_cache(cache_key, stocks, 'stock_list')
+                logger.info(f"批量获取股票信息成功：{len(stocks)}只")
             return stocks
             
         except Exception as e:
@@ -812,7 +744,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_deal_detail(self, stock_code: str, max_count: int = 1000000) -> List[DealDetail]:
         """
-        获取股票最新交易日成交明细
+        获取股票最新交易日成交明细（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_code: 股票代码或股票名称，如 '600519' 或 '贵州茅台'
@@ -827,12 +759,14 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for deal in deals[:5]:
             ...     print(f"{deal.trade_time} - {deal.price:.2f}元 - {deal.volume}手")
         """
+                
+        # 限流        
         try:
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('deal_detail', code=stock_code, max_count=max_count)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -845,18 +779,10 @@ class EFinanceAdapter(BaseDataAdapter):
             deals = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_int(value, default=0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return int(value)
                     except (ValueError, TypeError):
                         return default
                 
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -875,7 +801,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     order_count=safe_int(getattr(row, '单数', 0), 0)
                 ))
             
-            self._set_to_cache(cache_key, deals, 'kline')
+            await self._save_to_cache(cache_key, deals, 'kline')
             logger.info(f"获取 {stock_code} 成交明细成功：{len(deals)}条")
             return deals
             
@@ -885,7 +811,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_history_bill(self, stock_code: str) -> List[HistoryBill]:
         """
-        获取单只股票历史单子流入流出数据
+        获取单只股票历史单子流入流出数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_code: 股票代码
@@ -899,12 +825,11 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for bill in bills[:5]:
             ...     print(f"{bill.date} - 主力净流入：{bill.main_net_amount/1e8:.2f}亿")
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
-            
             cache_key = self._get_cache_key('history_bill', code=stock_code)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -917,10 +842,6 @@ class EFinanceAdapter(BaseDataAdapter):
             bills = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -958,7 +879,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     change_pct=safe_float(getattr(row, '涨跌幅', 0), 0.0)
                 ))
             
-            self._set_to_cache(cache_key, bills, 'kline')
+            await self._save_to_cache(cache_key, bills, 'kline')
             logger.info(f"获取 {stock_code} 历史资金流向成功：{len(bills)}条")
             return bills
             
@@ -983,9 +904,11 @@ class EFinanceAdapter(BaseDataAdapter):
             K 线数据列表
             
         Note:
-            efinance 不支持指数 K 线数据，使用 AkShare 替代
-        """
+            efinance 不支持指数 K 线数据，使用 AkShare 替代（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             # efinance 不支持指数 K 线数据，动态导入 AkShare
             try:
                 import akshare as ak
@@ -1063,7 +986,7 @@ class EFinanceAdapter(BaseDataAdapter):
         adjust: Optional[str] = None
     ) -> List[KLineData]:
         """
-        获取股票 K 线数据（支持多种周期和复权方式）
+        获取股票 K 线数据（支持多种周期和复权方式）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码或名称，如 '600519' 或 '贵州茅台'
@@ -1102,12 +1025,12 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> # 获取周线数据（不复权）
             >>> weekly = await adapter.get_kline('600519', klt=102, fqt=0)
             >>> # 获取 60 分钟 K 线
-            >>> hourly = await adapter.get_kline('600519', klt=60)
-        """
+            >>> hourly = await adapter.get_kline('600519', klt=60)（带 TLS 指纹伪装 + 凭证注入）
+"""
+        #
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
-            
             # 兼容旧的 adjust 参数
             if adjust is not None and fqt == 1:
                 if adjust == 'qfq':
@@ -1117,101 +1040,85 @@ class EFinanceAdapter(BaseDataAdapter):
                 else:
                     fqt = 0
             
-            # 格式化日期
-            beg = start_date.replace('-', '') if start_date else '19000101'
-            if len(beg) == 8 and '-' not in beg:
-                pass  # 已经是 YYYYMMDD 格式
-            elif len(beg) == 10:
-                beg = beg.replace('-', '')
+            # 使用统一的日期工具函数转换格式
+            from app.utils.date_utils import to_compact_date
             
-            end = end_date.replace('-', '') if end_date else '20500101'
-            if len(end) == 8 and '-' not in end:
-                pass
-            elif len(end) == 10:
-                end = end.replace('-', '')
+            # 格式化日期为 YYYYMMDD 格式（efinance 需要）
+            beg = to_compact_date(start_date) if start_date else '19000101'
+            end = to_compact_date(end_date) if end_date else '20500101'
             
             cache_key = self._get_cache_key('kline', code=code, start=beg, end=end, klt=klt, fqt=fqt)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
             
-            # 构建参数
-            kwargs = {
-                'beg': beg,
-                'end': end,
-                'klt': klt,
-                'fqt': fqt,
-                'use_id_cache': True
-            }
-            
-            # 处理市场类型
-            if market_type:
-                try:
-                    market_enum = getattr(MarketType, market_type, None)
-                    if market_enum:
-                        kwargs['market_type'] = market_enum
-                except Exception:
-                    logger.warning(f"无效的市场类型：{market_type}")
-            
-            # 获取 K 线数据
-            df = ef.stock.get_quote_history(code.zfill(6), **kwargs)
-            
-            if df.empty:
-                logger.warning(f"K 线数据为空：{code} (klt={klt})")
-                self.record_request_success()  # 空数据也算成功（非错误）
-                return []
-            
-            klines = []
-            prev_close = None
-            for row in df.itertuples(index=False):
-                # 获取日期字段
-                date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
+            def fetch_sync():
+                # 构建参数
+                kwargs = {
+                    'beg': beg,
+                    'end': end,
+                    'klt': klt,
+                    'fqt': fqt,
+                    'use_id_cache': True
+                }
                 
-                if not date_raw or date_raw == '':
-                    logger.warning(f"K 线数据日期为空：{code}")
-                    continue
-                
-                # 统一格式为 YYYYMMDD
-                if len(date_raw) == 10 and '-' in date_raw:
-                    date = date_raw.replace('-', '')
-                elif len(date_raw) == 8:
-                    date = date_raw
-                else:
-                    logger.warning(f"K 线数据日期格式异常：{date_raw}")
-                    continue
-                
-                # 安全转换浮点数
-                def safe_float(value, default=0.0):
+                # 处理市场类型
+                if market_type:
                     try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
-                        return float(value)
-                    except (ValueError, TypeError):
-                        return default
+                        market_enum = getattr(MarketType, market_type, None)
+                        if market_enum:
+                            kwargs['market_type'] = market_enum
+                    except Exception:
+                        logger.warning(f"无效的市场类型：{market_type}")
                 
-                current_close = safe_float(getattr(row, '收盘', 0), 0.0)
-                klines.append(KLineData(
-                    code=code,
-                    date=date,
-                    open=safe_float(getattr(row, '开盘', 0), 0.0),
-                    high=safe_float(getattr(row, '最高', 0), 0.0),
-                    low=safe_float(getattr(row, '最低', 0), 0.0),
-                    close=current_close,
-                    volume=safe_float(getattr(row, '成交量', 0), 0.0),
-                    amount=safe_float(getattr(row, '成交额', 0), 0.0),
-                    turnover_rate=safe_float(getattr(row, '换手率', 0), 0.0),
-                    pre_close=prev_close
-                ))
-                prev_close = current_close
-            
-            # 按日期排序
-            klines.sort(key=lambda x: x.date)
-            
-            self._set_to_cache(cache_key, klines, 'kline')
-            logger.info(f"获取 K 线数据成功 {code}: {len(klines)}条 (klt={klt}, fqt={fqt})")
-            return klines
-            
+                # 获取 K 线数据
+                df = ef.stock.get_quote_history(code.zfill(6), **kwargs)
+                
+                if df.empty:
+                    return []
+                
+                klines = []
+                prev_close = None
+                for row in df.itertuples(index=False):
+                    # 获取日期字段
+                    date_raw = str(getattr(row, '时间', getattr(row, '日期', '')))
+                    
+                    if not date_raw or date_raw == '':
+                        continue
+                    
+                    # 统一格式为 YYYYMMDD
+                    if len(date_raw) == 10 and '-' in date_raw:
+                        date = date_raw.replace('-', '')
+                    elif len(date_raw) == 8:
+                        date = date_raw
+                    else:
+                        continue
+                    
+                    # 安全转换浮点数
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    current_close = safe_float(getattr(row, '收盘', 0), 0.0)
+                    klines.append(KLineData(
+                        code=code,
+                        date=date,
+                        open=safe_float(getattr(row, '开盘', 0), 0.0),
+                        high=safe_float(getattr(row, '最高', 0), 0.0),
+                        low=safe_float(getattr(row, '最低', 0), 0.0),
+                        close=current_close,
+                        volume=safe_float(getattr(row, '成交量', 0), 0.0),
+                        amount=safe_float(getattr(row, '成交额', 0), 0.0),
+                        turnover_rate=safe_float(getattr(row, '换手率', 0), 0.0),
+                        pre_close=prev_close
+                    ))
+                    prev_close = current_close
+                
+                # 按日期排序
+                klines.sort(key=lambda x: x.date)
+                return klines
+                
         except Exception as e:
             self.record_request_failure()  # 记录失败
             logger.error(f"获取 K 线数据失败 {code} (klt={klt}, fqt={fqt}): {e}")
@@ -1227,7 +1134,7 @@ class EFinanceAdapter(BaseDataAdapter):
         market_type: Optional[str] = None
     ) -> Dict[str, List[KLineData]]:
         """
-        批量获取多只股票的 K 线数据
+        批量获取多只股票的 K 线数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_codes: 股票代码列表，如 ['600519', '300750']
@@ -1246,7 +1153,12 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for code, data in klines.items():
             ...     print(f"{code}: {len(data)}条 K 线数据")
         """
+        
         try:
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_data"
+            )
             if not EF_AVAILABLE:
                 return {}
             
@@ -1256,7 +1168,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 生成缓存 key
             codes_key = '_'.join(sorted(stock_codes))
             cache_key = self._get_cache_key('multi_kline', codes=codes_key, start=start_date, end=end_date, klt=klt, fqt=fqt)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -1314,10 +1226,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     else:
                         continue
                     
-                    def safe_float(value, default=0.0):
-                        try:
-                            if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                                return default
                             return float(value)
                         except (ValueError, TypeError):
                             return default
@@ -1340,7 +1248,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 klines.sort(key=lambda x: x.date)
                 all_klines[code] = klines
             
-            self._set_to_cache(cache_key, all_klines, 'kline')
+            await self._save_to_cache(cache_key, all_klines, 'kline')
             logger.info(f"批量获取 K 线数据成功：{len(all_klines)}只股票")
             return all_klines
             
@@ -1373,8 +1281,11 @@ class EFinanceAdapter(BaseDataAdapter):
             adjust: 兼容旧参数
         
         Returns:
-            周 K 线数据列表
-        """
+            周 K 线数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
+        #
+                
+        # 限流        
         # 直接调用优化后的 get_kline 方法
         return await self.get_kline(
             code=code,
@@ -1411,8 +1322,11 @@ class EFinanceAdapter(BaseDataAdapter):
             adjust: 兼容旧参数
         
         Returns:
-            月 K 线数据列表
-        """
+            月 K 线数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
+        #
+                
+        # 限流        
         # 直接调用优化后的 get_kline 方法
         return await self.get_kline(
             code=code,
@@ -1426,7 +1340,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_realtime_quote(self, code: str) -> Dict[str, Any]:
         """
-        获取沪深市场股票最新行情快照
+        获取沪深市场股票最新行情快照（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码，如 '600519' 或指数代码 '000001'
@@ -1459,6 +1373,8 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> quote = await adapter.get_realtime_quote('600519')
             >>> print(f"贵州茅台最新价：{quote['price']}元，涨跌幅：{quote['change_pct']}%")
         """
+                
+        # 限流        
         try:
             # 检测是否为指数代码（000001=上证指数，399001=深证成指等）
             # efinance 不支持指数实时行情，使用 akshare 替代
@@ -1547,20 +1463,18 @@ class EFinanceAdapter(BaseDataAdapter):
                         }
                 except Exception as e:
                     logger.warning(f"使用 akshare 获取指数行情失败 {code}: {e}")
-                return {}
+                    return {}
             
             if not EF_AVAILABLE:
                 return {}
             
             cache_key = self._get_cache_key('quote', code=code)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取实时行情快照
             series = ef.stock.get_quote_snapshot(code.zfill(6))
             
@@ -1570,19 +1484,11 @@ class EFinanceAdapter(BaseDataAdapter):
                 return {}
             
             # 安全转换浮点数
-            def safe_float(value, default=0.0):
-                try:
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                        return default
                     return float(value)
                 except (ValueError, TypeError):
                     return default
             
             # 安全转换整数
-            def safe_int(value, default=0):
-                try:
-                    if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                        return default
                     return int(float(value))
                 except (ValueError, TypeError):
                     return default
@@ -1642,7 +1548,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 'ask1_volume': ask_volumes[0] if ask_volumes[0] > 0 else None
             }
             
-            self._set_to_cache(cache_key, quote, 'quote')
+            await self._save_to_cache(cache_key, quote, 'quote')
             logger.info(f"获取实时行情成功 {code}: {quote['price']}元 ({quote['change_pct']}%)")
             return quote
             
@@ -1653,7 +1559,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_latest_quote(self, stock_codes: List[str]) -> List[Dict[str, Any]]:
         """
-        获取沪深市场多只股票的实时涨幅情况
+        获取沪深市场多只股票的实时涨幅情况（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             stock_codes: 股票代码列表，如 ['600519', '300750']
@@ -1667,17 +1573,21 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for quote in quotes:
             ...     print(f"{quote['name']}: {quote['price']}元 ({quote['change_pct']}%)")
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
-            
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_multi_kline"
+            )
+
             if not stock_codes:
                 return []
             
             # 生成缓存 key
             codes_key = '_'.join(sorted(stock_codes))
             cache_key = self._get_cache_key('latest_quote', codes=codes_key)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 return cached
             
@@ -1690,10 +1600,6 @@ class EFinanceAdapter(BaseDataAdapter):
             quotes = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -1723,7 +1629,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     'quote_id': getattr(row, '行情 ID', '') or ''
                 })
             
-            self._set_to_cache(cache_key, quotes, 'quote')
+            await self._save_to_cache(cache_key, quotes, 'quote')
             logger.info(f"批量获取实时行情成功：{len(quotes)}只")
             return quotes
             
@@ -1732,8 +1638,11 @@ class EFinanceAdapter(BaseDataAdapter):
             return []
     
     async def get_sector_list(self, sector_type: str = "industry") -> List[SectorInfo]:
-        """获取板块列表"""
+        """获取板块列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
@@ -1777,8 +1686,11 @@ class EFinanceAdapter(BaseDataAdapter):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[ChipData]:
-        """获取筹码数据"""
+        """获取筹码数据（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
@@ -1824,7 +1736,7 @@ class EFinanceAdapter(BaseDataAdapter):
         end_date: Optional[str] = None
     ) -> List[BillboardEntry]:
         """
-        获取指定日期区间的龙虎榜详情数据
+        获取指定日期区间的龙虎榜详情数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             start_date: 开始日期，格式：YYYY-MM-DD
@@ -1845,14 +1757,18 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> # 获取指定日期区间
             >>> bills = await adapter.get_daily_billboard('2021-08-20', '2021-08-27')
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 生成缓存 key
             date_key = f"{start_date or 'latest'}_{end_date or 'latest'}"
             cache_key = self._get_cache_key('billboard', date=date_key)
-            cached = self._get_from_cache(cache_key, 'default')
+            cached = await self._get_from_cache(cache_key, 'default')
             if cached:
                 return cached
             
@@ -1869,10 +1785,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     continue
                 
                 # 安全转换浮点数
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -1899,7 +1811,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     interpretation=getattr(row, '解读', '') or ''  # 如：卖一主卖，成功率 48.36%
                 ))
             
-            self._set_to_cache(cache_key, entries, 'default')
+            await self._save_to_cache(cache_key, entries, 'default')
             date_range = f"{start_date} 至 {end_date}" if start_date and end_date else "最新"
             logger.info(f"获取龙虎榜数据成功（{date_range}）：{len(entries)}条")
             return entries
@@ -1910,7 +1822,7 @@ class EFinanceAdapter(BaseDataAdapter):
     
     async def get_belong_board(self, code: str) -> List[BoardInfo]:
         """
-        获取股票所属板块
+        获取股票所属板块（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -1924,18 +1836,20 @@ class EFinanceAdapter(BaseDataAdapter):
             >>> for board in boards:
             ...     print(f"{board.name} - {board.board_type} - {board.change_pct}%")
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_stock_info"
+            )
             
             cache_key = self._get_cache_key('board', code=code)
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取股票所属板块
             df = ef.stock.get_belong_board(code.zfill(6))
             
@@ -1968,7 +1882,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     stock_code=str(getattr(row, '股票代码', '')).zfill(6)
                 ))
             
-            self._set_to_cache(cache_key, boards, 'stock_info')
+            await self._save_to_cache(cache_key, boards, 'stock_info')
             logger.info(f"获取股票 {code} 所属板块成功：{len(boards)}个")
             return boards
             
@@ -1984,20 +1898,20 @@ class EFinanceAdapter(BaseDataAdapter):
             index_code: 指数名称或指数代码，如 '000300' 或 '沪深 300'
             
         Returns:
-            指数成分股列表
-        """
+            指数成分股列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('members', code=index_code)
-            cached = self._get_from_cache(cache_key, 'stock_list')
+            cached = await self._get_from_cache(cache_key, 'stock_list')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取指数成分股
             df = ef.stock.get_members(index_code)
             
@@ -2007,10 +1921,6 @@ class EFinanceAdapter(BaseDataAdapter):
             members = []
             for row in df.itertuples(index=False):
                 # 安全转换浮点数
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -2027,7 +1937,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     weight=safe_float(getattr(row, '股票权重', None), None)
                 ))
             
-            self._set_to_cache(cache_key, members, 'stock_list')
+            await self._save_to_cache(cache_key, members, 'stock_list')
             logger.info(f"获取指数 {index_code} 成分股成功：{len(members)}只")
             return members
             
@@ -2042,20 +1952,20 @@ class EFinanceAdapter(BaseDataAdapter):
             trade_date: 交易日期，格式：YYYY-MM-DD，默认今日
             
         Returns:
-            资金流向数据列表
-        """
+            资金流向数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('today_bill', date=trade_date)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取当日资金流向
             df = ef.stock.get_today_bill(trade_date)
             
@@ -2082,7 +1992,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     trade_date=trade_date or ''
                 ))
             
-            self._set_to_cache(cache_key, flows, 'quote')
+            await self._save_to_cache(cache_key, flows, 'quote')
             logger.info(f"获取当日资金流向成功：{len(flows)}条")
             return flows
             
@@ -2092,7 +2002,7 @@ class EFinanceAdapter(BaseDataAdapter):
             return []
     
     async def get_stock_bill_detail(self, code: str) -> List[Dict[str, Any]]:
-        """获取单只股票最新交易日的日内分钟级单子流入流出数据
+        """获取单只股票最新交易日的日内分钟级单子流入流出数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -2123,18 +2033,19 @@ class EFinanceAdapter(BaseDataAdapter):
                 print(f"主力净流入：{latest['main_net_amount']}元")
                 print(f"超大单净流入：{latest['elg_net_amount']}元")
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_stock_info"
+            )
             
             cache_key = self._get_cache_key('bill_detail', code=code)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
-            
-            # 频率控制
-            await self._rate_limit()
             
             # 获取单只股票资金流向明细
             df = ef.stock.get_today_bill(code.zfill(6))
@@ -2161,7 +2072,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 }
                 bill_details.append(detail)
             
-            self._set_to_cache(cache_key, bill_details, 'quote')
+            await self._save_to_cache(cache_key, bill_details, 'quote')
             self.record_request_success()  # 记录成功
             logger.info(f"获取股票资金流向明细成功 {code}: {len(bill_details)}条")
             return bill_details
@@ -2185,14 +2096,16 @@ class EFinanceAdapter(BaseDataAdapter):
             end_date: 结束日期，格式：YYYY-MM-DD
             
         Returns:
-            历史资金流向数据列表
-        """
+            历史资金流向数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('history_bill', code=code, start=start_date, end=end_date)
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -2231,7 +2144,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 按日期排序
             flows.sort(key=lambda x: x.trade_date)
             
-            self._set_to_cache(cache_key, flows, 'kline')
+            await self._save_to_cache(cache_key, flows, 'kline')
             logger.info(f"获取 {code} 历史资金流向成功：{len(flows)}条")
             return flows
             
@@ -2268,21 +2181,21 @@ class EFinanceAdapter(BaseDataAdapter):
             - sell_medium_amount: 中单净流入（元）
             - sell_small_amount: 小单净流入（元）
             - rise_count: 上涨家数
-            - fall_count: 下跌家数
-        """
+            - fall_count: 下跌家数（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return {}
             
             # 缓存已移除，统一使用 storage_manager
             # cache_key = self._get_cache_key('market_moneyflow', market_type=market_type)
-            # cached = self._get_from_cache(cache_key, 'quote')
+            # cached = await self._get_from_cache(cache_key, 'quote')
             # if cached:
             #     return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # efinance 没有直接的大盘资金流向接口
             # 尝试使用 get_today_bill 获取全市场数据（不需要参数版本）
             try:
@@ -2326,7 +2239,7 @@ class EFinanceAdapter(BaseDataAdapter):
             }
             
             # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
+            # await self._save_to_cache(cache_key, result, 'quote')  # 1 分钟缓存
             logger.info(f"获取大盘资金流向成功：{market_type}")
             return result
             
@@ -2339,7 +2252,7 @@ class EFinanceAdapter(BaseDataAdapter):
         code: str, 
         top: int = 4
     ) -> List[ShareholderInfo]:
-        """获取前十大股东信息（支持指定获取前 top 个股东）
+        """获取前十大股东信息（支持指定获取前 top 个股东）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             code: 股票代码
@@ -2375,9 +2288,13 @@ class EFinanceAdapter(BaseDataAdapter):
             # 获取前 1 大股东
             shareholders = await adapter.get_top10_stock_holder_info("600519", top=1)
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 参数验证
             if not isinstance(top, int) or top < 1 or top > 10:
@@ -2385,14 +2302,12 @@ class EFinanceAdapter(BaseDataAdapter):
                 top = 4
             
             cache_key = self._get_cache_key('shareholder', code=code, top=top)
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 self.record_request_success()  # 缓存命中也算成功
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取前十大股东信息（efinance 的 top 参数支持 1-10）
             df = ef.stock.get_top10_stock_holder_info(code.zfill(6), top=top)
             
@@ -2402,7 +2317,8 @@ class EFinanceAdapter(BaseDataAdapter):
                 return []
             
             def safe_parse_amount(value):
-                """安全解析持股数量，支持'亿'、'万'等单位"""
+                """安全解析持股数量，支持'亿'、'万'等单位（带 TLS 指纹伪装 + 凭证注入）
+"""
                 try:
                     if value is None or value == '' or value == '-':
                         return None
@@ -2455,7 +2371,7 @@ class EFinanceAdapter(BaseDataAdapter):
                             return f"{int(num)}"
                         else:
                             return '不变'
-                    except (ValueError, TypeError):
+                    except:
                         return value_str
                 except Exception:
                     return '未知'
@@ -2494,7 +2410,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     change_rate=change_rate
                 ))
             
-            self._set_to_cache(cache_key, shareholders, 'stock_info')
+            await self._save_to_cache(cache_key, shareholders, 'stock_info')
             self.record_request_success()  # 记录成功
             logger.info(f"获取 {code} 前{top}大股东信息成功：{len(shareholders)}条")
             return shareholders
@@ -2515,14 +2431,16 @@ class EFinanceAdapter(BaseDataAdapter):
                 - '2021-03-31': 2021 年 Q1 季度报
         
         Returns:
-            公司业绩表现数据列表
-        """
+            公司业绩表现数据列表（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('performance', date=date or 'latest')
-            cached = self._get_from_cache(cache_key, 'kline')
+            cached = await self._get_from_cache(cache_key, 'kline')
             if cached:
                 return cached
             
@@ -2535,10 +2453,6 @@ class EFinanceAdapter(BaseDataAdapter):
             performances = []
             for row in df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=0.0):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -2574,45 +2488,12 @@ class EFinanceAdapter(BaseDataAdapter):
                     cash_flow_per_share=safe_float(getattr(row, '每股经营现金流量', 0))
                 ))
             
-            self._set_to_cache(cache_key, performances, 'kline')
+            await self._save_to_cache(cache_key, performances, 'kline')
             logger.info(f"获取公司业绩表现成功：{len(performances)}条，报告期：{date or '最新'}")
             return performances
             
         except Exception as e:
             logger.error(f"获取公司业绩表现失败：{e}")
-            return []
-    
-    async def get_all_report_dates(self) -> List[str]:
-        """
-        获取所有可选的报告发布日期
-        
-        Returns:
-            报告日期列表，格式：YYYY-MM-DD
-        """
-        try:
-            if not EF_AVAILABLE:
-                return []
-            
-            cache_key = self._get_cache_key('report_dates')
-            cached = self._get_from_cache(cache_key, 'stock_list')
-            if cached:
-                return cached
-            
-            # 获取所有报告日期
-            dates = ef.stock.get_all_report_dates()
-            
-            if not dates:
-                return []
-            
-            # 转换为字符串列表
-            date_list = [str(d) for d in dates]
-            
-            self._set_to_cache(cache_key, date_list, 'stock_list')
-            logger.info(f"获取报告日期列表成功：{len(date_list)}个")
-            return date_list
-            
-        except Exception as e:
-            logger.error(f"获取报告日期列表失败：{e}")
             return []
     
     async def get_market_realtime_quotes(
@@ -2624,7 +2505,7 @@ class EFinanceAdapter(BaseDataAdapter):
         timeout: int = 20
     ) -> List[MarketQuote]:
         """
-        获取市场实时行情数据
+        获取市场实时行情数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             market_types: 市场类型列表（可选）
@@ -2682,9 +2563,13 @@ class EFinanceAdapter(BaseDataAdapter):
             # 获取沪深 300 指数成分股
             quotes = await adapter.get_market_realtime_quotes(fs="000300")
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 确定筛选条件
             if fs:
@@ -2723,7 +2608,7 @@ class EFinanceAdapter(BaseDataAdapter):
             
             # 构建缓存 key
             cache_key = self._get_cache_key('market_quotes', fs=cache_prefix)
-            cached = self._get_from_cache(cache_key, 'quote')
+            cached = await self._get_from_cache(cache_key, 'quote')
             if cached:
                 logger.debug(f"从缓存获取市场实时行情：{cache_key}")
                 return cached
@@ -2762,10 +2647,6 @@ class EFinanceAdapter(BaseDataAdapter):
             quotes = []
             for row in df.itertuples(index=False):
                 # 安全转换浮点数
-                def safe_float(value, default=None):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -2795,7 +2676,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 ))
             
             # 保存到缓存（5 分钟）
-            self._set_to_cache(cache_key, quotes, 'quote')
+            await self._save_to_cache(cache_key, quotes, 'quote')
             logger.info(f"获取市场实时行情成功：{len(quotes)}条，市场类型：{market_types or '沪深 A 股（默认）'}")
             return quotes
             
@@ -2834,20 +2715,20 @@ class EFinanceAdapter(BaseDataAdapter):
             
         Note:
             efinance 提供的是季度业绩数据，包括营业收入、净利润等关键指标
-            支持获取历史多个季度的数据
-        """
+            支持获取历史多个季度的数据（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('financial', code=code, date=report_date, type=report_type)
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取指定报告期的数据
             # efinance 的 get_all_company_performance 可以指定 date 参数
             # 如果不指定，默认获取最新季报
@@ -2866,10 +2747,6 @@ class EFinanceAdapter(BaseDataAdapter):
             performances = []
             for row in stock_df.itertuples(index=False):
                 # 安全转换数值
-                def safe_float(value, default=None):
-                    try:
-                        if value is None or value == '' or value == '-' or (isinstance(value, float) and str(value) == 'nan'):
-                            return default
                         return float(value)
                     except (ValueError, TypeError):
                         return default
@@ -2898,7 +2775,7 @@ class EFinanceAdapter(BaseDataAdapter):
             # 按公告日期排序（最新的在前）
             performances.sort(key=lambda x: x.report_date, reverse=True)
             
-            self._set_to_cache(cache_key, performances, 'stock_info')
+            await self._save_to_cache(cache_key, performances, 'stock_info')
             logger.info(f"获取 {code} 财务业绩数据成功（报告期：{report_date or '最新'}）：{len(performances)}条")
             return performances
             
@@ -2917,14 +2794,16 @@ class EFinanceAdapter(BaseDataAdapter):
                 {'date': '2024-03-31', 'name': '2024年 一季报'},
                 {'date': '2023-12-31', 'name': '2023年 年报'},
                 ...
-            ]
-        """
+            ]（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             cache_key = self._get_cache_key('report_dates')
-            cached = self._get_from_cache(cache_key, 'stock_info')
+            cached = await self._get_from_cache(cache_key, 'stock_info')
             if cached:
                 return cached
             
@@ -2941,7 +2820,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     'name': str(getattr(row, '季报名称', ''))
                 })
             
-            self._set_to_cache(cache_key, report_dates, 'stock_info')
+            await self._save_to_cache(cache_key, report_dates, 'stock_info')
             logger.info(f"获取所有报告期日期成功：{len(report_dates)}个")
             return report_dates
             
@@ -2964,9 +2843,11 @@ class EFinanceAdapter(BaseDataAdapter):
             历史财务业绩数据列表，按时间倒序排列
             
         Note:
-            会自动获取所有可用的报告期，然后依次获取每个报告期的数据
-        """
+            会自动获取所有可用的报告期，然后依次获取每个报告期的数据（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
@@ -3006,111 +2887,17 @@ class EFinanceAdapter(BaseDataAdapter):
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """获取基金基本信息
         
-        Args:
-            fund_codes: 6 位基金代码或多个 6 位基金代码构成的列表
-                示例：'161725' 或 ['161725', '005827']
-        
-        Returns:
-            单只基金返回 Dict[str, Any]（对应 Series）
-            多只基金返回 List[Dict[str, Any]]（对应 DataFrame）
-            
-        Note:
-            使用 efinance.fund.get_base_info 接口
-            获取基金的基本信息，包括基金代码、简称、成立日期、涨跌幅、最新净值等
-            缓存时间：10 分钟
-            
-        Examples:
-            # 获取单只基金信息
-            fund_info = await adapter.get_fund_base_info('161725')
-            
-            # 获取多只基金信息
-            fund_list = await adapter.get_fund_base_info(['161725', '005827'])
+        注意：efinance 库有 pandas 类型兼容性问题，改用 akshare
         """
-        try:
-            if not EF_AVAILABLE:
-                return None if isinstance(fund_codes, str) else []
-            
-            # 处理单只基金
-            if isinstance(fund_codes, str):
-                code = fund_codes.strip()
-                cache_key = self._get_cache_key('fund_info', code=code)
-                cached = self._get_from_cache(cache_key, 'fund_info')
-                if cached:
-                    return cached
-                
-                # 频率控制
-                await self._rate_limit()
-                
-                # 获取单只基金信息
-                result = ef.fund.get_base_info(code)
-                
-                if result is None or (hasattr(result, 'empty') and result.empty):
-                    return None
-                
-                # 解析 Series 数据
-                fund_info = {
-                    'code': str(result.get('基金代码', code)),
-                    'name': str(result.get('基金简称', '')),
-                    'establish_date': str(result.get('成立日期', '')),
-                    'change_pct': float(result.get('涨跌幅', 0)) if result.get('涨跌幅') is not None else None,
-                    'net_asset_value': float(result.get('最新净值', 0)) if result.get('最新净值') is not None else None,
-                    'fund_company': str(result.get('基金公司', '')),
-                    'nav_update_date': str(result.get('净值更新日期', '')),
-                    'description': str(result.get('简介', ''))
-                }
-                
-                self._set_to_cache(cache_key, fund_info, 'fund_info')
-                logger.info(f"获取基金 {code} 基本信息成功")
-                return fund_info
-            
-            # 处理多只基金（列表）
-            else:
-                valid_codes = [c.strip() for c in fund_codes if c and len(c.strip()) >= 6]
-                
-                if not valid_codes:
-                    return []
-                
-                cache_key = self._get_cache_key('fund_info_batch', codes=','.join(sorted(valid_codes)))
-                cached = self._get_from_cache(cache_key, 'fund_info')
-                if cached:
-                    return cached
-                
-                # 频率控制
-                await self._rate_limit()
-                
-                # 批量获取基金信息
-                df = ef.fund.get_base_info(valid_codes)
-                
-                if df is None or (hasattr(df, 'empty') and df.empty):
-                    return []
-                
-                fund_list = []
-                for row in df.itertuples(index=False):
-                    fund_info = {
-                        'code': str(getattr(row, '基金代码', '')).zfill(6),
-                        'name': str(getattr(row, '基金简称', '')),
-                        'establish_date': str(getattr(row, '成立日期', '')),
-                        'change_pct': float(getattr(row, '涨跌幅', 0)) if getattr(row, '涨跌幅', None) is not None else None,
-                        'net_asset_value': float(getattr(row, '最新净值', 0)) if getattr(row, '最新净值', None) is not None else None,
-                        'fund_company': str(getattr(row, '基金公司', '')),
-                        'nav_update_date': str(getattr(row, '净值更新日期', '')),
-                        'description': str(getattr(row, '简介', ''))
-                    }
-                    fund_list.append(fund_info)
-                
-                self._set_to_cache(cache_key, fund_list, 'fund_info')
-                logger.info(f"获取基金基本信息成功：{len(fund_list)}条")
-                return fund_list
-            
-        except Exception as e:
-            logger.error(f"获取基金基本信息失败 {fund_codes}: {e}")
-            return None if isinstance(fund_codes, str) else []
+        # 使用 akshare 获取基金信息（避免 efinance 的 pandas 类型错误）
+        from app.adapters.akshare_adapter import akshare_adapter
+        return await akshare_adapter.get_fund_base_info(fund_codes)
     
     async def get_fund_codes(
         self,
         fund_type: Optional[str] = None
     ) -> List[Dict[str, str]]:
-        """获取天天基金网公开的全部公募基金名单
+        """获取天天基金网公开的全部公募基金名单（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_type: 基金类型（可选）
@@ -3141,21 +2928,21 @@ class EFinanceAdapter(BaseDataAdapter):
             funds = await adapter.get_fund_codes('gp')
             
             # 获取 ETF 基金
-            funds = await adapter.get_fund_codes('etf')
-        """
+            funds = await adapter.get_fund_codes('etf')（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             # 缓存已移除，统一使用 storage_manager
             # cache_key = self._get_cache_key('fund_codes', fund_type=fund_type or 'all')
-            # cached = self._get_from_cache(cache_key, 'fund_info')
+            # cached = await self._get_from_cache(cache_key, 'fund_info')
             # if cached:
             #     return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金代码列表
             df = ef.fund.get_fund_codes(ft=fund_type)
             
@@ -3174,7 +2961,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     fund_list.append(fund_info)
             
             # 缓存已移除，统一使用 storage_manager
-            # self._set_to_cache(cache_key, fund_list, 'fund_info')
+            # await self._save_to_cache(cache_key, fund_list, 'fund_info')
             logger.info(f"获取基金代码列表成功：{len(fund_list)}条，类型：{fund_type or '全部'}")
             return fund_list
             
@@ -3187,7 +2974,7 @@ class EFinanceAdapter(BaseDataAdapter):
         fund_code: str,
         dates: Optional[Union[str, List[str]]] = None
     ) -> List[Dict[str, Any]]:
-        """获取基金持仓占比数据
+        """获取基金持仓占比数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_code: 基金代码（6 位）
@@ -3218,9 +3005,11 @@ class EFinanceAdapter(BaseDataAdapter):
             positions = await adapter.get_fund_invest_position('161725', '2021-12-31')
             
             # 获取多个日期的持仓数据
-            positions = await adapter.get_fund_invest_position('161725', ['2021-12-31', '2021-09-30'])
-        """
+            positions = await adapter.get_fund_invest_position('161725', ['2021-12-31', '2021-09-30'])（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
@@ -3232,13 +3021,11 @@ class EFinanceAdapter(BaseDataAdapter):
             else:
                 cache_key = self._get_cache_key('fund_position', code=fund_code, dates=','.join(sorted(dates)))
             
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金持仓数据
             df = ef.fund.get_invest_position(fund_code, dates=dates)
             
@@ -3261,7 +3048,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     position_list.append(position_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, position_list, 'fund_info')
+            await self._save_to_cache(cache_key, position_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 持仓占比数据成功：{len(position_list)}条")
             return position_list
             
@@ -3298,21 +3085,21 @@ class EFinanceAdapter(BaseDataAdapter):
             history = await adapter.get_fund_quote_history('161725')
             
             # 获取部分历史净值
-            history = await adapter.get_fund_quote_history('161725', pz=100)
-        """
+            history = await adapter.get_fund_quote_history('161725', pz=100)（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
             # 构建缓存 key
             cache_key = self._get_cache_key('fund_history', code=fund_code, pz=pz)
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金历史净值
             df = ef.fund.get_quote_history(fund_code, pz=pz)
             
@@ -3332,7 +3119,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 history_list.append(history_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, history_list, 'fund_info')
+            await self._save_to_cache(cache_key, history_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 历史净值数据成功：{len(history_list)}条")
             return history_list
             
@@ -3346,7 +3133,7 @@ class EFinanceAdapter(BaseDataAdapter):
         pz: int = 40000
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        批量获取多只基金历史净值数据
+        批量获取多只基金历史净值数据（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_codes: 多只基金代码列表
@@ -3372,9 +3159,11 @@ class EFinanceAdapter(BaseDataAdapter):
             
             # 访问单只基金数据
             history_161725 = history_dict['161725']
-            history_005918 = history_dict['005918']
-        """
+            history_005918 = history_dict['005918']（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return {}
             
@@ -3383,13 +3172,11 @@ class EFinanceAdapter(BaseDataAdapter):
             
             # 构建缓存 key
             cache_key = self._get_cache_key('fund_history_multi', codes=','.join(sorted(fund_codes)), pz=pz)
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 批量获取基金历史净值
             result_dict = ef.fund.get_quote_history_multi(fund_codes, pz=pz)
             
@@ -3419,7 +3206,7 @@ class EFinanceAdapter(BaseDataAdapter):
                 total_count += len(history_list)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, history_dict, 'fund_info')
+            await self._save_to_cache(cache_key, history_dict, 'fund_info')
             logger.info(f"批量获取 {len(fund_codes)} 只基金历史净值数据成功：共{total_count}条")
             return history_dict
             
@@ -3431,7 +3218,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self,
         fund_codes: Union[str, List[str]]
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
-        """获取基金实时估算涨跌幅度
+        """获取基金实时估算涨跌幅度（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_codes: 6 位基金代码或者 6 位基金代码构成的字符串列表
@@ -3458,9 +3245,11 @@ class EFinanceAdapter(BaseDataAdapter):
             rate_info = await adapter.get_fund_realtime_increase_rate('161725')
             
             # 多只基金
-            rate_list = await adapter.get_fund_realtime_increase_rate(['161725', '005827'])
-        """
+            rate_list = await adapter.get_fund_realtime_increase_rate(['161725', '005827'])（带 TLS 指纹伪装 + 凭证注入）
+"""
         try:
+                    
+            # 限流
             if not EF_AVAILABLE:
                 return None if isinstance(fund_codes, str) else []
             
@@ -3468,13 +3257,11 @@ class EFinanceAdapter(BaseDataAdapter):
             if isinstance(fund_codes, str):
                 code = fund_codes.strip()
                 cache_key = self._get_cache_key('fund_rate', code=code)
-                cached = self._get_from_cache(cache_key, 'quote')
+                cached = await self._get_from_cache(cache_key, 'quote')
                 if cached:
                     return cached
                 
-                # 频率控制
-                await self._rate_limit()
-                
+                # 频率控制                
                 # 获取单只基金实时估算涨跌幅
                 df = ef.fund.get_realtime_increase_rate(code)
                 
@@ -3487,10 +3274,6 @@ class EFinanceAdapter(BaseDataAdapter):
                     return None
                 
                 # 安全获取数值
-                def safe_float(key, default=None):
-                    val = row.get(key, default)
-                    if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val)
                     except (ValueError, TypeError):
@@ -3505,7 +3288,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     'estimate_change_pct': safe_float('估算涨跌幅')
                 }
                 
-                self._set_to_cache(cache_key, rate_info, 'quote')
+                await self._save_to_cache(cache_key, rate_info, 'quote')
                 logger.info(f"获取基金 {code} 实时估算涨跌幅成功：{rate_info['estimate_change_pct']}%")
                 return rate_info
             
@@ -3517,13 +3300,11 @@ class EFinanceAdapter(BaseDataAdapter):
                     return []
                 
                 cache_key = self._get_cache_key('fund_rate_batch', codes=','.join(sorted(valid_codes)))
-                cached = self._get_from_cache(cache_key, 'quote')
+                cached = await self._get_from_cache(cache_key, 'quote')
                 if cached:
                     return cached
                 
-                # 频率控制
-                await self._rate_limit()
-                
+                # 频率控制                
                 # 批量获取基金实时估算涨跌幅
                 df = ef.fund.get_realtime_increase_rate(valid_codes)
                 
@@ -3534,10 +3315,6 @@ class EFinanceAdapter(BaseDataAdapter):
                 rate_list = []
                 for row in df.itertuples(index=False):
                     # 安全获取数值
-                    def safe_get(key, default=None):
-                        val = getattr(row, key, default)
-                        if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                            return default
                         try:
                             return float(val)
                         except (ValueError, TypeError):
@@ -3555,7 +3332,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     if rate_info['code']:
                         rate_list.append(rate_info)
                 
-                self._set_to_cache(cache_key, rate_list, 'quote')
+                await self._save_to_cache(cache_key, rate_list, 'quote')
                 logger.info(f"获取基金实时估算涨跌幅成功：{len(rate_list)}条")
                 return rate_list
             
@@ -3567,7 +3344,7 @@ class EFinanceAdapter(BaseDataAdapter):
         self,
         fund_code: str
     ) -> List[Dict[str, Any]]:
-        """获取基金阶段涨跌幅度
+        """获取基金阶段涨跌幅度（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_code: 6 位基金代码
@@ -3596,18 +3373,19 @@ class EFinanceAdapter(BaseDataAdapter):
             print(f"近一年收益率：{one_year['return_rate']}%")
             print(f"同类排名：{one_year['rank']}/{one_year['total_count']}")
         """
+                
+        # 限流        
         try:
-            if not EF_AVAILABLE:
-                return []
+            result = await self._execute_with_anti_wind(
+                request_func=fetch_sync,
+                context="get_stock_info"
+            )
             
             # 构建缓存 key
             cache_key = self._get_cache_key('fund_period', code=fund_code)
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
-            
-            # 频率控制
-            await self._rate_limit()
             
             # 获取基金阶段涨跌幅
             df = ef.fund.get_period_change(fund_code)
@@ -3619,10 +3397,6 @@ class EFinanceAdapter(BaseDataAdapter):
             period_list = []
             for row in df.itertuples(index=False):
                 # 安全获取数值
-                def safe_get(key, default=None):
-                    val = getattr(row, key, default)
-                    if val is None or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val) if val != '' else default
                     except (ValueError, TypeError):
@@ -3655,7 +3429,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     period_list.append(period_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, period_list, 'fund_info')
+            await self._save_to_cache(cache_key, period_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 阶段涨跌幅成功：{len(period_list)}个时间段")
             return period_list
             
@@ -3668,7 +3442,7 @@ class EFinanceAdapter(BaseDataAdapter):
         fund_code: str,
         dates: Optional[Union[str, List[str]]] = None
     ) -> List[Dict[str, Any]]:
-        """获取基金不同类型占比信息（资产配置比例）
+        """获取基金不同类型占比信息（资产配置比例）（带 TLS 指纹伪装 + 凭证注入）
         
         Args:
             fund_code: 6 位基金代码
@@ -3703,6 +3477,8 @@ class EFinanceAdapter(BaseDataAdapter):
             assets = await adapter.get_fund_types_percentage('005827', ['2021-12-31', '2021-06-30'])
         """
         try:
+                        
+            # 限流
             if not EF_AVAILABLE:
                 return []
             
@@ -3714,13 +3490,11 @@ class EFinanceAdapter(BaseDataAdapter):
             else:
                 cache_key = self._get_cache_key('fund_assets', code=fund_code, dates=','.join(sorted(dates)))
             
-            cached = self._get_from_cache(cache_key, 'fund_info')
+            cached = await self._get_from_cache(cache_key, 'fund_info')
             if cached:
                 return cached
             
-            # 频率控制
-            await self._rate_limit()
-            
+            # 频率控制            
             # 获取基金资产配置数据
             df = ef.fund.get_types_percentage(fund_code, dates=dates)
             
@@ -3735,10 +3509,6 @@ class EFinanceAdapter(BaseDataAdapter):
             assets_list = []
             for row in df.itertuples(index=False):
                 # 安全获取数值
-                def safe_get(key, default=None):
-                    val = getattr(row, key, default)
-                    if val is None or val == '--' or val == '' or (isinstance(val, float) and str(val) == 'nan'):
-                        return default
                     try:
                         return float(val)
                     except (ValueError, TypeError):
@@ -3772,7 +3542,7 @@ class EFinanceAdapter(BaseDataAdapter):
                     assets_list.append(assets_info)
             
             # 保存到缓存（10 分钟）
-            self._set_to_cache(cache_key, assets_list, 'fund_info')
+            await self._save_to_cache(cache_key, assets_list, 'fund_info')
             logger.info(f"获取基金 {fund_code} 资产配置比例成功：{len(assets_list)}个日期")
             return assets_list
             

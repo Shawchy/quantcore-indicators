@@ -74,7 +74,7 @@ cargo build --release
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                  Frontend (React 18 + TS 6)              │
-│  Chakra UI + Zustand + React Query + ECharts      │
+│  Chakra UI + Redux Toolkit + React Query + ECharts      │
 │  KLineCharts + @tanstack/react-virtual + Sentry         │
 └────────────────────────┬─────────────────────────────────┘
                          │ HTTP/REST API
@@ -149,7 +149,7 @@ Quant/
 │   │   ├── pages/               # 29 个页面组件
 │   │   ├── components/          # 通用组件
 │   │   ├── services/            # API 服务
-│   │   ├── store/               # Zustand 状态管理
+│   │   ├── store/               # Redux 状态管理
 │   │   └── hooks/               # 自定义 Hooks
 │   └── package.json
 ├── quantcore/

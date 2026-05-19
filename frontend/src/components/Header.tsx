@@ -1,5 +1,15 @@
-import { Avatar, Badge, Box, Flex, HStack, IconButton, Input, InputGroup, Menu, Tooltip } from '@chakra-ui/react'
-import { FiMenu, FiBell, FiSearch } from 'react-icons/fi'
+import {
+  Box,
+  Flex,
+  HStack,
+  IconButton,
+  Input,
+  InputGroup,
+  Menu,
+  Avatar,
+  Tooltip,
+} from '@chakra-ui/react'
+import { FiMenu, FiSearch, FiBell, FiUser } from 'react-icons/fi'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
@@ -47,18 +57,22 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       >
         <HStack gap={4}>
           <IconButton
-            display={{ base: 'flex', lg: 'none' }}
-            variant="ghost"
-            aria-label="打开菜单"
-            onClick={onMenuClick}
-            color="light.textSecondary"
-            _hover={{ color: 'brand.500', bg: 'light.bgSecondary' }}
-          >
-            <FiMenu />
-          </IconButton>
+              display={{ base: 'flex', lg: 'none' }}
+              variant="ghost"
+              aria-label="打开菜单"
+              onClick={onMenuClick}
+              color="light.textSecondary"
+              _hover={{ color: 'brand.500', bg: 'light.bgSecondary' }}
+            >
+              <FiMenu />
+            </IconButton>
           
           <form onSubmit={handleSearch}>
-            <InputGroup w={{ base: '180px', md: '320px' }} startElement={<FiSearch color="var(--chakra-colors-fg-subtle)" />}>
+            <InputGroup w={{ base: '180px', md: '320px' }} startAddon={
+              <Box pointerEvents="none" h="full" display="flex" alignItems="center" pl={3}>
+                <FiSearch color="var(--chakra-colors-light-textMuted)" />
+              </Box>
+            }>
               <Input
                 placeholder="搜索股票代码/名称..."
                 value={searchValue}
@@ -87,36 +101,25 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         <HStack gap={2}>
           <Tooltip.Root>
             <Tooltip.Trigger>
-              <Box position="relative">
-                <IconButton
-                  variant="ghost"
-                  aria-label="通知"
-                  size="md"
-                  color="light.textSecondary"
-                  _hover={{ 
-                    color: 'brand.500', 
-                    bg: 'light.bgSecondary' 
-                  }}
-                >
-                  <FiBell />
-                </IconButton>
-                <Badge
-                  position="absolute"
-                  top={1}
-                  right={1}
-                  colorPalette="red"
-                  borderRadius="full"
-                  boxSize={2}
-                  p={0}
-                />
-              </Box>
+              <IconButton
+                variant="ghost"
+                aria-label="通知"
+                size="md"
+                color="light.textSecondary"
+                _hover={{ 
+                  color: 'brand.500', 
+                  bg: 'light.bgSecondary' 
+                }}
+              >
+                <FiBell />
+              </IconButton>
             </Tooltip.Trigger>
             <Tooltip.Content>系统通知</Tooltip.Content>
           </Tooltip.Root>
           
           <Menu.Root>
             <Menu.Trigger>
-              <Avatar.Root 
+              <Avatar.Root
                 size="sm"
                 bg="brand.500"
                 color="white"
@@ -126,28 +129,33 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                 }}
                 transition="all 0.2s"
               >
-                <Avatar.Fallback name={user?.username} />
+                <Avatar.Fallback name={user?.username}><FiUser /></Avatar.Fallback>
               </Avatar.Root>
             </Menu.Trigger>
-            <Menu.Content>
-              <Menu.Item value="user__username_____个人中心" 
-                _hover={{ bg: 'light.bgSecondary' }}
-              >
-                {user?.username || '个人中心'}
-              </Menu.Item>
-              <Menu.Item value="系统设置" 
-                _hover={{ bg: 'light.bgSecondary' }}
-              >
-                系统设置
-              </Menu.Item>
-              <Menu.Item value="退出登录" 
-                onClick={handleLogout}
-                _hover={{ bg: 'light.bgSecondary' }}
-                color="red.500"
-              >
-                退出登录
-              </Menu.Item>
-            </Menu.Content>
+            <Menu.Positioner>
+              <Menu.Content>
+                <Menu.Item 
+                  value="profile"
+                  _hover={{ bg: 'light.bgSecondary' }}
+                >
+                  {user?.username || '个人中心'}
+                </Menu.Item>
+                <Menu.Item 
+                  value="settings"
+                  _hover={{ bg: 'light.bgSecondary' }}
+                >
+                  系统设置
+                </Menu.Item>
+                <Menu.Item 
+                  value="logout"
+                  onClick={handleLogout}
+                  _hover={{ bg: 'light.bgSecondary' }}
+                  color="red.500"
+                >
+                  退出登录
+                </Menu.Item>
+              </Menu.Content>
+            </Menu.Positioner>
           </Menu.Root>
         </HStack>
       </Flex>

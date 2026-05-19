@@ -11,7 +11,7 @@ pub fn calculate_annual_return(daily_values: &[f64], initial_capital: f64) -> f6
     let total_return = (daily_values[daily_values.len() - 1] - initial_capital) / initial_capital;
     let days = daily_values.len() as f64;
 
-    (1.0 + total_return).powf(252.0 / days) - 1.0
+    (1.0 + total_return).powf(365.0 / days) - 1.0
 }
 
 /// 计算波动率（年化）

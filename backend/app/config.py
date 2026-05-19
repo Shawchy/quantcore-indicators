@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator, computed_field, Field
+from pydantic import field_validator, computed_field
 from typing import Optional
 from functools import lru_cache
 
@@ -28,8 +28,12 @@ def get_quantcore_indicators_path() -> str:
 
 
 class Settings(BaseSettings):
+    """应用配置类
+    
+    使用 Pydantic V2 的 SettingsConfigDict 替代旧的 class Config
+    """
     model_config = SettingsConfigDict(
-        env_file=f".env.{os.getenv('QUANT_ENV', 'development')}" if os.getenv('QUANT_ENV') else ".env",
+        env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore"
@@ -37,8 +41,11 @@ class Settings(BaseSettings):
     
     APP_NAME: str = "Quant Analysis System"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = os.getenv("QUANT_ENV", "development") != "production"
-    ENV: str = os.getenv("QUANT_ENV", "development")
+    # DEBUG 模式说明：
+    # - True: 启用详细日志、SQL 回显、开发模式安全提示
+    # - False: 生产模式，关闭调试输出，使用安全配置
+    # - 环境变量覆盖：DEBUG=True/False
+    DEBUG: bool = False
     
     API_PREFIX: str = "/api/v1"
     

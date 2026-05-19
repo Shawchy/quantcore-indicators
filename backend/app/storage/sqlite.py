@@ -177,19 +177,9 @@ class BacktestRecord(Base):
     annual_return: Mapped[Optional[float]] = mapped_column(Float)
     max_drawdown: Mapped[Optional[float]] = mapped_column(Float)
     sharpe_ratio: Mapped[Optional[float]] = mapped_column(Float)
-    sortino_ratio: Mapped[Optional[float]] = mapped_column(Float, default=0)
-    calmar_ratio: Mapped[Optional[float]] = mapped_column(Float, default=0)
-    win_rate: Mapped[Optional[float]] = mapped_column(Float, default=0)
-    max_consecutive_losses: Mapped[Optional[int]] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     result_path: Mapped[Optional[str]] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    
-    __table_args__ = (
-        Index("idx_backtest_strategy_status", "strategy_id", "status"),
-        Index("idx_backtest_created_at", "created_at"),
-        Index("idx_backtest_sharpe", "sharpe_ratio"),
-    )
 
 
 class TradeRecord(Base):

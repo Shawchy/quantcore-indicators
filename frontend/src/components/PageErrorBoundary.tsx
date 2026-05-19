@@ -1,5 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
-import { Box, Button, Icon, Text, VStack } from '@chakra-ui/react'
+import { Box, Button, Text, VStack, Icon } from '@chakra-ui/react'
 import { FiAlertTriangle } from 'react-icons/fi'
 
 interface Props {

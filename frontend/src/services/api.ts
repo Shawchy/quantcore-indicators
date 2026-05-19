@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
-import type { ScreenerCondition, StrategyCreateRequest, StrategyUpdateRequest, StrategyOptimizeRequest, BacktestRunRequest } from '../types'
 
 const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? '/api/v1'
 
@@ -240,7 +239,7 @@ export const chipApi = {
 }
 
 export const screenerApi = {
-  query: (conditions: ScreenerCondition) => api.post('/screener/query', conditions),
+  query: (conditions: unknown) => api.post('/screener/query', conditions),
   getMarketStats: (tradeDate?: string) => api.get('/screener/market-stats', { params: { trade_date: tradeDate } }),
   getSectorStats: (sectorCode: string) => api.get(`/screener/sector-stats/${sectorCode}`),
   getPresetConditions: () => api.get('/screener/preset-conditions'),
@@ -251,15 +250,15 @@ export const screenerApi = {
 export const strategyApi = {
   getList: () => api.get('/strategy/list'),
   get: (strategyId: string) => api.get(`/strategy/${strategyId}`),
-  create: (config: StrategyCreateRequest) => api.post('/strategy/create', config),
-  update: (strategyId: string, config: StrategyUpdateRequest) => api.put(`/strategy/${strategyId}`, config),
+  create: (config: unknown) => api.post('/strategy/create', config),
+  update: (strategyId: string, config: unknown) => api.put(`/strategy/${strategyId}`, config),
   delete: (strategyId: string) => api.delete(`/strategy/${strategyId}`),
-  optimize: (strategyId: string, paramRanges: StrategyOptimizeRequest, method: string = 'bayesian') =>
+  optimize: (strategyId: string, paramRanges: unknown, method: string = 'bayesian') =>
     api.post(`/strategy/${strategyId}/optimize`, paramRanges, { params: { method } }),
 }
 
 export const backtestApi = {
-  run: (config: BacktestRunRequest) => api.post('/backtest/run', config),
+  run: (config: unknown) => api.post('/backtest/run', config),
   getResult: (backtestId: string) => api.get(`/backtest/result/${backtestId}`),
   getPerformance: (backtestId: string) => api.get(`/backtest/performance/${backtestId}`),
   getTrades: (backtestId: string, page: number = 1, pageSize: number = 50) =>

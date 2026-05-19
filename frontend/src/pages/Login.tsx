@@ -4,8 +4,20 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuthStore } from '../store/authStore'
-import { Alert, Box, Button, Container, Field, Heading, IconButton, Input, InputGroup, Text, VStack } from '@chakra-ui/react'
-import { toaster } from '../components/ui/toaster'
+import {
+  Box,
+  Button,
+  Container,
+  Field,
+  Input,
+  Heading,
+  Text,
+  Alert,
+  VStack,
+  InputGroup,
+  IconButton,
+  createToaster,
+} from '@chakra-ui/react'
 import { useColorModeValue } from '../components/ui/color-mode'
 import { FiEye, FiEyeOff } from 'react-icons/fi'
 import { useState } from 'react'
@@ -23,6 +35,11 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>
 
+const toaster = createToaster({
+  placement: 'top-end',
+  duration: 3000,
+})
+
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false)
   const login = useAuthStore((s) => s.login)
@@ -32,7 +49,6 @@ const Login = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const navigate = useNavigate()
   const location = useLocation()
-  
 
   const {
     register,
@@ -64,8 +80,6 @@ const Login = () => {
         title: '登录失败',
         description: error || '请检查用户名和密码',
         type: 'error',
-        duration: 3000,
-        closable: true,
       })
     }
   }
@@ -90,7 +104,7 @@ const Login = () => {
         borderColor={borderColor}
       >
         <VStack gap={2} mb={8}>
-          <Heading size="xl" color="brand.500">
+          <Heading size="xl" color="blue.500">
             量化分析系统
           </Heading>
           <Text color="gray.500" fontSize="sm">
@@ -99,14 +113,14 @@ const Login = () => {
         </VStack>
 
         {error && (
-          <Alert.Root status="error" mb={6} borderRadius="lg" variant="subtle">
+          <Alert.Root status="error" mb={6} borderRadius="lg">
             <Alert.Indicator />
             <Alert.Description>{error}</Alert.Description>
           </Alert.Root>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)}>
-          <Field.Root mb={5} invalid={!!errors.username}>
+          <Field.Root invalid={!!errors.username} mb={5}>
             <Field.Label fontWeight="medium">用户名</Field.Label>
             <Input
               {...register('username')}
@@ -118,9 +132,19 @@ const Login = () => {
             <Field.ErrorText>{errors.username?.message}</Field.ErrorText>
           </Field.Root>
 
-          <Field.Root mb={6} invalid={!!errors.password}>
+          <Field.Root invalid={!!errors.password} mb={6}>
             <Field.Label fontWeight="medium">密码</Field.Label>
-            <InputGroup endElement={<IconButton size="sm" variant="ghost" aria-label={showPassword ? '隐藏密码' : '显示密码'} onClick={handleTogglePassword} tabIndex={-1}>{showPassword ? <FiEyeOff /> : <FiEye />}</IconButton>}>
+            <InputGroup endAddon={
+              <IconButton
+                size="sm"
+                variant="ghost"
+                aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                onClick={handleTogglePassword}
+                tabIndex={-1}
+              >
+                {showPassword ? <FiEyeOff /> : <FiEye />}
+              </IconButton>
+            }>
               <Input
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}

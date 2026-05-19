@@ -415,7 +415,7 @@ class EnhancedPlaywrightAdapter(BaseDataAdapter):
                         def parse_float(text):
                             try:
                                 return float(text.strip().replace(',', '').replace('%', ''))
-                            except (ValueError, TypeError):
+                            except:
                                 return None
                         
                         quote = MarketQuote(
@@ -465,7 +465,7 @@ class EnhancedPlaywrightAdapter(BaseDataAdapter):
                         def parse_float(text):
                             try:
                                 return float(text.strip().replace('%', ''))
-                            except (ValueError, TypeError):
+                            except:
                                 return None
                         
                         sector = SectorInfo(
@@ -541,7 +541,7 @@ class EnhancedPlaywrightAdapter(BaseDataAdapter):
             if price_elem:
                 try:
                     quote['price'] = float(await price_elem.inner_text())
-                except (ValueError, TypeError):
+                except:
                     pass
             
             return quote

@@ -22,7 +22,7 @@ Quant/
 │   │   ├── pages/             # 页面组件 (29 个页面)
 │   │   ├── components/        # 通用组件
 │   │   ├── services/          # API 服务
-│   │   ├── store/             # Zustand 状态管理
+│   │   ├── store/             # Redux 状态管理
 │   │   └── hooks/             # 自定义 Hooks
 │   └── package.json
 ├── quantcore/                  # Rust 量化引擎
@@ -46,7 +46,7 @@ Quant/
 ### 前端
 - **React 18** + TypeScript 6 + Vite 6
 - **Chakra UI** + Emotion
-- **Zustand** + React Query
+- **Redux Toolkit** + React Query
 - **ECharts** + KLineCharts + Recharts
 - **@tanstack/react-virtual** (虚拟列表)
 - **Sentry** (错误监控)
